@@ -483,9 +483,10 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
               <dt>眼睛</dt><dd>{r!.eye_visible == null ? "—" : r!.eye_visible ? "看得见" : "看不见"}</dd>
               <dt>头部清晰度</dt><dd>{sharpTxt(r!.sharpness)}{r!.sharpness_region && <span className="ref"> · 量在{REGION[r!.sharpness_region]}，只在本批内比较（阈值未标定）</span>}</dd>
               <dt>美学分</dt><dd>{r!.aesthetic != null ? r!.aesthetic.toFixed(2) : "—"} <span className="ref">仅供参考</span></dd>
-              <dt>稀有度</dt><dd title={RARITY_NOTE}>{r!.rarity ? <>{r!.rarity.label}{r!.rarity.region && <span className="ref"> · {r!.rarity.region}，当月</span>}</> : "—"}
-                <span className="ref"> · 观察记录多少，不是数量多少</span></dd>
-              <dt>受威胁等级</dt><dd>{r!.rarity?.iucn ? `IUCN ${IUCN_ZH[r!.rarity.iucn] ?? r!.rarity.iucn}（${r!.rarity.iucn}）` : "—"}</dd>
+              <dt>本地稀有度</dt><dd title={RARITY_NOTE}>{r!.rarity ? <><b>{r!.rarity.label}</b>{r!.rarity.region && <span className="ref"> · {r!.rarity.region}</span>}</> : "—"}
+                <span className="ref" style={{ display: "block" }}>此地此月，按 GBIF 观察记录所占比例；是有多少人报告，不是鸟有多少</span></dd>
+              <dt>受威胁等级</dt><dd>{r!.rarity?.iucn ? <b>IUCN {IUCN_ZH[r!.rarity.iucn] ?? r!.rarity.iucn}（{r!.rarity.iucn}）</b> : "—"}
+                <span className="ref" style={{ display: "block" }}>全球受威胁等级（IUCN 红色名录），全球统一，不随地点变化</span></dd>
               <dt>连拍组</dt><dd>{!p.burst_group ? "扫完后分组" : p.burst_size === 1 ? `第 ${p.burst_group} 组 · 只有这一张`
                 : `第 ${p.burst_group} 组 · 组内排名第 ${p.burst_rank}，共 ${p.burst_size} 张${burst ? ` · 按拍摄顺序第 ${burst.order.get(p.id)} 张` : ""}`}</dd>
               <dt>鸟框</dt><dd>{r!.boxes.length} 个{r!.boxes.length > 1 && r!.subject != null ? `，主体按${r!.focus ? "对焦点" : "把握"}选取` : ""}</dd>
