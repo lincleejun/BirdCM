@@ -13,6 +13,7 @@ def res(t, sharp, aes, sp="Aa bb", **k):
 
 
 def run(results, **cfg):
+    cfg.setdefault("strategy", "quota")                    # these tests pin the recorded strategy; select has its own
     rows = [{"id": i, "result": r} for i, r in enumerate(results)]
     out = rate(rows, cfg)
     return [out[i] for i in range(len(rows))]
@@ -86,7 +87,7 @@ def test_ratio_config_and_unidentified_group():
 def test_deterministic_and_failed_rows():
     rs = [res(10.0 * i, i % 3, 0.5 + i / 100) for i in range(12)]
     assert run(rs) == run([dict(r) for r in rs])
-    out = rate([{"id": 1, "result": None}], {})
+    out = rate([{"id": 1, "result": None}], {"strategy": "quota"})
     assert out[1]["stars"] is None and out[1]["burst_size"] == 1
 
 

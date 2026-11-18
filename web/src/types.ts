@@ -46,11 +46,12 @@ export interface PhotoRow {
   // per scan (stars.py); null = 待定
   stars: number | null; star_reason: string | null; burst_group: number | null; burst_rank: number | null; burst_size: number | null;
   species_fix: Species | null;    // the burst's majority species, when it differs from this frame's own
+  quality?: { q: number; parts: Record<string, number | null> | null } | null;   // stars.py "select": Q and its parts
 }
 
 export type ScanState = "queued" | "running" | "stopping" | "paused" | "finalizing" | "completed" | "failed";
 export interface Counts { queued: number; working: number; done: number; failed: number; total: number }
-export interface Ratio { preset: string; p3: number; p2: number }
+export interface Ratio { preset?: string; keep?: number; p3?: number; p2?: number; strategy?: string }
 export interface Scan {
   id: number; folder: string; recursive: number; region: string | Place | null; ratio: Ratio; state: ScanState;
   error: string | null; created_at: number; counts: Counts; previous?: number[]; fp?: string;

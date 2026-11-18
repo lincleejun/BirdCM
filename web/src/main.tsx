@@ -3,27 +3,16 @@ import { createRoot } from "react-dom/client";
 import { get, post } from "./api";
 import Results, { STATE_LABEL } from "./Results";
 import Singles from "./Singles";
+import KeepControl, { DEFAULT_KEEP, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, rememberedPlace } from "./Location";
-import type { ModelStatus, Place, Ratio, Scan } from "./types";
+import type { ModelStatus, Place, Scan } from "./types";
 import "./styles.css";
-
-const RATIOS: Record<string, [number, number] | null> = { loose: [40, 30], std: [30, 30], strict: [20, 30], stricter: [10, 20], custom: null };
-const RATIO_LABEL: [string, string][] = [["loose", "宽松"], ["std", "标准"], ["strict", "严格"], ["stricter", "更严"], ["custom", "自定义"]];
-
-function ratioOf(preset: string, c3: number, c2: number): Ratio {
-  const fixed = RATIOS[preset];
-  if (fixed) return { preset, p3: fixed[0], p2: fixed[1] };
-  const p3 = Math.max(0, Math.min(100, c3 || 0));
-  return { preset, p3, p2: Math.max(0, Math.min(100 - p3, c2 || 0)) };
-}
 
 function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue: Country[] }) {
   const [place, setPlace] = useState<Place | null>(rememberedPlace);
   const [folder, setFolder] = useState("");
   const [sub, setSub] = useState(false);
-  const [preset, setPreset] = useState("std");
-  const [c3, setC3] = useState(25);
-  const [c2, setC2] = useState(30);
+  const [keep, setKeep] = useState<KeepSetting>(DEFAULT_KEEP);
   const [models, setModels] = useState<ModelStatus | null>(null);
   const [scans, setScans] = useState<Scan[]>([]);
   const [err, setErr] = useState("");
@@ -37,7 +26,7 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
     return () => clearInterval(t);
   }, []);
 
-  const ratio = ratioOf(preset, c3, c2);
+  const ratio = keep;
   const pick = async () => {
     setErr("");
     try {
@@ -79,21 +68,10 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
           <p className="hint">照片自带 GPS 时以照片为准；没有 GPS 的照片用这里的位置和拍摄日期修正鸟种。不选也能扫，只凭图像。</p>
         </div>
         <div className="field">
-          <span className="label" id="lb-ratio">留片比例</span>
-          <div className="seg" role="radiogroup" aria-labelledby="lb-ratio">
-            {RATIO_LABEL.map(([v, t]) => (
-              <label key={v}><input type="radio" name="ratio" value={v} checked={preset === v} onChange={() => setPreset(v)} />
-                <span>{t}{v === "stricter" && <> <span className="tbd">待定</span></>}</span></label>
-            ))}
-          </div>
-          <p className="hint">目标 {ratio.p3}% 三星、接着 {ratio.p2}% 两星。受连拍上限和鸟种保底影响。{preset === "stricter" ? " 档位待定。" : ""}
-            {preset === "custom" && c2 > ratio.p2 ? ` 两档合计最多 100%，本次两星按 ${ratio.p2}% 计算。` : ""}</p>
-          {preset === "custom" && (
-            <div className="row" style={{ marginTop: 8 }}>
-              <label>三星 <input type="number" min={0} max={100} value={c3} onChange={(e) => setC3(+e.target.value)} /> %</label>
-              <label>两星 <input type="number" min={0} max={100 - ratio.p3} value={c2} onChange={(e) => setC2(+e.target.value)} /> %</label>
-            </div>
-          )}
+          <span className="label" id="lb-ratio">留片比例（有星的照片占比）</span>
+          <KeepControl value={keep} onChange={setKeep} />
+          <p className="hint">大约 {keep.keep}% 的照片会有星（一、二、三星合计），其余 0 星。几星看照片本身好不好，不按名额分；
+            同一种鸟、同一组连拍拍得越多，越不容易全拿星。照片整体一般时会少于这个比例。扫完后还能改，不用重扫。</p>
         </div>
         <button className="btn primary big" disabled={!folder.trim() || busy} onClick={go}>开始</button>
         {err && <p className="error-text" role="alert">{err}</p>}

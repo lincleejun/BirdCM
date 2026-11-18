@@ -61,7 +61,7 @@ def test_runs_to_completed(store):
     snap = store.snapshot(sid)
     assert snap["scan"]["state"] == "completed"
     assert [p["state"] for p in snap["photos"]] == ["done"] * 5
-    assert snap["photos"][0]["stars"] == -1 and snap["photos"][1]["stars"] == 0        # 淘汰 / gated (no subject score)
+    assert snap["photos"][0]["stars"] == -1 and snap["photos"][1]["stars"] is not None  # 淘汰 / rated
     assert {p["burst_size"] for p in snap["photos"]} == {1}                          # no times: own groups
     k = kinds(store, sid)
     assert k[-2:] == ["stars", "scan"] and k.count("photo") == 10                    # working + done per photo

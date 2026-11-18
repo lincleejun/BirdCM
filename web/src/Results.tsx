@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { get, post } from "./api";
+import { get, post, put } from "./api";
+import KeepControl, { keepOf, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, placeText } from "./Location";
 import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks } from "./names";
 import type { Exif, PhotoResult, PhotoRow, Place, Scan, Snapshot } from "./types";
@@ -22,6 +23,13 @@ const RARITY_NOTE = "按 GBIF 观察记录在当地当月所占比例分级：�
 const IUCN_ZH: Record<string, string> = { LC: "无危", NT: "近危", VU: "易危", EN: "濒危", CR: "极危", DD: "数据缺乏", EX: "灭绝", EW: "野外灭绝", NE: "未评估" };
 // rarer first: 罕见 1, 少见 2, 不常见 3, 常见 4; 无记录 (0) counts as rarest, unknown last
 const rank = (p: PhotoRow) => { const t = p.result?.rarity?.tier; return t == null ? 9 : t === 0 ? 0.5 : t; };
+const Q_LABEL: Record<string, string> = { sharp_burst: "组内清晰度", sharp_species: "同种清晰度", eye: "眼睛", size: "鸟的大小",
+  focus: "对焦", aesthetic: "美学", detection: "检测把握", fly: "飞版加分", rare: "稀有加分" };
+function qParts(parts: Record<string, number | null> | null | undefined): string {
+  if (!parts) return "";
+  return Object.entries(parts).filter(([k, v]) => !(["fly", "rare"].includes(k) && !v))
+    .map(([k, v]) => `${Q_LABEL[k] ?? k} ${v == null ? "未知" : ["fly", "rare"].includes(k) ? `+${v}` : v.toFixed(2)}`).join(" · ");
+}
 const PRIOR_SRC: Record<string, string> = { photo: "照片 GPS", map: "地图选点", device: "本机定位", region: "地区中心点" };
 const fmtTime = (t: string | null | undefined) => (t ? t.slice(0, 19).replace("T", " ") : "时间未知");
 
@@ -246,10 +254,12 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
 
   // "只看这一组": the list shows one burst, whatever the other filters say (they are kept, and come back on clearing)
   const [groupOnly, setGroupOnly] = useState<number | null>(null);
+  const [fold, setFold] = useState(false);              // 连拍折叠: one row per burst, its best frame
   const view = useMemo(() => {
     const usesResults = fsp || ffly !== "all" || frar !== "0";
     const v = photos.filter((p) => {
       if (onlyIds) return onlyIds.ids.has(p.id);
+      if (fold && groupOnly === null && (p.burst_rank ?? 1) > 1) return false;
       if (groupOnly !== null) return p.burst_group === groupOnly;
       if (starsReady && fs !== "all" && p.stars !== +fs) return false;
       if (!usesResults) return true;
@@ -263,7 +273,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
     const cmp: Record<string, (a: PhotoRow, b: PhotoRow) => number> = {
       queue: (a, b) => a.seq - b.seq,
       time: (a, b) => (a.result?.exif.taken_at ?? "~").localeCompare(b.result?.exif.taken_at ?? "~") || a.seq - b.seq,
-      star: (a, b) => (b.stars ?? -2) - (a.stars ?? -2) || a.seq - b.seq,
+      star: (a, b) => (b.stars ?? -2) - (a.stars ?? -2) || (b.quality?.q ?? -1) - (a.quality?.q ?? -1) || a.seq - b.seq,
       species: (a, b) => nameOf(a.result!).localeCompare(nameOf(b.result!), "zh-CN") || a.seq - b.seq,
       fly: (a, b) => (b.result?.p_fly ?? 0) - (a.result?.p_fly ?? 0),
       eye: (a, b) => (b.result?.sharpness ?? -1) - (a.result?.sharpness ?? -1),
@@ -272,7 +282,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
     // finished photos first in the chosen order; the ones still waiting stay behind them in queue order
     v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp[sort](a, b) : a.seq - b.seq));
     return v;
-  }, [photos, fs, fsp, ffly, frar, sort, starsReady, groupOnly, onlyIds]);
+  }, [photos, fs, fsp, ffly, frar, sort, starsReady, groupOnly, onlyIds, fold]);
 
   // a photo picked from the burst strip may be outside the filtered list: it is still the one shown
   const current = view.find((p) => p.id === selected) ?? (selected !== null ? photos.find((p) => p.id === selected) : undefined) ?? view[0] ?? null;
@@ -323,6 +333,9 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
   const c = { total: photos.length, done: photos.filter((p) => p.state === "done").length, failed: photos.filter((p) => p.state === "failed").length };
   const finished = c.done + c.failed;
   const rejected = photos.filter((p) => p.result?.rejected).length;
+  const eligibleN = photos.filter((p) => p.result && !p.result.rejected).length;
+  const starredPct = eligibleN ? Math.round((100 * photos.filter((p) => (p.stars ?? 0) > 0).length) / eligibleN) : 0;
+  const keepSet = keepOf(scan.ratio as { preset?: string; keep?: number });
   const rare = new Map<string, string>();
   for (const p of photos) {
     const t = p.result?.rarity?.tier, l = p.result?.species?.label;
@@ -369,6 +382,11 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
       {rel.stale && !rel.newer && (
         <p className="stale">这些结果是旧版本算的（模型、地点修正或规则变过） · <button className="btn link" onClick={() => setRescanOpen(true)}>重新扫描</button></p>
       )}
+      {complete && (scan.ratio as { strategy?: string })?.strategy !== "quota" && (
+        <div className="keep-row"><span className="label" style={{ margin: 0 }}>留片比例（有星的照片占比）</span>
+          <KeepControl name="keep-res" value={keepSet} onChange={(v) => put(`/api/scans/${scanId}/ratio`, { ...v }).then(() => load()).catch((e) => setError(String(e.message)))} />
+          <span className="hint">目标 {keepSet.keep}%，实际 {starredPct}%（{eligibleN} 张可评星的照片）· 改了立刻重算，不用重扫</span></div>
+      )}
       {changes && (
         <p className="changes"><button className="btn link" onClick={() => { keepOld(rel.previous!, true); onOpen(rel.previous!); }}>之前的结果</button> · 和上一次扫描比：
           <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.changed), label: "鸟种有变化的" })}>{changes.changed.length} 张鸟种变了</button>，
@@ -389,6 +407,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
         {complete ? (
           <>
             <div><b>{c.total}</b><small>张照片</small></div>
+            <div><b>{starredPct}%</b><small>有星（目标 {keepSet.keep}%）</small></div>
             {[3, 2, 1, 0].map((s) => (
               <div key={s}><b>{starsReady ? photos.filter((p) => p.stars === s).length : "—"}</b>
                 <small className="stars" aria-label={`${s} 星`}>{s ? "★".repeat(s) : "0 星"}{!starsReady && " 待定"}</small></div>
@@ -418,6 +437,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
         <select aria-label="是否在飞" value={ffly} onChange={(e) => setFfly(e.target.value)}>
           <option value="all">所有姿态</option><option value="fly">在飞</option><option value="still">不在飞</option>
         </select>
+        <label className="inline"><input type="checkbox" checked={fold} onChange={(e) => setFold(e.target.checked)} disabled={!complete} /> 连拍折叠</label>
         <label className="inline">排序
           <select value={sort} onChange={(e) => { sortTouched.current = true; setSort(e.target.value); }}>
             <option value="queue">队列顺序</option>
@@ -465,6 +485,9 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
                   <span className="row-result">{r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">按连拍组修正</span>}
                     {r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}</> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
                     {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
+                    {fold && groupOnly === null && (p.burst_size ?? 1) > 1 && (
+                      <span className="pill more" role="link" title="只看这一组" onClick={(e) => { e.stopPropagation(); setSelected(p.id); setGroupOnly(p.burst_group); }}>+{(p.burst_size ?? 1) - 1}</span>
+                    )}
                     {r && !r.rejected && r.flying !== null && <span className="pill">{r.flying ? "在飞" : "不在飞"}</span>}
                     {r && <span className="small reason-line" style={{ display: "block" }}>
                       {complete && p.star_reason ? p.star_reason : r.rejected ? "不参与标星" : r.eye_visible ? `眼睛可见 · 头部清晰度 ${sharpTxt(r.sharpness)}` : "眼睛未找到"}</span>}
@@ -562,6 +585,8 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
                 <span className="ref" style={{ display: "block" }}>此地此月，按 GBIF 观察记录所占比例；是有多少人报告，不是鸟有多少</span></dd>
               <dt>受威胁等级</dt><dd>{r!.rarity?.iucn ? <b>IUCN {IUCN_ZH[r!.rarity.iucn] ?? r!.rarity.iucn}（{r!.rarity.iucn}）</b> : "—"}
                 <span className="ref" style={{ display: "block" }}>全球受威胁等级（IUCN 红色名录），全球统一，不随地点变化</span></dd>
+              {p.quality && <><dt>综合分</dt><dd><b>{p.quality.q.toFixed(2)}</b>
+                <span className="ref" style={{ display: "block" }}>{qParts(p.quality.parts)}</span></dd></>}
               <dt>连拍组</dt><dd>{!p.burst_group ? "扫完后分组" : p.burst_size === 1 ? `第 ${p.burst_group} 组 · 只有这一张`
                 : `第 ${p.burst_group} 组 · 组内排名第 ${p.burst_rank}，共 ${p.burst_size} 张${burst ? ` · 按拍摄顺序第 ${burst.order.get(p.id)} 张` : ""}`}</dd>
               <dt>鸟框</dt><dd>{r!.boxes.length} 个{r!.boxes.length > 1 && r!.subject != null ? `，主体按${r!.focus ? "对焦点" : "把握"}选取` : ""}</dd>
@@ -600,7 +625,6 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
   );
 });
 
-const PRESETS: [string, string, number, number][] = [["loose", "宽松", 40, 30], ["std", "标准", 30, 30], ["strict", "严格", 20, 30], ["stricter", "更严", 10, 20]];
 
 /** 重新扫描: the same folder, with the location and ratio prefilled and changeable. */
 function Rescan({ scan, catalogue, onClose, onStarted }: { scan: Scan; catalogue: Country[]; onClose: () => void; onStarted: (id: number) => void }) {
@@ -610,12 +634,11 @@ function Rescan({ scan, catalogue, onClose, onStarted }: { scan: Scan; catalogue
       const [cz, sub] = label.split(" · "); const c = catalogue.find((x) => x.zh === cz); const r = c?.regions.find((x) => x.zh === sub);
       return c ? { lat: (r ?? c).lat, lon: (r ?? c).lon, label, source: "region" as const } : null; })();
   const [place, setPlace] = useState<Place | null>(start);
-  const [preset, setPreset] = useState(scan.ratio?.preset ?? "std");
+  const [keep, setKeep] = useState<KeepSetting>(keepOf(scan.ratio as { preset?: string; keep?: number }));
   const [err, setErr] = useState("");
   useEffect(() => { ref.current?.showModal(); }, []);
   const go = async () => {
-    const pr = PRESETS.find((x) => x[0] === preset);
-    const ratio = pr ? { preset, p3: pr[2], p2: pr[3] } : scan.ratio;
+    const ratio = keep;
     try {
       const r = await post<{ id: number }>("/api/scans", { folder: scan.folder, recursive: !!scan.recursive, region: place, ratio });
       onStarted(r.id);
@@ -628,9 +651,7 @@ function Rescan({ scan, catalogue, onClose, onStarted }: { scan: Scan; catalogue
         <p className="hint">{scan.folder}{scan.recursive ? " · 包含子文件夹" : ""}。新结果会替代这一次的；没变的照片会直接复用。</p>
         <div className="field"><span className="label">拍摄地点</span><LocationPicker value={place} onChange={setPlace} catalogue={catalogue} /></div>
         <div className="field"><span className="label">留片比例</span>
-          <div className="seg" role="radiogroup" aria-label="留片比例">
-            {PRESETS.map(([v, t]) => <label key={v}><input type="radio" name="rs-ratio" checked={preset === v} onChange={() => setPreset(v)} /><span>{t}</span></label>)}
-          </div></div>
+          <KeepControl name="rs-keep" value={keep} onChange={setKeep} /></div>
         {err && <p className="error-text">{err}</p>}
         <button className="btn primary big" onClick={go}>开始重新扫描</button>
       </div>

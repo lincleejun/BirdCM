@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS scan (
 CREATE TABLE IF NOT EXISTS photo (
   id INTEGER PRIMARY KEY, scan_id INTEGER NOT NULL REFERENCES scan(id), seq INTEGER NOT NULL, path TEXT NOT NULL,
   size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, state TEXT NOT NULL, fp TEXT, result TEXT, error TEXT, reused INTEGER DEFAULT 0,
-  stars INTEGER, star_reason TEXT, burst_group INTEGER, burst_rank INTEGER, burst_size INTEGER, species_fix TEXT,
+  stars INTEGER, star_reason TEXT, burst_group INTEGER, burst_rank INTEGER, burst_size INTEGER, species_fix TEXT, quality TEXT,
   UNIQUE (scan_id, path));
 CREATE INDEX IF NOT EXISTS photo_reuse ON photo(path, size, mtime_ns, fp) WHERE state = 'done';
 CREATE INDEX IF NOT EXISTS photo_scan_state ON photo(scan_id, state);
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS single (
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
 TERMINAL = ("done", "failed")
-PHOTO_COLS = "id, seq, path, size, mtime_ns, state, result, error, reused, stars, star_reason, burst_group, burst_rank, burst_size, species_fix"
+PHOTO_COLS = "id, seq, path, size, mtime_ns, state, result, error, reused, stars, star_reason, burst_group, burst_rank, burst_size, species_fix, quality"
 
 
 def location(v):
@@ -50,6 +50,7 @@ def photo_row(r: sqlite3.Row) -> dict:
     d = dict(r)
     d["result"] = json.loads(d["result"]) if d["result"] else None
     d["species_fix"] = json.loads(d["species_fix"]) if d.get("species_fix") else None
+    d["quality"] = json.loads(d["quality"]) if d.get("quality") else None
     d["file"] = Path(d["path"]).name
     return d
 
@@ -63,8 +64,10 @@ class Store:
         with self.lock:
             db = self._db()
             db.executescript(SCHEMA)
-            if "species_fix" not in {r[1] for r in db.execute("PRAGMA table_info(photo)")}:   # databases from before it
-                db.execute("ALTER TABLE photo ADD COLUMN species_fix TEXT")
+            have = {r[1] for r in db.execute("PRAGMA table_info(photo)")}
+            for col in ("species_fix", "quality"):                 # databases from before these columns
+                if col not in have:
+                    db.execute(f"ALTER TABLE photo ADD COLUMN {col} TEXT")
 
     def _db(self) -> sqlite3.Connection:
         """One connection per thread, autocommit (transactions are explicit)."""
@@ -260,7 +263,7 @@ class Store:
         def go(db):
             db.execute("UPDATE scan SET fp = ? WHERE id = ?", (fp, scan_id))
             db.execute("UPDATE photo SET state='queued', result=NULL, error=NULL, reused=0, fp=?, stars=NULL, star_reason=NULL, "
-                       "burst_group=NULL, burst_rank=NULL, burst_size=NULL, species_fix=NULL WHERE scan_id = ?", (fp, scan_id))
+                       "burst_group=NULL, burst_rank=NULL, burst_size=NULL, species_fix=NULL, quality=NULL WHERE scan_id = ?", (fp, scan_id))
             self._event(db, scan_id, "stars", {})                 # clients refetch the snapshot
             self._scan_event(db, scan_id)
         self._write(go)
@@ -287,9 +290,11 @@ class Store:
         def go(db):
             for pid, f in fields.items():
                 fix = f.get("species_fix")
-                db.execute("UPDATE photo SET stars=?, star_reason=?, burst_group=?, burst_rank=?, burst_size=?, species_fix=? WHERE id=? AND scan_id=?",
+                qual = {"q": f["q"], "parts": f.get("q_parts")} if f.get("q") is not None else None
+                db.execute("UPDATE photo SET stars=?, star_reason=?, burst_group=?, burst_rank=?, burst_size=?, species_fix=?, quality=? "
+                           "WHERE id=? AND scan_id=?",
                            (f.get("stars"), f.get("star_reason"), f.get("burst_group"), f.get("burst_rank"), f.get("burst_size"),
-                            json.dumps(fix, ensure_ascii=False) if fix else None, pid, scan_id))
+                            json.dumps(fix, ensure_ascii=False) if fix else None, json.dumps(qual) if qual else None, pid, scan_id))
             self._event(db, scan_id, "stars", {})
             if complete and db.execute("UPDATE scan SET state='completed', error=NULL WHERE id=? AND state='finalizing'", (scan_id,)).rowcount:
                 self._scan_event(db, scan_id)

@@ -37,6 +37,32 @@ BURST_GAP = 2.0
 
 @dataclass
 class Config:
+    strategy: str = "select"          # "select" (default, docs/stars.md) or "quota" (the recorded one, for comparison)
+    # ---- select ----
+    keep: float = 0.25                # budget: share of eligible photos that get any star (1+2+3)
+    w_sharp_burst: float = 0.30       # head sharpness percentile within its burst (same scene, same ISO)
+    w_sharp_species: float = 0.15     # ... within the same species (pool) across the scan
+    w_eye: float = 0.10               # P(eye visible)
+    w_size: float = 0.10              # bird size in frame (box area share, saturating at size_full)
+    w_focus: float = 0.05             # camera focus on the head 1, on the bird 0.6, off the bird 0 (forgiven when sharp)
+    w_aes: float = 0.15               # aesthetic percentile over the scan
+    w_det: float = 0.05               # detection score
+    fly_boost: float = 0.15           # added to Q for a flying bird
+    rare_boost: float = 0.05          # 少见 (and 0.1 for 罕见 / 无记录) locally this month
+    size_full: float = 0.04           # box area share at which size counts fully
+    d_species: float = 0.995          # diminishing return per photo already starred of the same species (pool); set on a synthetic scan only
+    d_burst: float = 0.6              # ... of the same burst
+    q_floor: float = 0.35             # below this Q a photo is not starred just to fill the budget
+    weak_size: float = 0.005          # "weak" = eye not visible AND box share below this AND burst sharpness pct < 0.5
+    q3_min: float = 0.70              # 3★: absolute conditions (all must hold)
+    eye3: float = 0.7
+    burst3: float = 0.75              # sharpness pct in burst at least this (best or near best)
+    species3: float = 0.5             # sharpness pct in species at least this
+    aes3: float = 0.5                 # aesthetic pct at least this
+    size3: float = 0.01               # box share at least this
+    margin3: float = 0.05             # Q above the median Q of the starred photos of its species ("鸟都差不多" -> 2★)
+    q2_min: float = 0.50              # 2★: Q at least this and (eye visible or flying)
+    # ---- quota ----
     q3: float = 0.30
     q2: float = 0.30
     w_sharp: float = 0.65
@@ -58,10 +84,12 @@ class Config:
 
     @classmethod
     def from_ratio(cls, ratio: dict | None) -> "Config":
-        """The scan's stored settings: {preset, p3, p2 (percent), any Config field to override}."""
+        """The scan's stored settings: {preset, keep (percent, select), p3 / p2 (percent, quota), any Config field}."""
         r = dict(ratio or {})
         known = {f.name for f in fields(cls)}
         c = cls(**{k: v for k, v in r.items() if k in known})
+        if "keep" in r:
+            c.keep = float(r["keep"]) / 100
         if "p3" in r:
             c.q3 = float(r["p3"]) / 100
         if "p2" in r:
@@ -75,9 +103,13 @@ def validate(ratio: dict) -> dict:
     if not isinstance(ratio, dict):
         raise ValueError("星级设置要是一个对象")
     known = {f.name: f for f in fields(Config)} | {"p3": None, "p2": None, "preset": None}
+    if ratio.get("strategy", "select") not in ("select", "quota"):
+        raise ValueError("strategy 只能是 select 或 quota")
     for k, v in ratio.items():
         if k not in known:
             raise ValueError(f"不认识的星级设置：{k}")
+        if k == "strategy":
+            continue
         if k == "preset":
             if not isinstance(v, str):
                 raise ValueError("preset 要是文字")
@@ -89,6 +121,8 @@ def validate(ratio: dict) -> dict:
         elif isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
             raise ValueError(f"{k} 要是数字")
     c = Config.from_ratio(ratio)
+    if not 0 <= c.keep <= 1:
+        raise ValueError("留片比例在 0–100%")
     if not (0 <= c.q3 <= 1 and 0 <= c.q2 <= 1 and c.q3 + c.q2 <= 1 + 1e-9):
         raise ValueError("三星、两星比例各在 0–100%，合计不超过 100%")
     if c.w_sharp < 0 or c.w_aes < 0 or c.burst_cap < 0 or c.burst_gap < 0 or not 0 <= c.species_min_p <= 1:
@@ -222,7 +256,25 @@ def rate(rows: list[dict], ratio: dict | None, rarity=None) -> dict[int, dict]:
         from birdcm.pipeline import rarity_for
         for i, fix in fixes.items():
             fix["rarity"] = rarity_for(rarity, fix, res[i])
-    out = {i: {"stars": None, "star_reason": None, "q": None, "species_fix": fixes.get(i)} for i in res}
+    out = {i: {"stars": None, "star_reason": None, "q": None, "q_parts": None, "species_fix": fixes.get(i)} for i in res}
+    seq = {r["id"]: n for n, r in enumerate(rows)}
+    if c.strategy == "quota":
+        _quota(rows, res, fixes, bursts, c, out, seq)
+    else:
+        _select(rows, res, fixes, bursts, c, out, seq)
+    by_burst: dict[int, list[int]] = defaultdict(list)
+    for i in res:
+        by_burst[bursts[i][0]].append(i)
+    for g, idx in by_burst.items():
+        idx.sort(key=lambda i: (-(out[i]["stars"] if out[i]["stars"] is not None else -2), -(out[i]["q"] or -1), seq[i]))
+        for rank, i in enumerate(idx, 1):
+            out[i].update(burst_group=g, burst_rank=rank, burst_size=len(idx))
+    return out
+
+
+def _quota(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config", out: dict, seq: dict) -> None:
+    """The recorded strategy (strategy "quota"): Q from sharpness and aesthetic percentiles, per-species 3-star / 2-star
+    quotas, burst cap. Kept for comparison."""
     ok = []
     for r in rows:
         i, x = r["id"], r.get("result")
@@ -268,7 +320,6 @@ def rate(rows: list[dict], ratio: dict | None, rarity=None) -> dict[int, dict]:
     groups: dict[str | None, list[int]] = defaultdict(list)
     for i in ok:
         groups[species(i) if c.per_species else None].append(i)
-    seq = {r["id"]: n for n, r in enumerate(rows)}
     per_burst: dict[int, int] = defaultdict(int)
     for sp, idx in groups.items():
         idx.sort(key=lambda i: (-out[i]["q"], seq[i]))
@@ -293,11 +344,155 @@ def rate(rows: list[dict], ratio: dict | None, rarity=None) -> dict[int, dict]:
                 out[i].update(stars=1, star_reason="排名靠后，" + place)
         if sp is not None and idx and max(out[i]["stars"] for i in idx) < 2:
             out[idx[0]].update(stars=2, star_reason="保底：这个鸟种最好的一张")
-    by_burst: dict[int, list[int]] = defaultdict(list)
-    for i in res:
-        by_burst[bursts[i][0]].append(i)
-    for g, idx in by_burst.items():
-        idx.sort(key=lambda i: (-(out[i]["stars"] if out[i]["stars"] is not None else -2), -(out[i]["q"] or -1), seq[i]))
-        for rank, i in enumerate(idx, 1):
-            out[i].update(burst_group=g, burst_rank=rank, burst_size=len(idx))
-    return out
+
+
+def _pctl(ids: list[int], value, alone: float = 1.0) -> dict[int, float]:
+    """Percentile of each id's value among ids; a lone value gets `alone` (nothing to compare with)."""
+    have = [i for i in ids if value(i) is not None]
+    return dict(zip(have, percentiles([value(i) for i in have]))) if len(have) > 1 else {i: alone for i in have}
+
+
+def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config", out: dict, seq: dict) -> None:
+    """Strategy "select" (docs/stars.md): who gets a star is a budget spent greedily with diminishing returns per
+    species and per burst; which star is decided by absolute conditions, not quotas."""
+    import heapq
+    elig = []
+    for r in rows:
+        i, x = r["id"], r.get("result")
+        if x is None:
+            continue
+        if x.get("rejected"):
+            out[i].update(stars=-1, star_reason=x.get("reject_reason") or "没有找到鸟")
+        else:
+            elig.append(i)
+    if not elig:
+        return
+
+    def sp_of(i: int) -> dict | None:
+        return fixes.get(i) or res[i].get("species")
+
+    def pool(i: int) -> str:
+        sp = sp_of(i) or {}
+        lab = sp.get("label")
+        if sp.get("level") == "species" and lab and (i in fixes or (lab.get("p") or 0) >= c.species_min_p):
+            return lab["sci"]
+        g = (lab or sp.get("genus") or {}).get("sci") if sp.get("level") == "genus" else None
+        return f"genus:{g.split(' ')[0]}" if g else "未确认"
+    pools = {i: pool(i) for i in elig}
+    burst_of = {i: bursts[i][0] for i in elig}
+    by_burst, by_pool = defaultdict(list), defaultdict(list)
+    for i in elig:
+        by_burst[burst_of[i]].append(i)
+        by_pool[pools[i]].append(i)
+    sharp = lambda i: res[i].get("sharpness")                        # noqa: E731
+    pb, pbq = {}, {}                  # pb: for "best in its burst" (a lone frame is); pbq: for Q (a lone frame is neutral)
+    for ids in by_burst.values():
+        pb.update(_pctl(ids, sharp))
+        pbq.update(_pctl(ids, sharp, alone=0.5))
+    psp = {}
+    for ids in by_pool.values():
+        psp.update(_pctl(ids, sharp))
+    pa = _pctl(elig, lambda i: res[i].get("aesthetic"))
+    fc = {i: focus_class(res[i]) for i in elig}
+
+    def area(i: int) -> float | None:
+        x = res[i]
+        if x.get("subject") is None:
+            return None
+        b = x["boxes"][x["subject"]]["box"]
+        return max(0.0, (b[2] - b[0]) * (b[3] - b[1]))
+    q, parts = {}, {}
+    for i in elig:
+        x = res[i]
+        a = area(i)
+        focus = {"head": 1.0, "bird": 0.6, "outside": 0.6 if (pb.get(i) or 0) >= 0.8 else 0.0}.get(fc[i])
+        det = x["boxes"][x["subject"]]["score"] if x.get("subject") is not None else None
+        sig = {"sharp_burst": (pbq.get(i), c.w_sharp_burst), "sharp_species": (psp.get(i), c.w_sharp_species),
+               "eye": (x.get("eye_p"), c.w_eye), "size": (None if a is None else min(1.0, math.sqrt(a / c.size_full)), c.w_size),
+               "focus": (focus, c.w_focus), "aesthetic": (pa.get(i), c.w_aes),
+               "detection": (None if det is None else min(1.0, max(0.0, (det - 0.1) / 0.6)), c.w_det)}
+        tw = sum(w for _, w in sig.values()) or 1.0
+        base = sum((0.5 if v is None else v) * w for v, w in sig.values()) / tw      # a missing signal is neutral
+        fly = c.fly_boost if (x.get("p_fly") or 0) >= 0.5 else 0.0
+        tier = ((fixes.get(i) or {}).get("rarity") or x.get("rarity") or {}).get("tier")
+        rare = 2 * c.rare_boost if tier in (0, 1) else c.rare_boost if tier == 2 else 0.0
+        q[i] = round(base + fly + rare, 4)
+        parts[i] = {k: (None if v is None else round(v, 3)) for k, (v, _) in sig.items()} | {"fly": fly, "rare": rare}
+        out[i].update(q=q[i], q_parts=parts[i])
+
+    def weak(i: int) -> bool:
+        x, a = res[i], area(i)
+        return q[i] < c.q_floor or ((x.get("eye_p") or 0) < 0.5 and a is not None and a < c.weak_size and (pbq.get(i) or 0) <= 0.5)
+    budget = round(c.keep * len(elig))
+    taken_sp, taken_b = defaultdict(int), defaultdict(int)
+    chosen: list[int] = []
+    heap = [(-q[i], seq[i], i, 0, 0) for i in elig if not weak(i)]
+    heapq.heapify(heap)
+    while heap and len(chosen) < budget:
+        neg, _, i, ks, kb = heapq.heappop(heap)
+        now = (taken_sp[pools[i]], taken_b[burst_of[i]])
+        if (ks, kb) != now:                                        # stale: re-score with the current counts
+            eff = q[i] * c.d_species ** now[0] * c.d_burst ** now[1]
+            heapq.heappush(heap, (-eff, seq[i], i, *now))
+            continue
+        chosen.append(i)
+        taken_sp[pools[i]] += 1
+        taken_b[burst_of[i]] += 1
+    picked = set(chosen)
+    floor = set()
+    for sp, ids in by_pool.items():                               # every confirmed species: at least its best photo
+        if sp.startswith("genus:") or sp == "未确认" or picked & set(ids):
+            continue
+        best = max(ids, key=lambda i: (q[i], -seq[i]))
+        picked.add(best)
+        floor.add(best)
+    med = {sp: sorted(q[i] for i in ids if i in picked) for sp, ids in by_pool.items()}
+    med = {sp: v[len(v) // 2] if v else 0.0 for sp, v in med.items()}
+    best_in_burst = {}
+    for b, ids in by_burst.items():
+        sel = [i for i in ids if i in picked]
+        if sel:
+            best_in_burst[b] = max(sel, key=lambda i: (q[i], -seq[i]))
+    for i in elig:
+        x = res[i]
+        flying = (x.get("p_fly") or 0) >= 0.5
+        name = _name(res[i], fixes.get(i))
+        if i not in picked:
+            other = best_in_burst.get(burst_of[i])
+            why = (f"同组 {res[other].get('file', '另一张')} 更好" if other is not None
+                   else "整体质量不够，不为凑比例而给星" if weak(i) else "比例已满，排在后面")
+            out[i].update(stars=0, star_reason=why)
+            continue
+        short = []
+        if (x.get("eye_p") or 0) < c.eye3:
+            short.append("眼睛不够清楚")
+        if (pb.get(i) or 0) < c.burst3:
+            short.append("同组里不是最清楚的")
+        if (psp.get(i) if psp.get(i) is not None else 1.0) < c.species3:
+            short.append("同种里清晰度偏低")
+        if fc[i] == "outside" and (pb.get(i) or 0) < 0.8:
+            short.append("对焦点不在鸟身上")
+        a = area(i)
+        if a is not None and a < c.size3:
+            short.append("鸟太小")
+        if (pa.get(i) if pa.get(i) is not None else 1.0) < c.aes3:
+            short.append("构图美感一般")
+        if pools[i].startswith("genus:") or pools[i] == "未确认":
+            short.append("鸟种没认准")
+        if best_in_burst.get(burst_of[i]) != i:
+            short.append("同组已有更好的一张")
+        if q[i] < c.q3_min:
+            short.append("综合分不够高")
+        if not short and q[i] < med.get(pools[i], 0) + c.margin3 and len([j for j in by_pool[pools[i]] if j in picked]) > 1:
+            short.append(f"和其他{name}差不多")
+        lead = "飞版，" if flying else ""
+        if not short:
+            out[i].update(stars=3, star_reason=f"{lead}各方面都很好（综合 {q[i]:.2f}）")
+        elif q[i] >= c.q2_min and ((x.get("eye_p") or 0) >= 0.5 or flying):
+            out[i].update(stars=2, star_reason=f"{lead}值得留，但{short[0]}")
+        else:
+            why = ("这个鸟种在这批里最好的一张" if i in floor else
+                   "当地少见，留作记录" if (parts[i]["rare"] or 0) > 0 else
+                   "飞版，有瑕疵" if flying else "留作记录")
+            out[i].update(stars=1, star_reason=f"{why}；{short[0]}")
+
