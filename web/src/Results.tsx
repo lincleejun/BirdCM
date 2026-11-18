@@ -632,6 +632,7 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
                   <p className="fixed-note">图像最像：{named({ ...sp, label: sp.override.visual, level: "species" }).title} <i>{sp.override.visual.sci}</i> {pct(sp.override.visual.p)}
                     · 但此地此季几乎没有它，所以只报到{sp.level === "genus" ? "属" : "“不确定”"}{sp.override.local && <>；当地有的同属：{named({ ...sp, label: sp.override.local, level: "species" }).title} <i>{sp.override.local.sci}</i></>}</p>
                 )}
+                {sp.lookalike && <p className="rare-note"><span className="tbd">近似种来回跳</span> 这一组同一只鸟在 {named(sp).title} 和 <i>{sp.lookalike}</i> 之间来回认，按多数算 {named(sp).title}；两种很像，请核对。</p>}
                 {r!.species_own && (
                   <p className="fixed-note"><span className="tbd">按连拍组修正</span> 这一组 {sp.consensus?.frames} 张里 {sp.consensus?.support} 张支持它；
                     这张自己最像 {named({ ...r!.species_own, label: r!.species_own.top5[0], level: "species" }).title} <i>{r!.species_own.top5[0]?.sci}</i>（{pct(r!.species_own.top5[0]?.p ?? 0)}），按连拍组改成它</p>

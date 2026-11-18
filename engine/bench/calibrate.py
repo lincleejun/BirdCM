@@ -1,88 +1,131 @@
-"""Choose the "confirmed to species" rule on the evaluation set only (never the owner's photos).
+"""Choose the naming rule on the evaluation set only (never the owner's photos), on the FINAL pipeline's output.
 
-  uv run python bench/calibrate.py EVAL_JSON          # rows written by `birdcm eval --out` (location prior on)
+  uv run python bench/calibrate.py EVAL_JSON [NAMES_NPZ]     # rows from `birdcm eval --out`; names default: the installed list
 
-Rule: species when p1 >= P and p1 - p2 >= M (posterior, after the location prior); else genus when the best genus sum
->= G; else 不确定. Target: precision among confirmed species >= 97 %, coverage as high as possible.
-Choice by 5-fold cross-validation with folds by species (a species is never on both sides): on each training part,
-pick the (P, M) with the highest coverage whose precision is >= the target; report the held-out precision and
-coverage; the final rule is the one picked on all photos. Same for G on genus-level precision.
-Rows whose truth name is not in the AviList list (a label typo in the list) are left out of the choice.
+Rule (as the app applies it): species when the posterior's first name has p1 >= P and its location prior over the
+place (max) >= EPS (or the prior is unknown / there is no place); else genus when the best genus sum >= G; else
+不确定. Target: precision among confirmed species >= TARGET at the highest coverage; the same target for genus.
+
+Honesty (Codex C5 / C6):
+- names: the full AviList list is required (a missing argument used to shrink the allowed set to ONE species);
+  rows whose truth is not in the list are scored through evaluate.CANONICAL, others left out and counted.
+- 5-fold cross-validation with folds by species (a species is never on both sides). P, EPS and G are chosen
+  TOGETHER on each training part; the held-out parts are pooled for the reported precision / coverage, with a
+  Wilson 95 % interval. The final rule is then chosen on all photos and reported separately as "fit on all"
+  (optimistic: the same photos chose it). There is no blind test set yet; the report says so.
 """
 from __future__ import annotations
 
 import json
+import math
 import sys
 import zlib
 
 import numpy as np
 
 TARGET = 0.97
-PS = np.round(np.arange(0.30, 0.99, 0.02), 2)
-MS = np.round(np.arange(0.0, 0.81, 0.05), 2)
-GS = np.round(np.arange(0.30, 0.99, 0.02), 2)
+PS = np.round(np.arange(0.50, 0.99, 0.02), 2)
+EPSS = (0.005, 0.01, 0.02)
+GS = np.round(np.arange(0.50, 0.99, 0.02), 2)
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> list[float] | None:
+    if not n:
+        return None
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return [round(c - h, 4), round(c + h, 4)]
 
 
 def load(path: str, names: set[str]):
-    rows = [r for r in json.load(open(path))["rows"] if r["kind"] == "bird" and r["truth"] in names
-            and r["top5"] and not r["rejected"]]
+    from birdcm.evaluate import CANONICAL
+    raw = [r for r in json.load(open(path))["rows"] if r["kind"] == "bird"]
+    rows, left_out = [], 0
+    for r in raw:
+        truth = CANONICAL.get(r["truth"], r["truth"])
+        if truth not in names:
+            left_out += 1
+            continue
+        if not r["top5"] or r["rejected"]:
+            continue
+        rows.append({**r, "truth": truth})
+    if not rows:
+        raise SystemExit("no usable rows: is EVAL_JSON from `birdcm eval --out`?")
     p1 = np.array([r["top5p"][0] for r in rows])
-    p2 = np.array([r["top5p"][1] for r in rows])
     ok = np.array([r["top5"][0] == r["truth"] for r in rows])
+    pr = np.array([(r.get("prior") or {}).get("max", np.inf) if not (r.get("prior") or {}).get("unknown") else np.inf
+                   for r in rows], float)                                        # no prior / unknown: never vetoed
     gp = np.array([r["genus_p"] or 0 for r in rows])
     gok = np.array([(r["genus"] or "").split(" ")[0] == r["truth"].split(" ")[0] for r in rows])
     fold = np.array([zlib.crc32(r["truth"].encode()) % 5 for r in rows])
-    return rows, p1, p2, ok, gp, gok, fold
+    return rows, p1, ok, pr, gp, gok, fold, left_out
 
 
-def pick(p1, p2, ok, idx):
+def pick(p1, ok, pr, gp, gok, idx):
+    """(P, EPS, G) with the highest species coverage at precision >= TARGET, then G likewise on the rest."""
     best = None
-    for P in PS:
-        for M in MS:
-            c = idx & (p1 >= P) & (p1 - p2 >= M)
+    for E in EPSS:
+        for P in PS:
+            c = idx & (p1 >= P) & (pr >= E)
             if c.sum() < 20:
                 continue
             prec, cov = ok[c].mean(), c.sum() / idx.sum()
-            if prec >= TARGET and (best is None or cov > best[2] or (cov == best[2] and (P, M) < best[:2])):
-                best = (float(P), float(M), float(cov), float(prec))
-    return best
-
-
-def pick_g(gp, gok, idx):
-    best = None
-    for G in GS:
-        c = idx & (gp >= G)
-        if c.sum() < 20:
-            continue
-        prec, cov = gok[c].mean(), c.sum() / idx.sum()
-        if prec >= TARGET and (best is None or cov > best[1]):
-            best = (float(G), float(cov), float(prec))
-    return best
+            if prec >= TARGET and (best is None or cov > best[2] + 1e-12):
+                best = (float(P), float(E), float(cov))
+    if best is None:
+        raise SystemExit("no (P, EPS) reaches the target precision on a training part")
+    P, E, _ = best
+    rest = idx & ~((p1 >= P) & (pr >= E))
+    G = None
+    for g in GS:
+        c = rest & (gp >= g)
+        if c.sum() >= 20 and gok[c].mean() >= TARGET:
+            G = float(g)
+            break
+    return P, E, G if G is not None else float(GS[-1])
 
 
 def main() -> None:
-    names = set(map(str, np.load(sys.argv[2])["scientific"])) if len(sys.argv) > 2 else None
-    rows, p1, p2, ok, gp, gok, fold = load(sys.argv[1], names or {json.load(open(sys.argv[1]))["rows"][0]["truth"]} | set())
-    every = np.ones(len(rows), bool)
-    out = {"photos": len(rows), "top1_among_them": round(float(ok.mean()), 4), "target_precision": TARGET, "cv": []}
-    held_c = held_ok = 0
+    if len(sys.argv) > 2:
+        names = set(map(str, np.load(sys.argv[2])["scientific"]))
+    else:
+        from birdcm import models
+        names = set(map(str, np.load(models.paths()["names"])["scientific"]))
+    rows, p1, ok, pr, gp, gok, fold, left_out = load(sys.argv[1], names)
+    out = {"photos_used": len(rows), "left_out_truth_not_in_list": left_out, "target_precision": TARGET, "folds": []}
+    hc = hok = gc = gokn = 0
     for k in range(5):
         tr, te = fold != k, fold == k
-        P, M, *_ = pick(p1, p2, ok, tr)
-        c = te & (p1 >= P) & (p1 - p2 >= M)
-        held_c += c.sum()
-        held_ok += ok[c].sum()
-        out["cv"].append({"fold": k, "P": P, "M": M, "held_out_coverage": round(float(c.sum() / te.sum()), 4),
-                          "held_out_precision": round(float(ok[c].mean()), 4)})
-    out["cv_pooled"] = {"coverage": round(float(held_c / len(rows)), 4), "precision": round(float(held_ok / held_c), 4)}
-    P, M, cov, prec = pick(p1, p2, ok, every)
-    out["chosen"] = {"P": P, "M": M, "coverage": round(cov, 4), "precision": round(prec, 4)}
-    rest = every & ~((p1 >= P) & (p1 - p2 >= M))
-    G, gcov, gprec = pick_g(gp, gok, rest)
-    out["genus_on_the_rest"] = {"G": G, "coverage_of_rest": round(gcov, 4), "precision": round(gprec, 4)}
-    # the curve (all photos, M = chosen) for the doc
-    out["curve"] = [{"P": float(p), "coverage": round(float(((p1 >= p) & (p1 - p2 >= M)).mean()), 4),
-                     "precision": round(float(ok[(p1 >= p) & (p1 - p2 >= M)].mean()), 4)} for p in PS[::3]]
+        if not te.any() or not tr.any():
+            raise SystemExit(f"fold {k} is empty")
+        P, E, G = pick(p1, ok, pr, gp, gok, tr)
+        sp = te & (p1 >= P) & (pr >= E)
+        ge = te & ~sp & (gp >= G)
+        hc, hok, gc, gokn = hc + sp.sum(), hok + ok[sp].sum(), gc + ge.sum(), gokn + gok[ge].sum()
+        out["folds"].append({"fold": k, "P": P, "EPS": E, "G": G, "held_out_species_coverage": round(float(sp.sum() / te.sum()), 4),
+                             "held_out_species_precision": round(float(ok[sp].mean()), 4) if sp.any() else None})
+    out["held_out_pooled"] = {"species_coverage": round(float(hc / len(rows)), 4), "species_precision": round(float(hok / hc), 4),
+                              "species_precision_ci95": wilson(int(hok), int(hc)),
+                              "genus_coverage": round(float(gc / len(rows)), 4),
+                              "genus_precision": round(float(gokn / gc), 4) if gc else None, "genus_precision_ci95": wilson(int(gokn), int(gc))}
+    every = np.ones(len(rows), bool)
+    P, E, G = pick(p1, ok, pr, gp, gok, every)
+    sp = (p1 >= P) & (pr >= E)
+    ge = ~sp & (gp >= G)
+    out["fit_on_all"] = {"P": P, "EPS": E, "G": G, "species_coverage": round(float(sp.mean()), 4),
+                         "species_precision": round(float(ok[sp].mean()), 4), "genus_coverage": round(float(ge.mean()), 4),
+                         "genus_precision": round(float(gok[ge].mean()), 4) if ge.any() else None,
+                         "note": "chosen and scored on the same photos: optimistic"}
+    from birdcm import confirm, tower
+    cur = (p1 >= tower.SPECIES_P) & (pr >= confirm.EPS)
+    cg = ~cur & (gp >= tower.GENUS_P)
+    out["current_rule"] = {"P": tower.SPECIES_P, "EPS": confirm.EPS, "G": tower.GENUS_P,
+                           "species_coverage": round(float(cur.mean()), 4), "species_precision": round(float(ok[cur].mean()), 4),
+                           "species_precision_ci95": wilson(int(ok[cur].sum()), int(cur.sum())),
+                           "genus_coverage": round(float(cg.mean()), 4), "genus_precision": round(float(gok[cg].mean()), 4) if cg.any() else None}
+    out["blind_test"] = "none yet: every photo here has been used to choose thresholds at some point"
     print(json.dumps(out, indent=1))
 
 

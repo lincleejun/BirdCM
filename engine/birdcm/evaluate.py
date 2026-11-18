@@ -63,10 +63,29 @@ def score(rows: list[dict]) -> dict:
     out["precision_confirmed_species_pct"] = pct("species_right", c.get("level_species", 0)) if c.get("level_species") else None
     out["precision_genus_pct"] = pct("genus_right", c.get("level_genus", 0)) if c.get("level_genus") else None
     mammals = [r for r in rows if r["kind"] == "mammal"]
-    if mammals:
-        rej = sum(1 for r in mammals if r["result"] is None or r["result"]["rejected"])
-        out.update(mammal_photos=len(mammals), mammal_rejected=rej, mammal_rejected_pct=round(100 * rej / len(mammals), 2))
+    if mammals:                                      # a failed photo is a failure, never a correct rejection (Codex D3)
+        failed = sum(1 for r in mammals if r["result"] is None)
+        rej = sum(1 for r in mammals if r["result"] is not None and r["result"]["rejected"])
+        kept = len(mammals) - failed - rej
+        n = len(mammals)
+        out.update(mammal_photos=n, mammal_rejected=rej, mammal_rejected_pct=round(100 * rej / n, 2),
+                   mammal_kept_as_bird=kept, mammal_kept_pct=round(100 * kept / n, 2),
+                   mammal_failed=failed, mammal_failed_pct=round(100 * failed / n, 2))
     return out
+
+
+# Ground-truth names that are spelling variants of an AviList v2026 name (Codex C7). The raw truth stays as it is;
+# the "canonical" score reads it through this map. Source per entry.
+CANONICAL = {"Pica nuttalli": "Pica nuttallii"}    # AviList v2026 (and IOC) spell the Yellow-billed Magpie nuttallii
+
+
+def score_both(rows: list[dict]) -> dict:
+    """The strict score (truth string as given) and the canonical one (truth through CANONICAL), same denominators."""
+    strict = score(rows)
+    canon = score([{**r, "truth": CANONICAL.get(r["truth"], r["truth"])} for r in rows])
+    keys = ("top1", "top1_pct", "top5", "top5_pct", "best_guess", "best_guess_pct", "level_species", "species_right",
+            "precision_confirmed_species_pct", "genus_right", "precision_genus_pct", "flag_rare", "flag_rare_right")
+    return {**strict, "canonical": {k: canon.get(k) for k in keys}, "canonical_map": CANONICAL}
 
 
 def region_label(lat: float, lon: float) -> str | None:
@@ -119,7 +138,7 @@ def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit
         e.close()
     rows = [{"kind": r["kind"], "truth": r["scientific"], "path": r["path"],
              "result": got.get(i, (None, "missing"))[0], "error": got.get(i, (None, "missing"))[1]} for i, r in enumerate(gt)]
-    report = {**score(rows), "missing_files": len(missing), "seconds": round(time.perf_counter() - t0, 1),
+    report = {**score_both(rows), "missing_files": len(missing), "seconds": round(time.perf_counter() - t0, 1),
               "location_prior": prior, "fingerprint": e.fingerprint(None)}
     names = set(e.tower.sci)
     report["truth_not_in_names"] = sum(1 for r in gt if r["kind"] == "bird" and r["scientific"] not in names)

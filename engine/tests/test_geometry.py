@@ -51,12 +51,24 @@ def test_crop_edge_box_shifts_inside():
     assert c[2] == 2048 and c[3] == 1365
 
 
-def test_crop_bigger_than_frame_is_clipped_then_centre_cropped():
-    # a portrait frame whose bird fills it: the square is wider than the frame -> clipped, square_map centre-crops
-    c = g.crop_rect((0.05, 0.05, 0.95, 0.95), 1365, 2048)
-    assert c[2] - c[0] == 1365 and c[3] - c[1] < 2048 + 1
+def test_crop_bigger_than_frame_stays_square_and_holds_the_whole_box():
+    """Codex C3: a bird filling a portrait frame used to be clipped and centre-cropped again (box ends at y = -39 and
+    263 of the 224 input). Now the square reaches past the frame and every box corner lands inside the input."""
+    box = (0.05, 0.05, 0.95, 0.95)
+    c = g.crop_rect(box, 1365, 2048)
+    assert c[2] - c[0] == c[3] - c[1] and c[0] < 0
     k, left, top = g.square_map(c)
-    assert left == 0 and top > 0
+    assert left == 0 and top == 0
+    for corner in [(box[0], box[1]), (box[2], box[3]), (box[0], box[3]), (box[2], box[1])]:
+        x, y = g.to_input(corner, c, 1365, 2048)
+        assert 0 <= x <= 224 and 0 <= y <= 224
+
+
+def test_pad_crop_fills_outside_with_the_mean_colour():
+    from PIL import Image
+    im = Image.new("RGB", (100, 200), (10, 200, 30))
+    out = g.pad_crop(im, (-50, 0, 150, 200))
+    assert out.size == (200, 200) and out.getpixel((0, 100)) == (10, 200, 30) and out.getpixel((100, 100)) == (10, 200, 30)
 
 
 @pytest.mark.parametrize("w,h,box", [(2048, 1365, (0.4, 0.3, 0.6, 0.7)), (1365, 2048, (0.1, 0.0, 0.9, 1.0)),
@@ -65,8 +77,10 @@ def test_input_round_trip(w, h, box):
     c = g.crop_rect(box, w, h)
     for pt in [(0, 0), (112, 112), (223.5, 10), (5, 200)]:
         n = g.from_input(pt, c, w, h)
-        assert 0 <= n[0] <= 1 and 0 <= n[1] <= 1
         assert g.to_input(n, c, w, h) == pytest.approx(pt, abs=1e-6)
+    for corner in [(box[0], box[1]), (box[2], box[3])]:                # the whole box is in the input
+        x, y = g.to_input(corner, c, w, h)
+        assert -1e-6 <= x <= 224 + 1e-6 and -1e-6 <= y <= 224 + 1e-6
 
 
 def test_input_centre_maps_to_crop_centre():
@@ -94,3 +108,24 @@ def test_subject_choice():
 def test_dedupe():
     kept = g.dedupe([(0.5, (0, 0, 1, 1)), (0.9, (0, 0, 0.95, 0.95)), (0.4, (2, 2, 3, 3))])
     assert [s for s, _ in kept] == [0.9, 0.4]
+
+
+@pytest.mark.parametrize("w,h,box,dot", [(1365, 2048, (0.05, 0.05, 0.95, 0.95), (0.5, 0.08)),
+                                         (2048, 1365, (0.9, 0.85, 1.0, 1.0), (0.97, 0.95)),
+                                         (2048, 1365, (0.3, 0.3, 0.5, 0.6), (0.4, 0.35))])
+def test_pixel_round_trip_through_the_model_input(w, h, box, dot):
+    """A red dot in the frame is found in the 224 input where to_input says, and maps back to itself."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    from birdcm.tower import square
+    im = Image.new("RGB", (w, h), (0, 0, 0))
+    px, py = dot[0] * w, dot[1] * h
+    ImageDraw.Draw(im).ellipse((px - 12, py - 12, px + 12, py + 12), fill=(255, 0, 0))
+    c = g.crop_rect(box, w, h)
+    inp = np.asarray(square(g.pad_crop(im, c)), np.float32)
+    ys, xs = np.nonzero(inp[:, :, 0] > 128)
+    found = (xs.mean(), ys.mean())
+    assert g.to_input(dot, c, w, h) == pytest.approx(found, abs=1.5)
+    back = g.from_input(found, c, w, h)
+    tol = 1.5 * (c[2] - c[0]) / 224 / min(w, h)                     # 1.5 input pixels, in frame units
+    assert back == pytest.approx(dot, abs=tol)

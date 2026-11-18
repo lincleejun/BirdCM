@@ -163,12 +163,15 @@ def defaults() -> dict:
 
 
 def _seconds(taken_at: str | None) -> float | None:
+    """The camera's wall clock in seconds, offset dropped: bursts are one body's consecutive frames, so its own clock
+    is the right scale, and the machine's time zone must not matter (Codex C8)."""
     if not taken_at:
         return None
     try:
-        return datetime.fromisoformat(taken_at).timestamp()
+        t = datetime.fromisoformat(taken_at).replace(tzinfo=None)
     except ValueError:
         return None
+    return (t - datetime(1970, 1, 1)).total_seconds()
 
 
 def group_bursts(photos: list[dict], gap: float = BURST_GAP) -> dict[int, tuple[int, int]]:
@@ -276,11 +279,53 @@ def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
     return out
 
 
+def lookalikes(frames: list[tuple[int, dict]], fixes: dict[int, dict], near: float = 0.12) -> dict[int, dict]:
+    """Two confirmed species of the same genus alternating inside one burst on the same bird (a look-alike pair the
+    model flips between, e.g. Elegant / Royal Tern frame to frame): when one holds at least twice the frames of the
+    other (and at least 3), the other's frames whose subject sits where the dominant one's does (centre within `near`
+    of their median, normalised) take the dominant species, marked "lookalike". Different genera, or the other bird
+    somewhere else in the frame, are left alone: a burst can hold two birds."""
+    def eff(i, r):
+        return fixes.get(i) or r.get("species")
+
+    def centre(r):
+        if r.get("subject") is None:
+            return None
+        b = r["boxes"][r["subject"]]["box"]
+        return ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
+    named = [(i, r, eff(i, r)) for i, r in frames if (eff(i, r) or {}).get("level") == "species" and eff(i, r).get("label")]
+    count: dict[str, int] = defaultdict(int)
+    for _, _, sp in named:
+        count[sp["label"]["sci"]] += 1
+    if len(count) < 2:
+        return {}
+    dom = max(count, key=lambda s: (count[s], s))
+    src = next(sp for _, _, sp in named if sp["label"]["sci"] == dom)
+    cs = [c for _, r, sp in named if sp["label"]["sci"] == dom and (c := centre(r))]
+    if not cs:
+        return {}
+    mx, my = sorted(c[0] for c in cs)[len(cs) // 2], sorted(c[1] for c in cs)[len(cs) // 2]
+    out = {}
+    for i, r, sp in named:
+        s = sp["label"]["sci"]
+        if s == dom or s.split(" ")[0] != dom.split(" ")[0] or count[dom] < max(3, 2 * count[s]):
+            continue
+        c = centre(r)
+        if c is None or abs(c[0] - mx) > near or abs(c[1] - my) > near:
+            continue
+        own = r.get("species") or {}
+        p = next((x["p"] for x in own.get("top5", []) if x["sci"] == dom), None)
+        out[i] = {"level": "species", "label": {**src["label"], "p": p}, "top5": own.get("top5", []), "geo": own.get("geo", False),
+                  "consensus": {"support": count[dom], "frames": len(named)}, "lookalike": s, "visual": own.get("visual"),
+                  **{k: src[k] for k in ("check", "prior") if src.get(k)}}
+    return out
+
+
 def rate(rows: list[dict], ratio: dict | None, rarity=None) -> dict[int, dict]:
     """rows: {id, result (PhotoResult or None)} -> id: {stars, star_reason, burst_group, burst_rank, burst_size, q}."""
     c = Config.from_ratio(ratio)
     res = {r["id"]: r.get("result") for r in rows}
-    bursts = group_bursts([{"id": i, "camera": (x or {}).get("exif", {}).get("camera"),
+    bursts = group_bursts([{"id": i, "camera": (x or {}).get("exif", {}).get("camera_id") or (x or {}).get("exif", {}).get("camera"),
                             "taken_at": (x or {}).get("exif", {}).get("taken_at")} for i, x in res.items()], c.burst_gap)
     members: dict[int, list[tuple[int, dict]]] = defaultdict(list)
     for i, x in res.items():
@@ -289,6 +334,7 @@ def rate(rows: list[dict], ratio: dict | None, rarity=None) -> dict[int, dict]:
     fixes: dict[int, dict] = {}
     for frames in members.values():
         fixes.update(consensus(frames))
+        fixes.update(lookalikes(frames, fixes))
     if rarity is not None:                                         # a corrected frame shows its new species' rarity
         from birdcm.pipeline import rarity_for
         for i, fix in fixes.items():

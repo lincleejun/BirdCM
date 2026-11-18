@@ -15,6 +15,7 @@ Box = list[float]                   # [x0, y0, x1, y1], same frame
 
 class Exif(TypedDict):
     camera: str | None
+    camera_id: NotRequired[str | None]  # model + serial number: the body (bursts never span two bodies)
     lens: str | None
     focal_mm: float | None
     aperture: float | None

@@ -17,6 +17,7 @@ export interface Species {
   check?: "rare";                                      // confirmed, but not expected over most of the place (请核对)
   override?: { why: "range"; visual: Name; local: Name | null };   // not confirmed: first name not expected here
   prior?: { max?: number; median?: number; unknown?: boolean };
+  lookalike?: string;                                  // burst fix: the look-alike name this frame flipped to
 }
 export interface Detection {
   box: Box; score: number; clear: boolean | null; species: Species;

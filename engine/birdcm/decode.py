@@ -173,7 +173,8 @@ def decode(job: dict) -> dict:
 
 TAGS = ["-Make", "-Model", "-LensModel", "-LensID", "-FocalLength#", "-FNumber#", "-ExposureTime#", "-ISO#",
         "-ExposureCompensation#", "-FocusMode", "-AFAreaMode", "-DateTimeOriginal", "-SubSecTimeOriginal",
-        "-OffsetTimeOriginal", "-GPSLatitude#", "-GPSLongitude#", "-FocusLocation#", "-Orientation#"]
+        "-OffsetTimeOriginal", "-GPSLatitude#", "-GPSLongitude#", "-FocusLocation#", "-Orientation#",
+        "-SerialNumber", "-InternalSerialNumber"]
 
 
 class ExifTool:
@@ -271,4 +272,6 @@ def parse_exif(r: dict) -> dict:
             "aperture": _num(r.get("FNumber")), "shutter": shutter_text(_num(r.get("ExposureTime"))),
             "iso": _num(r.get("ISO")), "ev": _num(r.get("ExposureCompensation")), "focus_mode": focus or None,
             "taken_at": taken, "gps": gps, "focus_raw": r.get("FocusLocation"),
+            # the body, not the model: two bodies of one model must not share bursts
+            "camera_id": " ".join(str(x) for x in (model or None, r.get("SerialNumber") or r.get("InternalSerialNumber")) if x) or None,
             "orientation": int(_num(r.get("Orientation")) or 1)}

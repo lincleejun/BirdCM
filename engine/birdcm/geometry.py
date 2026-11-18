@@ -30,23 +30,33 @@ def focus_point(raw: str | None, orientation: int) -> tuple[float, float] | None
 
 def crop_rect(box: tuple[float, float, float, float], width: int, height: int,
               min_side: int = MIN_CROP) -> tuple[int, int, int, int]:
-    """Normalised box -> the crop in a width x height frame's pixels: box + 10 % context, squared, at least
-    min_side, shifted to stay inside the frame (clipped only when the frame is smaller than the square)."""
+    """Normalised box -> a SQUARE crop in a width x height frame's pixels: box + 10 % context, squared, at least
+    min_side, shifted to stay inside the frame along an axis where the frame is long enough; where it is not (a bird
+    filling a portrait frame), the square reaches past the frame and the caller pads (pad_crop): the whole box always
+    reaches the model, nothing is centre-cropped away (Codex C3)."""
     x0, y0, x1, y1 = box[0] * width, box[1] * height, box[2] * width, box[3] * height
     bw, bh = x1 - x0, y1 - y0
     x0, y0, x1, y1 = x0 - bw * CONTEXT, y0 - bh * CONTEXT, x1 + bw * CONTEXT, y1 + bh * CONTEXT
-    side = max(x1 - x0, y1 - y0, float(min_side))
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    x0, x1, y0, y1 = cx - side / 2, cx + side / 2, cy - side / 2, cy + side / 2
-    if x0 < 0:
-        x1, x0 = x1 - x0, 0.0
-    if y0 < 0:
-        y1, y0 = y1 - y0, 0.0
-    if x1 > width:
-        x0, x1 = x0 - (x1 - width), float(width)
-    if y1 > height:
-        y0, y1 = y0 - (y1 - height), float(height)
-    return max(0, int(x0)), max(0, int(y0)), min(width, int(x1)), min(height, int(y1))
+    side = round(max(x1 - x0, y1 - y0, float(min_side)))
+
+    def place(c: float, size: int) -> int:
+        lo = round(c - side / 2)
+        return lo if side > size else min(max(0, lo), size - side)
+    left, top = place((x0 + x1) / 2, width), place((y0 + y1) / 2, height)
+    return left, top, left + side, top + side
+
+
+def pad_crop(im, rect):
+    """Cut rect from a PIL image; the part outside the frame is filled with the crop's mean colour, not black."""
+    from PIL import Image, ImageStat
+    x0, y0, x1, y1 = rect
+    inside = (max(0, x0), max(0, y0), min(im.width, x1), min(im.height, y1))
+    if inside == tuple(rect):
+        return im.crop(rect)
+    part = im.crop(inside)
+    canvas = Image.new(im.mode, (x1 - x0, y1 - y0), tuple(int(v) for v in ImageStat.Stat(part).mean))
+    canvas.paste(part, (inside[0] - x0, inside[1] - y0))
+    return canvas
 
 
 def square_map(crop: tuple[int, int, int, int]) -> tuple[float, int, int]:

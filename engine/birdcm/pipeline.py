@@ -29,7 +29,8 @@ from birdcm.rarity import Rarity
 from birdcm.result import PhotoResult
 from birdcm.sharpness import head_sharpness
 
-PIPELINE_VERSION = 5            # bump when any step's output changes: old results stop being reused
+SMALL_BOX = 128                 # a subject box shorter than this (2048-frame px) is cropped from the decode resolution
+PIPELINE_VERSION = 7            # bump when any step's output changes: old results stop being reused
 SETTINGS = {"frame": decode.FRAME, "embedded_min": decode.EMBEDDED_MIN, "min_crop": geometry.MIN_CROP,
             "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR, "max_boxes": 5}
 DECODE_TIMEOUT = 120.0          # seconds one decode may run before its pool is killed and the file isolated
@@ -285,11 +286,22 @@ class Engine:
                 exif = {**exif, "gps": None}
             boxes = boxes[:MAX_BOXES]
             fh, fw = d["frame"].shape[:2]
-            rects = [geometry.crop_rect(b, fw, fh) for _, b in boxes]
             im = Image.fromarray(d["frame"])
+            sources = [(im, fw, fh)] * len(boxes)
+            small = [k for k, (_, b) in enumerate(boxes) if max((b[2] - b[0]) * fw, (b[3] - b[1]) * fh) < SMALL_BOX]
+            if small and d.get("source") in ("embedded", "jpeg") and max(d["width"], d["height"]) > max(fw, fh):
+                # a small bird: crop it from the decode-resolution image instead of the 2048 frame (Codex C4,
+                # bench/c4_ablation.py); costs one more JPEG decode (~0.05 s) for these photos only
+                try:
+                    big = decode.load_upright(Path(it["path"]))[0]
+                    for k in small:
+                        sources[k] = (big, big.width, big.height)
+                except Exception:  # noqa: BLE001 - keep the frame crop
+                    pass
+            rects = [(geometry.crop_rect(b, sw, sh), sw, sh) for (_, b), (_, sw, sh) in zip(boxes, sources)]
             first = len(crops)
             where = self._place(exif, region)
-            crops += [(im.crop(r), where["p_geo"] if where else None) for r in rects]
+            crops += [(geometry.pad_crop(src, r), where["p_geo"] if where else None) for (r, _, _), (src, _, _) in zip(rects, sources)]
             rows.append((it, d, (exif, boxes, rects, first, where)))
         looks = [r for i in range(0, len(crops), self.tower_batch) for r in per_item(self.tower, crops[i:i + self.tower_batch])]
         for it, d, x in rows:                                  # the range rule, with the place's spread (confirm.py)
@@ -388,8 +400,8 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
     W, H = d["width"], d["height"]
     focus = geometry.focus_point(exif.get("focus_raw"), d["orientation"])
 
-    def to(pt, rect):
-        return [round(v, 5) for v in geometry.from_input(pt, rect, fw, fh)]
+    def to(pt, rect):                                    # rect: (crop, width, height of the image it was cut from)
+        return [round(min(1.0, max(0.0, v)), 5) for v in geometry.from_input(pt, rect[0], rect[1], rect[2])]
     dets = []
     for (score, b), rect, lk in zip(boxes, rects, looks):
         k = 0 if lk["p_eyes"][0] >= lk["p_eyes"][1] else 1
@@ -409,7 +421,7 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
     sharp = None
     if s and d.get("gray") is not None and s["eye"] is not None:
         sharp = head_sharpness_of(d["gray"], s)
-    ex = {k: exif.get(k) for k in ("camera", "lens", "focal_mm", "aperture", "shutter", "iso", "ev", "focus_mode", "taken_at", "gps")}
+    ex = {k: exif.get(k) for k in ("camera", "camera_id", "lens", "focal_mm", "aperture", "shutter", "iso", "ev", "focus_mode", "taken_at", "gps")}
     reason = None if s else ("没有清楚的鸟" if dets else "没有找到鸟")
     return {
         "file": os.path.basename(it["path"]), "width": W, "height": H, "orientation": d["orientation"],

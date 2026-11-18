@@ -189,3 +189,68 @@ def test_consensus_carries_the_rare_flag_to_corrected_frames():
     odd["top5"][0] = {"sci": "Tyrannus couchii", "en": "x", "zh": None, "p": 0.87}
     o = run(burst(tk(), tk(), tk(), odd))
     assert o[3]["species_fix"]["label"]["sci"] == "Tyrannus melancholicus" and o[3]["species_fix"]["check"] == "rare"
+
+
+
+def at(spx, x):
+    """A result whose subject box is centred at (x, 0.5)."""
+    return spx, x
+
+
+def burst_at(*items, t0=0.0):
+    out = []
+    for k, (spx, x) in enumerate(items):
+        r = res(t0 + 0.5 * k, 1, 0.5, species=spx)
+        r["boxes"] = [{"box": [x - 0.05, 0.45, x + 0.05, 0.55], "score": 0.9}]
+        r["subject"] = 0
+        out.append(r)
+    return out
+
+
+def test_lookalike_pair_flipping_on_one_bird_takes_the_dominant():
+    """Owner's group 16: one tern on one post, Royal 10 frames / Elegant 2, alternating at 0.99 each."""
+    E, R = "Thalasseus elegans", "Thalasseus maximus"
+    seq = [R, R, R, R, E, R, R, R, R, R, E, R]
+    o = run(burst_at(*[(sp(s, 0.99, top=[(E if s == R else R, 0.01)]), 0.5) for s in seq]))
+    fixed = [x["species_fix"] for x in o]
+    assert fixed[4]["label"]["sci"] == R and fixed[4]["lookalike"] == E and fixed[10]["label"]["sci"] == R
+    assert all(f is None for k, f in enumerate(fixed) if k not in (4, 10))
+
+
+def test_lookalike_rule_leaves_other_birds_and_other_genera():
+    E, R = "Thalasseus elegans", "Thalasseus maximus"
+    # the minority bird sits elsewhere in the frame: a second bird, not a flip
+    o = run(burst_at(*[(sp(R, 0.99), 0.3)] * 6, (sp(E, 0.99), 0.8)))
+    assert o[6]["species_fix"] is None
+    # different genera (the merganser / scoter case): untouched
+    o = run(burst_at(*[(sp("Melanitta perspicillata", 1.0), 0.5)] * 6, (sp("Lophodytes cucullatus", 0.99), 0.5)))
+    assert o[6]["species_fix"] is None
+    # not clearly dominant (4 vs 4): untouched
+    o = run(burst_at(*[(sp(R, 0.99), 0.5)] * 4, *[(sp(E, 0.99), 0.5)] * 4))
+    assert all(x["species_fix"] is None for x in o)
+
+
+
+def test_bursts_follow_the_body_and_ignore_the_machine_time_zone(monkeypatch):
+    """Codex C8: two bodies of one model must not share a burst; a time with and without its offset is the same
+    moment on the camera's clock whatever the machine's time zone."""
+    import time
+    from birdcm.stars import group_bursts
+    a = [{"id": 1, "camera": "ILCE-7M4 111", "taken_at": "2026-11-14T10:00:00"},
+         {"id": 2, "camera": "ILCE-7M4 222", "taken_at": "2026-11-14T10:00:00.5"}]
+    g = group_bursts(a)
+    assert g[1][0] != g[2][0]
+    b = [{"id": 1, "camera": "X", "taken_at": "2026-11-14T10:00:00"}, {"id": 2, "camera": "X", "taken_at": "2026-11-14T10:00:01-08:00"}]
+    for tz in ("America/Los_Angeles", "UTC", "Asia/Shanghai"):
+        monkeypatch.setenv("TZ", tz)
+        time.tzset()
+        g = group_bursts(b)
+        assert g[1][0] == g[2][0], tz
+    monkeypatch.delenv("TZ")
+    time.tzset()
+
+
+def test_parse_exif_keeps_the_body_serial():
+    from birdcm.decode import parse_exif
+    e = parse_exif({"Make": "SONY", "Model": "ILCE-7M4", "SerialNumber": "05226932"})
+    assert e["camera_id"] == "ILCE-7M4 05226932"
