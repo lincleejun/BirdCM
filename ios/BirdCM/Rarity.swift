@@ -51,6 +51,24 @@ final class Rarity {
         if hit[1] != nil && hit[0] == nil {hit[0]=String(hit[1]!.prefix(2))}
         return (hit[1],hit[0])
     }
+    /// The region code for a place (explicit region choice first, else the point lookup), and the month's GBIF source region.
+    func source(_ place: Place, month: Int) -> (code: String?, source: String?, coverage: String?) {
+        let point: (division: String?, country: String?) = place.regionCode == nil ? regionAt(lat: place.lat, lon: place.lon) : (nil, nil)
+        guard let code = place.regionCode ?? point.division ?? point.country else { return (nil, nil, nil) }
+        var row = rows("SELECT m.source_id,m.coverage FROM months m JOIN regions r ON r.id=m.region_id WHERE r.code=? AND m.month=?", [code, String(month)]).first
+        if row == nil && code.contains("-") { row = rows("SELECT m.source_id,m.coverage FROM months m JOIN regions r ON r.id=m.region_id WHERE r.code=? AND m.month=?", [String(code.prefix(2)), String(month)]).first }
+        return (code, row.flatMap { $0[0].isEmpty ? nil : $0[0] }, row?[1])
+    }
+    /// GBIF records per species in the source region/month (record share = n / total); nil when the month has no data.
+    func monthCounts(_ place: Place, month: Int) -> (counts: [String: (n: Int, tier: Int)], total: Int, coverage: String?)? {
+        let s = source(place, month: month)
+        guard let src = s.source else { return nil }
+        var out = [String: (Int, Int)](), total = 0
+        for r in rows("SELECT sp.scientific,c.n,c.tier FROM counts c JOIN species sp ON sp.id=c.species_id WHERE c.region_id=? AND c.month=?", [src, String(month)]) {
+            let n = Int(r[1]) ?? 0; out[r[0]] = (n, Int(r[2]) ?? 0); total += n
+        }
+        return (out, total, s.coverage)
+    }
     func lookup(_ sci: String, place: Place?, month: Int?) -> RarityValue {
         let sp=rows("SELECT id,iucn FROM species WHERE scientific=?",[sci]).first
         let iucn=UserDefaults.standard.bool(forKey:"hideIUCN") ? nil:sp.flatMap{$0[1].isEmpty ? nil:$0[1]}

@@ -28,13 +28,31 @@ final class Catalogue {
     func species(_ key: String?) -> Species? { key.flatMap { index[$0] }.map { all[$0] } }
     func name(_ key: String?) -> String { species(key)?.name ?? key ?? "未知" }
     /// Exact > prefix > substring over Chinese / English / scientific; ties by scientific name. Empty query: alphabetical.
+    /// Pinyin (full, no spaces) and initials per Chinese name, built once off the main actor with Foundation's
+    /// Mandarin transliteration. A convenience only: never an identity, never guaranteed pronunciation.
+    private(set) var pinyin: [(String, String)]?
+    func preparePinyin() async {
+        guard pinyin == nil else { return }
+        let names = all.map(\.zh)
+        let built = await Task.detached { names.map { Catalogue.pinyinOf($0) } }.value
+        await MainActor.run { pinyin = built }
+    }
+    static func pinyinOf(_ zh: String) -> (String, String) {
+        guard !zh.isEmpty, let latin = zh.applyingTransform(.mandarinToLatin, reverse: false) else { return ("", "") }
+        let tokens = latin.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil).split { !$0.isLetter }.map(String.init)
+        return (tokens.joined(), String(tokens.compactMap(\.first)))
+    }
     func search(_ query: String) -> [Species] {
         let q = Self.fold(query)
         guard !q.isEmpty else { return all.sorted { $0.sci < $1.sci } }
+        let latin = pinyin != nil && q.allSatisfy { $0.isASCII && $0.isLetter }
         var hits = [(Int, Int)]()
         for (i, names) in folded.enumerated() {
             var best = 3
             for n in names where !n.isEmpty { best = min(best, n == q ? 0 : n.hasPrefix(q) ? 1 : n.contains(q) ? 2 : 3) }
+            if latin, best > 1, let p = pinyin?[i], !p.0.isEmpty {
+                best = min(best, p.0 == q || p.1 == q ? 1 : p.0.hasPrefix(q) || p.1.hasPrefix(q) ? 2 : best)
+            }
             if best < 3 { hits.append((best, i)) }
         }
         return hits.sorted { $0.0 != $1.0 ? $0.0 < $1.0 : all[$0.1].sci < all[$1.1].sci }.map { all[$0.1] }
@@ -79,6 +97,26 @@ struct Ledger {
         observations = groups.values.sorted { $0.day != $1.day ? $0.day > $1.day : $0.id < $1.id }
         allTime = Self.stats(items: items, observations: observations, known: known, range: nil)
     }
+    /// Shared cover rule (engine library.cover_of): latest by capture wall time ("" when none), then hash, then subject id.
+    static func later(_ item: PhotoItem, _ sub: SubjectItem, than c: (item: PhotoItem, ordinal: Int)) -> Bool {
+        let old = c.item.subjects.first { $0.ordinal == c.ordinal }?.id ?? ""
+        return (item.capture ?? "", item.hash, sub.id) > (c.item.capture ?? "", c.item.hash, old)
+    }
+    struct Day { var day: String; var species = Set<String>(); var observations = 0; var cover: (item: PhotoItem, ordinal: Int)? }
+    /// Calendar cells: observations and species per local day, with the day's cover bird.
+    func days(_ range: (String, String)?) -> [String: Day] {
+        var out = [String: Day]()
+        for o in observations where Self.inRange(o.day, range) { out[o.day, default: Day(day: o.day)].observations += 1; out[o.day]!.species.insert(o.species) }
+        for item in items where out[item.day] != nil {
+            for sub in item.subjects where Self.eligible(sub, known) {
+                if let c = out[item.day]!.cover, !Self.later(item, sub, than: c) { continue }
+                out[item.day]!.cover = (item, sub.ordinal)
+            }
+        }
+        return out
+    }
+    /// The photos supporting one observation (one per distinct hash).
+    func evidence(_ o: Sighting) -> [PhotoItem] { items.filter { o.frames[$0.hash] != nil } }
     static func eligible(_ s: SubjectItem, _ known: (String) -> Bool) -> Bool { !s.excluded && s.key.map(known) == true }
     static func inRange(_ day: String, _ r: (String, String)?) -> Bool { r.map { day >= $0.0 && day <= $0.1 } ?? true }
     static func stats(items: [PhotoItem], observations: [Sighting], known: (String) -> Bool, range: (String, String)?) -> [String: SpeciesStat] {
@@ -92,9 +130,7 @@ struct Ledger {
             for sub in item.subjects where eligible(sub, known) {
                 let k = sub.key!
                 out[k]?.photos.insert(item.hash)
-                // Cover: latest eligible evidence; ties by hash then subject ID.
-                if let c = out[k]?.cover, let old = c.item.subjects.first(where: { $0.ordinal == c.ordinal }),
-                   c.item.wall > item.wall || (c.item.wall == item.wall && (c.item.hash, old.id) <= (item.hash, sub.id)) { continue }
+                if let c = out[k]?.cover, !Self.later(item, sub, than: c) { continue }
                 out[k]?.cover = (item, sub.ordinal)
             }
         }
