@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { get } from "./api";
 import type { Place } from "./types";
 
 // Where the photos were taken: a point (lat, lon) with a label and where it came from. Three ways in, one compact
@@ -59,23 +60,9 @@ export function parseCoords(text: string): { lat: number; lon: number } | null {
   return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
 }
 
-// Online place search (OpenStreetMap Nominatim): only on Enter / the button, at most one request a second, the last few
-// answers kept in memory. The browser sends this page as Referer; no personal details go with the query.
-const nomCache = new Map<string, { label: string; lat: number; lon: number }[]>();
-let lastNom = 0;
+// Online place search goes through the local engine (/api/places), which talks to OpenStreetMap Nominatim politely.
 async function nominatim(q: string): Promise<{ label: string; lat: number; lon: number }[]> {
-  const key = q.trim().toLowerCase();
-  if (nomCache.has(key)) return nomCache.get(key)!;
-  const wait = 1000 - (Date.now() - lastNom);
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastNom = Date.now();
-  const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=zh,en&q=${encodeURIComponent(q)}`);
-  if (!r.ok) throw new Error(String(r.status));
-  const rows = (await r.json()) as { display_name: string; lat: string; lon: string }[];
-  const out = rows.map((x) => ({ label: x.display_name, lat: +x.lat, lon: +x.lon }));
-  nomCache.set(key, out);
-  if (nomCache.size > 20) nomCache.delete(nomCache.keys().next().value!);
-  return out;
+  return get<{ label: string; lat: number; lon: number }[]>(`/api/places?q=${encodeURIComponent(q)}`);
 }
 
 export default function LocationPicker({ value, onChange, catalogue, compact = false }: {
@@ -207,7 +194,7 @@ function MapDialog({ start, catalogue, onClose, onPick }: { start: Place | null;
             {onlineMsg && <li className="hint">{onlineMsg}</li>}
           </ul>
         )}
-        <p className="hint">地图图块和按回车的地名搜索会访问 openstreetmap.org（只发送你输入的地名；照片不会离开这台电脑）。搜到地方后点一下或拖动图钉细调。</p>
+        <p className="hint">地图图块和按回车的地名搜索会访问 openstreetmap.org（搜索由本机程序转发，只发送你输入的地名；照片不会离开这台电脑）。搜到地方后点一下或拖动图钉细调。</p>
         <div ref={box} className="map-box" />
         {tilesOk === false && <p className="hint">地图图块加载不了（可能离线）。可以用上面的本地地名或输入坐标。</p>}
         <div className="row" style={{ marginTop: 8 }}>

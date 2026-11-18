@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from birdcm import config, decode, geo, models, stars
-from birdcm.pipeline import fingerprint, image_paths
+from birdcm.pipeline import EQUIVALENT_DATA, fingerprint, image_paths
 from birdcm.queue import Scheduler
 from birdcm.store import Store
 
@@ -158,6 +158,38 @@ class NewScan(BaseModel):
     ratio: dict = {"preset": "std", "p3": 30, "p2": 30}
 
 
+# OpenStreetMap Nominatim, per its usage policy: an identifying User-Agent (no personal details), at most one request a
+# second, no autocomplete (the page only asks on Enter), answers cached. ponytail: in-memory cache, gone on restart.
+NOMINATIM = "https://nominatim.openstreetmap.org/search"
+_places_lock = threading.Lock()
+_places_cache: dict[str, list] = {}
+_places_last = [0.0]
+
+
+def places_search(q: str, fetch=None) -> list[dict]:
+    import urllib.parse, urllib.request
+    key = q.lower()
+    with _places_lock:                                       # serialises requests, so the 1/s spacing holds across threads
+        if key in _places_cache:
+            return _places_cache[key]
+        wait = 1.0 - (time.monotonic() - _places_last[0])
+        if wait > 0:
+            time.sleep(wait)
+        _places_last[0] = time.monotonic()
+        url = NOMINATIM + "?" + urllib.parse.urlencode({"format": "jsonv2", "limit": 6, "accept-language": "zh,en", "q": q})
+        req = urllib.request.Request(url, headers={"User-Agent": "BirdCM/0.1 (open-source local bird photo culling app)"})
+        if fetch is None:
+            with urllib.request.urlopen(req, timeout=8) as r:
+                rows = json.load(r)
+        else:
+            rows = fetch(req)
+        out = [{"label": x["display_name"], "lat": float(x["lat"]), "lon": float(x["lon"])} for x in rows]
+        _places_cache[key] = out
+        if len(_places_cache) > 50:
+            _places_cache.pop(next(iter(_places_cache)))
+        return out
+
+
 def create_app(port: int = 8765, token: str | None = None, store: Store | None = None,
                engine_factory=None, start_scheduler: bool = True) -> FastAPI:
     token = token or secrets.token_urlsafe(24)
@@ -199,6 +231,16 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.get("/api/regions")
     def regions():
         return geo.catalogue()
+
+    @api.get("/api/places")
+    def places(q: str):
+        q = q.strip()[:200]
+        if not q:
+            return []
+        try:
+            return places_search(q)
+        except Exception as e:  # offline, timeout, HTTP error: the map's local matches still work
+            raise HTTPException(502, f"在线地名搜索用不了：{e}")
 
     @api.post("/api/pick-folder")
     def pick_folder():
@@ -251,6 +293,12 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             want = sched.engine.fingerprint(scan["region"]) if sched.engine else fingerprint(scan["region"])
         except Exception:  # noqa: BLE001 - no models: nothing to compare with
             return False
+        if scan.get("fp") and scan["fp"] != want:
+            with contextlib.suppress(Exception):
+                digest = getattr(sched.engine, "model_digest", None)
+                if scan["fp"] in [fingerprint(scan["region"], digest, data=d) for d in EQUIVALENT_DATA]:
+                    store.move_fp(scan["id"], scan["fp"], want)      # same results, only a display-only input changed
+                    scan["fp"] = want
         return scan.get("fp") not in (None, want) and scan.get("state") == "completed"
 
     @api.get("/api/scans/{sid}/events")

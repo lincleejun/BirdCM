@@ -73,9 +73,11 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
           <p className="hint">大约 {keep.keep}% 的照片会有星（一、二、三星合计），其余 0 星。几星看照片本身好不好，不按名额分；
             同一种鸟、同一组连拍拍得越多，越不容易全拿星。照片整体一般时会少于这个比例。扫完后还能改，不用重扫。</p>
         </div>
-        <button className="btn primary big" disabled={!folder.trim() || busy} onClick={go}>开始</button>
-        {err && <p className="error-text" role="alert">{err}</p>}
-        <p className="note">全部在这台电脑上处理，不上传，也不改动原片。</p>
+        <div className="go">
+          <button className="btn primary big" disabled={!folder.trim() || busy} onClick={go}>开始</button>
+          {err && <p className="error-text" role="alert">{err}</p>}
+          <p className="note">全部在这台电脑上处理，不上传，也不改动原片。</p>
+        </div>
         {scans.length > 0 && (
           <div className="recent"><span className="label">最近的扫描</span>
             {scans.slice(0, 6).map((s) => (

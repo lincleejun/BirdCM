@@ -36,7 +36,13 @@ EXIF_CHUNK = 16
 MAX_BOXES = 5            # boxes looked at per photo (strongest first); ponytail: raise if flocks matter
 
 
-def fingerprint(region, model_digest: str | None = None) -> str:
+# Data hashes of earlier releases whose results are the same as now (only display-only inputs changed): a stored
+# fingerprint made with one of these is moved to the current one instead of marking the scan stale.
+# d8d5a4e6f3379b0a: the old Wikidata Chinese-name table was still hashed in (names are joined at read time since IOC 15.2).
+EQUIVALENT_DATA = ("d8d5a4e6f3379b0a",)
+
+
+def fingerprint(region, model_digest: str | None = None, data: str | None = None) -> str:
     """Models (role -> sha256), bundled data (regions; Chinese names are joined at read time, names.py, so not here),
     pipeline version, settings and the effective region: a
     stored result is reused only when this and the file's (size, mtime) match. An Engine passes the digest of the
@@ -44,7 +50,7 @@ def fingerprint(region, model_digest: str | None = None) -> str:
     from birdcm import detect, tower
     cfg = {**SETTINGS, "det": [detect.FLOOR, detect.SECOND, detect.SECOND_TOP],
            "level": [tower.SPECIES_P, tower.SPECIES_MARGIN, tower.GENUS_P, tower.RANGE_EPS, tower.RANGE_TAU]}
-    data = hashlib.sha256(b"".join(f.read_bytes() for f in (geo.REGIONS, geo.COUNTRIES, geo.INDEX))).hexdigest()[:16]
+    data = data or hashlib.sha256(b"".join(f.read_bytes() for f in (geo.REGIONS, geo.COUNTRIES, geo.INDEX))).hexdigest()[:16]
     from birdcm import rarity
     cfg["iucn"] = rarity.SHOW_IUCN
     cfg["geo_grid"] = geo.GRID

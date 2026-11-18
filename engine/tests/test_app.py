@@ -228,3 +228,33 @@ def test_images_by_id_are_revalidated_not_cached(env, monkeypatch):
     r = c.get(f"/api/photos/{pid}/thumb", headers=OK)
     assert r.status_code == 200 and "max-age" not in r.headers["cache-control"] and "no-cache" in r.headers["cache-control"]
     assert r.headers.get("etag")
+
+
+def test_places_proxy_rate_limit_cache_and_ua():
+    import time as _t
+    from birdcm import app as A
+    A._places_cache.clear()
+    seen = []
+    def fake(req):
+        seen.append((_t.monotonic(), req.get_header("User-agent"), req.full_url))
+        return [{"display_name": "Homer, Alaska", "lat": "59.64", "lon": "-151.54"}]
+    assert A.places_search("Homer Alaska", fetch=fake) == [{"label": "Homer, Alaska", "lat": 59.64, "lon": -151.54}]
+    A.places_search("homer alaska", fetch=fake)               # cached: no second request
+    A.places_search("Bolsa Chica", fetch=fake)
+    assert len(seen) == 2 and seen[1][0] - seen[0][0] >= 0.99
+    assert seen[0][1].startswith("BirdCM/") and "q=Homer+Alaska" in seen[0][2]
+    def down(req):
+        raise OSError("offline")
+    import pytest
+    with pytest.raises(OSError):
+        A.places_search("Nowhere", fetch=down)
+
+
+def test_equivalent_old_fingerprint_moves_instead_of_going_stale(tmp_path):
+    from birdcm.pipeline import EQUIVALENT_DATA, fingerprint
+    old, new = fingerprint(None, "m", data=EQUIVALENT_DATA[0]), fingerprint(None, "m")
+    assert old != new
+    store = Store(tmp_path / "t.db")
+    sid = store.create_scan(str(tmp_path), False, None, {}, old, [])
+    store.move_fp(sid, old, new)
+    assert [s["fp"] for s in store.scans() if s["id"] == sid] == [new]

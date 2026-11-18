@@ -260,6 +260,13 @@ class Store:
             self._photo_event(db, photo_id)
         self._write(go)
 
+    def move_fp(self, scan_id: int, old: str, new: str) -> None:
+        """Relabel a scan (and its photos, so they stay reusable) from an equivalent old fingerprint to the current one."""
+        def go(db):
+            db.execute("UPDATE scan SET fp = ? WHERE id = ? AND fp = ?", (new, scan_id, old))
+            db.execute("UPDATE photo SET fp = ? WHERE scan_id = ? AND fp = ?", (new, scan_id, old))
+        self._write(go)
+
     def reset_scan(self, scan_id: int, fp: str) -> None:
         """The engine's fingerprint differs from the scan's: drop every result and queue the whole scan again."""
         def go(db):

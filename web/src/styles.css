@@ -344,3 +344,22 @@ dialog.map-dlg { width: min(860px, 96vw); }
 .map-hits button:hover { background: var(--soft); }
 .map-hits small { color: var(--muted); flex: none; }
 .map-hits .hint { padding: 6px 10px; }
+/* Home fits one screen on a laptop: the workbench takes the viewport below the masthead, the photo fills what is left,
+   the left column scrolls inside itself when the window is short, and 开始 stays pinned at its bottom. */
+@media (min-width: 721px) {
+  main:has(> #setup) { padding-top: 14px; padding-bottom: 14px; }
+  #setup { height: calc(100dvh - 70px - 28px); grid-template-rows: minmax(0, 1fr); }
+  #setup .setup { overflow: auto; padding: clamp(18px, 2.4vw, 36px) clamp(20px, 2.8vw, 40px) 0; }
+  #setup h2 { font-size: clamp(30px, 3.2vw, 46px); }
+  #setup .kicker { margin-bottom: 6px; }
+  #setup .intro { margin: 6px 0 10px; }
+  #setup .field { padding: 9px 0; }
+  #setup .field .hint { margin-top: 4px; }
+  #setup .go { position: sticky; bottom: 0; background: var(--surface); padding: 4px 0 14px; }
+  #setup .recent { max-height: 132px; overflow: auto; }
+  #setup .hero { display: flex; padding: clamp(16px, 2.4vw, 36px); }
+  #setup .hero figure { display: flex; flex-direction: column; width: 100%; max-width: none; min-height: 0; margin: 0; }
+  #setup .hero-frame { flex: 1; min-height: 0; display: flex; }
+  #setup .hero-frame .ph { flex: 1; min-height: 0; }
+  #setup .hero-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+}
