@@ -62,4 +62,5 @@ export interface Scan {
   error: string | null; created_at: number; counts: Counts; previous?: number[]; fp?: string;
 }
 export interface Snapshot { scan: Scan; photos: PhotoRow[]; cursor: number }
-export interface ModelStatus { ready: boolean; missing: string[]; fetch: string; exiftool: boolean; engine_error: string | null; pending: string[] }
+export interface ModelStatus { ready: boolean; missing: string[]; fetch: string; exiftool: boolean; engine_error: string | null;
+  optional_missing?: { name: string; role: string; released: boolean; effect: string }[] }

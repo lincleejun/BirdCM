@@ -52,6 +52,8 @@ license = "non-commercial only (bioclip-bird-heads WEIGHTS-LICENSE.md)"
 
 [[file]]
 name    = "clear.safetensors"
+optional = true   # the app runs without it (see models.OPTIONAL_EFFECT)
+released = false  # not published yet: its url answers 404
 role    = "clear"
 url     = "https://github.com/lincleejun/bioclip-bird-heads/releases/download/v0.1.0/clear.safetensors"
 sha256  = "d105665ac6ae8f9ded3480af00c9d85b628d13d61c9f3219f3d96cfee109bd8a"
@@ -60,6 +62,8 @@ license = "CC BY attribution for its CC BY training photos (clear-training-photo
 
 [[file]]
 name    = "aesthetic.safetensors"
+optional = true   # the app runs without it (see models.OPTIONAL_EFFECT)
+released = false  # not published yet: its url answers 404
 role    = "aesthetic"
 url     = "https://github.com/lincleejun/bioclip-bird-heads/releases/download/v0.1.0/aesthetic.safetensors"
 sha256  = "418430e07cb922400cdb80510f703d990e1f258e52b795579fafb5c6e133b46a"
@@ -76,6 +80,8 @@ license = "Apache-2.0 per the geomodel repo's LICENSE-MODELS.md; the birdnet pip
 
 [[file]]
 name    = "rarity-us-ca-cn.sqlite"
+optional = true   # the app runs without it (see models.OPTIONAL_EFFECT)
+released = false  # not published yet: its url answers 404
 role    = "rarity"
 url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/rarity-us-ca-cn.sqlite"
 sha256  = "84ca30397294c2862ea71e657062ff19bc18add8f7468c99fc64696850845592"

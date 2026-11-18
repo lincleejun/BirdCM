@@ -106,9 +106,10 @@ class Engine:
         self.device = device or pick_device()
         self.detector = Detector(str(p["detector:owlv2-int8"]), self.device, half=det_half and self.device != "cpu")
         self.tower = Tower(str(p["tower"]), str(p["names"]), str(p["parts"]), str(p["flight"]), self.device,
-                           clear=str(p["clear"]), aesthetic=str(p["aesthetic"]))
+                           clear=str(p["clear"]) if "clear" in p else None,           # optional files: models.OPTIONAL_EFFECT
+                           aesthetic=str(p["aesthetic"]) if "aesthetic" in p else None)
         self.geo = geo.Geo(str(p["geo"]), self.tower.sci)
-        self.rarity = Rarity(str(p["rarity"]))
+        self.rarity = Rarity(str(p["rarity"])) if "rarity" in p else None
         self.exif, self._own_exif = exif or decode.ExifTool(), exif is None
         self.workers, self.det_batch, self.tower_batch, self.mode = workers, det_batch, tower_batch, mode
         self.stats: dict[str, float] = {}
@@ -350,8 +351,10 @@ class Engine:
 
 def rarity_for(table, species: dict | None, r: dict) -> dict | None:
     """Rarity of a confirmed species at the photo's place (the prior's point, else the scan's region label) and month."""
-    if table is None or not species or species.get("level") != "species" or not species.get("label"):
+    if not species or species.get("level") != "species" or not species.get("label"):
         return None
+    if table is None:                                  # the rarity table is not installed
+        return {"tier": None, "label": "数据不足", "iucn": None, "region": None}
     pr = r["region"].get("prior") or {}               # no place: still the IUCN category, rarity 数据不足
     label = r["region"].get("name") if pr.get("source") in (None, "region") else None
     taken = r["exif"].get("taken_at") or ""

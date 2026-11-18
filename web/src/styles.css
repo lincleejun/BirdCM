@@ -203,6 +203,7 @@ details ol { margin: 5px 0 0; padding-left: 24px; }
 .tile[data-state=failed] .scan-name { color: var(--rust); }
 .missing { border: 1px solid var(--rust); color: var(--rust); border-radius: 9px; padding: 12px 14px; margin-bottom: 18px; }
 .missing code, .note code { font: 12px var(--mono); }
+.missing.soft { border-color: var(--line); color: var(--muted); font-size: 13px; padding: 8px 12px; margin-bottom: 10px; }
 .folder-input { flex: 1; min-width: 90px; min-height: 42px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; background: var(--surface); font: 13px/1.4 var(--mono); }
 .recent { margin-top: 18px; font-size: 13px; color: var(--muted); }
 .recent button { display: block; text-align: left; width: 100%; padding: 6px 0; border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); font-size: 13px; }
@@ -399,3 +400,7 @@ main.res-main { padding-top: 0; }
 .warn-strip .btn.link { color: inherit; text-decoration: underline; padding: 0 4px; min-height: 0; }
 .warn-strip .hint { color: inherit; opacity: .8; }
 @media (max-width: 1100px) { .resbar .masthead-inner { flex-wrap: wrap; } .scan-id { flex-basis: 100%; order: 2; } }
+.hero-mark { margin: auto; display: grid; justify-items: center; gap: 10px; color: var(--mat-text); text-align: center; }
+.hero-mark svg { width: min(56%, 260px); height: auto; color: #b8d6af; }
+.hero-name { font: 700 44px/1.1 var(--serif); letter-spacing: .1em; }
+.hero-tag { color: var(--mat-muted); font-size: 14px; letter-spacing: .08em; }

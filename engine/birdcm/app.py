@@ -555,6 +555,8 @@ def serve(port: int = 8765, open_browser: bool = True) -> int:
     st = models.status()
     if not st["ready"]:
         print(f"缺模型文件：{', '.join(st['missing'])}。运行 `{st['fetch']}`。", file=sys.stderr)
+    for o in st["optional_missing"]:
+        print(f"{'还没有发布' if not o['released'] else '没有'} {o['name']}：{o['effect']}", file=sys.stderr)
     url = f"http://127.0.0.1:{port}/"
     if not WEB.is_dir():
         print(f"没有找到界面文件 {WEB}；先在 web/ 里运行 `npm install && npm run build`。", file=sys.stderr)

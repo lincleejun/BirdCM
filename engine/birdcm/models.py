@@ -56,22 +56,32 @@ def locate(entry: dict) -> Path | None:
     return None
 
 
+# What the app does without an optional file (models.toml optional = true).
+OPTIONAL_EFFECT = {"clear": "没有“清楚的鸟”判断：每个检测框都当作鸟来认",
+                   "aesthetic": "没有美学分：星级只用其余的信号",
+                   "rarity": "没有本地稀有度和 IUCN 等级：显示“数据不足”"}
+
+
 def status() -> dict:
-    """{"ready": bool, "files": [{name, role, path|None}], "missing": [names], "fetch": command}"""
-    files = [{"name": e["name"], "role": e["role"], "path": str(p) if (p := locate(e)) else None}
-             for e in manifest()["file"]]
-    missing = [f["name"] for f in files if not f["path"]]
-    return {"ready": not missing, "files": files, "missing": missing, "fetch": "uv run birdcm models fetch",
-            "pending": ["geo", "rarity"]}
+    """{"ready": bool (every required file is here), "files": [{name, role, path|None, optional, released}],
+    "missing": [required names], "optional_missing": [{name, role, released, effect}], "fetch": command}"""
+    files = [{"name": e["name"], "role": e["role"], "path": str(p) if (p := locate(e)) else None,
+              "optional": bool(e.get("optional")), "released": e.get("released", True)} for e in manifest()["file"]]
+    missing = [f["name"] for f in files if not f["path"] and not f["optional"]]
+    opt = [{"name": f["name"], "role": f["role"], "released": f["released"], "effect": OPTIONAL_EFFECT.get(f["role"], "")}
+           for f in files if not f["path"] and f["optional"]]
+    return {"ready": not missing, "files": files, "missing": missing, "optional_missing": opt, "fetch": "uv run birdcm models fetch"}
 
 
 def paths() -> dict[str, Path]:
-    """role -> verified path; raises with the fetch command when anything is missing."""
+    """role -> verified path for every file that is here; raises with the fetch command when a REQUIRED one is missing
+    (an optional one is simply absent from the result)."""
     out, missing = {}, []
     for e in manifest()["file"]:
         p = locate(e)
         if p is None:
-            missing.append(e["name"])
+            if not e.get("optional"):
+                missing.append(e["name"])
         else:
             out[e["role"]] = p
     if missing:
@@ -80,8 +90,9 @@ def paths() -> dict[str, Path]:
 
 
 def digest() -> str:
-    """The models' part of the result fingerprint: which file (sha256) fills which role."""
-    roles = sorted((e["role"], e["sha256"]) for e in manifest()["file"])
+    """The models' part of the result fingerprint: which file (sha256) fills which role; an optional file that is not
+    here counts as absent, so results made with and without it never mix."""
+    roles = sorted((e["role"], e["sha256"] if not e.get("optional") or locate(e) else "absent") for e in manifest()["file"])
     return hashlib.sha256(json.dumps(roles).encode()).hexdigest()[:16]
 
 
@@ -91,6 +102,9 @@ def fetch(log=print) -> int:
     dest.mkdir(parents=True, exist_ok=True)
     failed = 0
     for e in manifest()["file"]:
+        if not e.get("released", True) and not locate(e):
+            log(f"skip {e['name']}: 还没有发布（{OPTIONAL_EFFECT.get(e['role'], '')}）")
+            continue
         if locate(e):
             log(f"ok       {e['name']}")
             continue

@@ -134,7 +134,7 @@ class Scheduler:
             try:
                 from birdcm import models
                 from birdcm.rarity import Rarity
-                self._rarity_table = Rarity(str(models.paths()["rarity"]))
+                self._rarity_table = Rarity(str(models.paths()["rarity"])) if "rarity" in models.paths() else None
             except Exception:  # noqa: BLE001 - no table (tests, missing file): corrected frames show no rarity
                 self._rarity_table = None
         return self._rarity_table

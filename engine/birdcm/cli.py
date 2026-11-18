@@ -37,7 +37,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1 if models.fetch() else 0
         st = models.status()
         for f in st["files"]:
-            print(f"{'ok     ' if f['path'] else 'MISSING'} {f['role']:22s} {f['path'] or f['name']}")
+            tag = "ok     " if f["path"] else "未发布 " if not f["released"] else "可选缺 " if f["optional"] else "MISSING"
+            print(f"{tag} {f['role']:22s} {f['path'] or f['name']}")
+        unrel = [o for o in st["optional_missing"] if not o["released"]]
+        if unrel:
+            print(f"这 {len(unrel)} 个文件还没有发布：{'、'.join(o['name'] for o in unrel)}。没有它们也能用：")
+            for o in unrel:
+                print(f"  - {o['effect']}")
         print("ready" if st["ready"] else f"missing {len(st['missing'])}: run `{st['fetch']}`")
         return 0 if st["ready"] else 1
 
