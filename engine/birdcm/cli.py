@@ -19,6 +19,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--limit", type=int)
     s.add_argument("--region")
     s.add_argument("--workers", type=int, default=4)
+    ev = sub.add_parser("eval", help="run the pipeline over an evaluation list and report (fixed denominators)")
+    ev.add_argument("--groundtruth", default="../../bioclip-bird/eval/groundtruth.csv")
+    ev.add_argument("--photos", required=True, help="folder the groundtruth paths are relative to (minus 'photos/')")
+    ev.add_argument("--kinds", default="bird", help="comma list: bird,mammal")
+    ev.add_argument("--limit", type=int)
+    ev.add_argument("--out", help="write the report and per-photo rows as JSON")
     v = sub.add_parser("serve", help="start the local web app")
     v.add_argument("--port", type=int, default=8765)
     v.add_argument("--no-open", action="store_true", help="do not open the browser")
@@ -36,6 +42,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if a.cmd == "scan":
         return scan(a)
+
+    if a.cmd == "eval":
+        from birdcm import evaluate
+        print(json.dumps(evaluate.run(a.groundtruth, a.photos, tuple(a.kinds.split(",")), a.limit, a.out), ensure_ascii=False, indent=1))
+        return 0
 
     from birdcm import app
     return app.serve(a.port, open_browser=not a.no_open)

@@ -118,3 +118,49 @@ def test_preflight_refuses_before_writing(tmp_path, monkeypatch):
     monkeypatch.setenv("BIRDCM_DATA_DIR", str(tmp_path / "nothing-yet"))
     preflight()                                                           # no database: nothing to check, nothing made
     assert not (tmp_path / "nothing-yet").exists()
+
+
+def test_singles_upload_switch_delete(env):
+    import io
+    from concurrent.futures import Future
+
+    from PIL import Image
+    c, api, tmp = env
+    calls = []
+
+    class Eng:
+        def identify(self, path, region, boxes):
+            calls.append((path, region, boxes))
+            sp = {"level": "species", "label": {"sci": "A b", "en": "A", "zh": None, "p": 0.9}, "top5": [], "geo": False}
+            return {"subject": 0, "rejected": False, "reject_reason": None, "exif": {"taken_at": None, "gps": None},
+                    "boxes": [{"box": [0, 0, 0.5, 0.5], "species": sp}, {"box": [0.5, 0.5, 1, 1], "species": sp}]}
+
+    def submit(fn):
+        f = Future()
+        f.set_result(fn(Eng()))
+        return f
+    api.state.scheduler.submit = submit
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 30)).save(buf, "PNG")
+    h = {**OK, "x-birdcm-token": "tok"}
+    assert c.post("/api/singles", files={"file": ("x.png", buf.getvalue())}, headers=OK).status_code == 403
+    r = c.post("/api/singles", files={"file": ("../../evil name.png", buf.getvalue())}, data={"region": "美国 · 加利福尼亚州"}, headers=h)
+    assert r.status_code == 200, r.text
+    rec = r.json()
+    stored = tmp / "data" / "singles" / rec["stored"]
+    assert stored.is_file() and stored.parent == tmp / "data" / "singles" and rec["name"] == "evil name.png"
+    assert rec["result"]["subject"] == 0 and calls[-1][1] == "美国 · 加利福尼亚州"
+    sid = rec["id"]
+    assert c.post(f"/api/singles/{sid}/identify", json={"subject": 1}, headers=h).json()["subject"] == 1
+    assert len(calls) == 1                                                  # switching birds recomputes nothing
+    assert c.post(f"/api/singles/{sid}/identify", json={"subject": 5}, headers=h).status_code == 400
+    c.post(f"/api/singles/{sid}/identify", json={"box": [0.1, 0.1, 0.4, 0.5]}, headers=h)
+    assert calls[-1][2] == [[0.1, 0.1, 0.4, 0.5]]
+    assert c.post(f"/api/singles/{sid}/identify", json={"box": [0.5, 0.1, 0.4, 0.5]}, headers=h).status_code == 400
+    assert c.post("/api/singles", files={"file": ("x.exe", b"MZ")}, headers=h).status_code == 400
+    assert [x["id"] for x in c.get("/api/singles", headers=OK).json()] == [sid]
+    assert c.delete(f"/api/singles/{sid}", headers=h).json() == {"deleted": 1}
+    assert not stored.exists() and c.get("/api/singles", headers=OK).json() == []
+    c.post("/api/singles", files={"file": ("y.png", buf.getvalue())}, headers=h)
+    assert c.delete("/api/singles", headers=h).json() == {"deleted": 1}
+    assert list((tmp / "data" / "singles").iterdir()) == []

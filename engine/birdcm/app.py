@@ -37,6 +37,35 @@ REGIONS = {
 }
 
 
+MAX_UPLOAD = 300 << 20           # bytes, one uploaded photo
+MAX_PIXELS = 120_000_000         # decoded pixels, one uploaded photo
+
+
+def check_pixels(path: Path) -> None:
+    """Refuse a JPEG / PNG larger than MAX_PIXELS (Pillow reads only the header). RAW files are not opened here (LibRaw
+    runs in the worker processes only); MAX_UPLOAD bounds them."""
+    if path.suffix.lower() in decode.RAW_EXT:
+        return
+    from PIL import Image
+    try:
+        with Image.open(path) as im:
+            n = im.width * im.height
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"打不开这张照片：{e}") from None
+    if n > MAX_PIXELS:
+        raise ValueError(f"照片太大（{n / 1e6:.0f} MP），上限 {MAX_PIXELS / 1e6:.0f} MP")
+
+
+def slim_result(res: dict | None, subject: int | None) -> dict | None:
+    """What the history list needs of a result: the shown bird's name and the photo's time and GPS."""
+    if not res:
+        return None
+    i = subject if subject is not None else res.get("subject")
+    b = res["boxes"][i] if i is not None and i < len(res.get("boxes") or []) else None
+    return {"species": b["species"] if b else None, "rejected": res["rejected"], "reject_reason": res["reject_reason"],
+            "taken_at": res["exif"].get("taken_at"), "gps": res["exif"].get("gps")}
+
+
 class Guard:
     """Pure ASGI: exact Host allow-list; an Origin, when sent, must be exactly this app; writes need the session
     token. Static files and the event stream pass through untouched once allowed."""
@@ -110,6 +139,12 @@ def sse_cursor(last_event_id: str | None, after: int | None) -> int:
 
 def sse(e: dict) -> str:
     return f"id: {e['n']}\nevent: {e['kind']}\ndata: {json.dumps(e['data'], ensure_ascii=False)}\n\n"
+
+
+class Identify(BaseModel):
+    box: list[float] | None = None          # normalised x0, y0, x1, y1 the person drew; [0, 0, 1, 1] = whole photo
+    region: str | None = None
+    subject: int | None = None              # only switch the shown bird, no recompute
 
 
 class NewScan(BaseModel):
@@ -274,6 +309,116 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             return exif.read([p["path"]]).get(p["path"], {})
         except Exception as e:  # noqa: BLE001
             raise HTTPException(503, str(e)) from None
+
+    # ---- single photos ------------------------------------------------------------------------------------------
+
+    singles_dir = config.data_dir() / "singles"
+
+    def stored_path(rec: dict) -> Path:
+        return singles_dir / rec["stored"]
+
+    def run_single(sid: int, region: str | None, boxes: list | None) -> dict:
+        rec = store.single(sid)
+        path = str(stored_path(rec))
+        try:
+            res = sched.submit(lambda e: e.identify(path, region, boxes)).result(timeout=600)
+            store.update_single(sid, result=res, subject=res["subject"], boxes=boxes, region=region, error=None)
+        except Exception as e:  # noqa: BLE001 - kept with the entry; the person can retry
+            store.update_single(sid, error=f"{type(e).__name__}: {e}"[:500], boxes=boxes, region=region)
+        return store.single(sid)
+
+    @api.post("/api/singles")
+    async def upload(request: Request):
+        form = await request.form(max_files=1, max_fields=4)
+        f = form.get("file")
+        if f is None or not hasattr(f, "read"):
+            raise HTTPException(400, "没有收到照片")
+        ext = Path(f.filename or "").suffix.lower()
+        if ext not in decode.SCAN_EXT | {".png"}:
+            raise HTTPException(400, "只支持 ARW、DNG、JPG、PNG")
+        singles_dir.mkdir(parents=True, exist_ok=True)
+        stored = f"{secrets.token_hex(12)}{ext}"                       # our own name, never the uploaded one
+        size = 0
+        with open(singles_dir / stored, "wb") as out:
+            while chunk := await f.read(1 << 20):
+                size += len(chunk)
+                if size > MAX_UPLOAD:
+                    out.close()
+                    (singles_dir / stored).unlink(missing_ok=True)
+                    raise HTTPException(413, f"照片超过 {MAX_UPLOAD >> 20} MB")
+                out.write(chunk)
+        try:
+            check_pixels(singles_dir / stored)
+        except ValueError as e:
+            (singles_dir / stored).unlink(missing_ok=True)
+            raise HTTPException(400, str(e)) from None
+        region = form.get("region") or None
+        sid = store.add_single(stored, Path(f.filename or "照片").name[:200], region if isinstance(region, str) else None)
+        return await run_in_threadpool(run_single, sid, region if isinstance(region, str) else None, None)
+
+    @api.post("/api/singles/{sid}/identify")
+    def reidentify(sid: int, body: Identify):
+        rec = store.single(sid)
+        if not rec:
+            raise HTTPException(404, "没有这条记录")
+        if body.box is None and body.region is None and body.subject is not None:
+            n = len((rec["result"] or {}).get("boxes") or [])
+            if not 0 <= body.subject < n:
+                raise HTTPException(400, "没有这只鸟")
+            store.update_single(sid, subject=body.subject)
+            return store.single(sid)
+        box = body.box
+        if box is not None and not (len(box) == 4 and 0 <= box[0] < box[2] <= 1 and 0 <= box[1] < box[3] <= 1):
+            raise HTTPException(400, "框的坐标不对")
+        return run_single(sid, body.region if body.region is not None else rec["region"], [box] if box else rec["boxes"])
+
+    @api.get("/api/singles")
+    def list_singles():
+        return [{k: r[k] for k in ("id", "name", "created_at", "region", "subject", "error")} |
+                {"result": slim_result(r["result"], r["subject"])} for r in store.singles()]
+
+    @api.get("/api/singles/{sid}")
+    def get_single(sid: int):
+        rec = store.single(sid)
+        if not rec:
+            raise HTTPException(404, "没有这条记录")
+        return rec
+
+    @api.get("/api/singles/{sid}/image")
+    def single_image(sid: int, size: str = "preview"):
+        rec = store.single(sid)
+        if not rec:
+            raise HTTPException(404, "没有这条记录")
+        path = stored_path(rec)
+        st = path.stat()
+        thumb, preview = image_paths(str(path), st.st_size, st.st_mtime_ns)
+        out = thumb if size == "thumb" else preview
+        if not out.exists():
+            previews.make({"path": str(path), "size": st.st_size, "mtime_ns": st.st_mtime_ns, "thumb": str(thumb), "preview": str(preview)})
+        return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+    def remove(names: list[str]) -> None:
+        for n in names:
+            p = singles_dir / n
+            if p.is_file():
+                st = p.stat()
+                for c in image_paths(str(p), st.st_size, st.st_mtime_ns):
+                    c.unlink(missing_ok=True)
+                p.unlink()
+
+    @api.delete("/api/singles/{sid}")
+    def delete_single(sid: int):
+        names = store.delete_singles(sid)
+        if not names:
+            raise HTTPException(404, "没有这条记录")
+        remove(names)
+        return {"deleted": len(names)}
+
+    @api.delete("/api/singles")
+    def clear_singles():
+        names = store.delete_singles()
+        remove(names)
+        return {"deleted": len(names)}
 
     if WEB.is_dir():
         api.mount("/", StaticFiles(directory=WEB, html=True), name="web")

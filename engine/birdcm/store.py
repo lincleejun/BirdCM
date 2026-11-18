@@ -27,6 +27,9 @@ CREATE INDEX IF NOT EXISTS photo_scan_state ON photo(scan_id, state);
 CREATE TABLE IF NOT EXISTS event (
   n INTEGER PRIMARY KEY AUTOINCREMENT, scan_id INTEGER NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS event_scan ON event(scan_id, n);
+CREATE TABLE IF NOT EXISTS single (
+  id INTEGER PRIMARY KEY, stored TEXT NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, region TEXT,
+  boxes TEXT, subject INTEGER, result TEXT, error TEXT);
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
 TERMINAL = ("done", "failed")
@@ -259,3 +262,42 @@ class Store:
         self.requeue_working()
         for r in self._db().execute("SELECT id, state FROM scan WHERE state IN ('running', 'stopping')").fetchall():
             self.set_state(r["id"], "queued" if r["state"] == "running" else "paused", when=(r["state"],))
+
+    # ---- single photos (history) ----------------------------------------------------------------------------------
+
+    @staticmethod
+    def _single(r: sqlite3.Row) -> dict:
+        d = dict(r)
+        d["result"] = json.loads(d["result"]) if d["result"] else None
+        d["boxes"] = json.loads(d["boxes"]) if d["boxes"] else None
+        return d
+
+    def add_single(self, stored: str, name: str, region: str | None) -> int:
+        return self._write(lambda db: db.execute("INSERT INTO single (stored, name, created_at, region) VALUES (?,?,?,?)",
+                                                 (stored, name, time.time(), region)).lastrowid)
+
+    def update_single(self, sid: int, **f) -> None:
+        cols = {"region": f.get("region"), "boxes": json.dumps(f["boxes"]) if f.get("boxes") is not None else None,
+                "subject": f.get("subject"), "result": json.dumps(f["result"], ensure_ascii=False) if f.get("result") else None,
+                "error": f.get("error")}
+        keys = [k for k in cols if k in f]
+        if keys:
+            self._write(lambda db: db.execute(f"UPDATE single SET {', '.join(k + ' = ?' for k in keys)} WHERE id = ?",
+                                              [cols[k] for k in keys] + [sid]))
+
+    def single(self, sid: int) -> dict | None:
+        r = self._db().execute("SELECT * FROM single WHERE id = ?", (sid,)).fetchone()
+        return self._single(r) if r else None
+
+    def singles(self) -> list[dict]:
+        return [self._single(r) for r in self._db().execute("SELECT * FROM single ORDER BY id DESC")]
+
+    def delete_singles(self, sid: int | None = None) -> list[str]:
+        """Delete one (or every) history entry; returns the stored file names so the caller removes the originals."""
+        def go(db):
+            q, a = ("SELECT stored FROM single WHERE id = ?", (sid,)) if sid is not None else ("SELECT stored FROM single", ())
+            names = [r[0] for r in db.execute(q, a)]
+            db.execute("DELETE FROM single" + (" WHERE id = ?" if sid is not None else ""), (sid,) if sid is not None else ())
+            return names
+        return self._write(go)
+
