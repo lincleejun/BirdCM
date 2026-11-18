@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import { get, post } from "./api";
 import Results, { STATE_LABEL } from "./Results";
 import Singles from "./Singles";
-import type { ModelStatus, Ratio, Scan } from "./types";
+import LocationPicker, { type Country, rememberedPlace } from "./Location";
+import type { ModelStatus, Place, Ratio, Scan } from "./types";
 import "./styles.css";
 
 const RATIOS: Record<string, [number, number] | null> = { loose: [40, 30], std: [30, 30], strict: [20, 30], stricter: [10, 20], custom: null };
@@ -16,10 +17,8 @@ function ratioOf(preset: string, c3: number, c2: number): Ratio {
   return { preset, p3, p2: Math.max(0, Math.min(100 - p3, c2 || 0)) };
 }
 
-function Setup({ onOpen }: { onOpen: (id: number) => void }) {
-  const [regions, setRegions] = useState<Record<string, string[]>>({});
-  const [country, setCountry] = useState("美国");
-  const [state, setState] = useState("");
+function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue: Country[] }) {
+  const [place, setPlace] = useState<Place | null>(rememberedPlace);
   const [folder, setFolder] = useState("");
   const [sub, setSub] = useState(false);
   const [preset, setPreset] = useState("std");
@@ -31,7 +30,6 @@ function Setup({ onOpen }: { onOpen: (id: number) => void }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    get<Record<string, string[]>>("/api/regions").then((r) => { setRegions(r); setState(r["美国"]?.[0] ?? ""); });
     get<ModelStatus>("/api/models").then(setModels).catch(() => {});
     get<Scan[]>("/api/scans").then(setScans).catch(() => {});
   }, []);
@@ -47,7 +45,7 @@ function Setup({ onOpen }: { onOpen: (id: number) => void }) {
   const go = async () => {
     setBusy(true); setErr("");
     try {
-      const r = await post<{ id: number }>("/api/scans", { folder: folder.trim(), recursive: sub, region: `${country} · ${state}`, ratio });
+      const r = await post<{ id: number }>("/api/scans", { folder: folder.trim(), recursive: sub, region: place, ratio });
       onOpen(r.id);
     } catch (e) { setErr(String((e as Error).message)); setBusy(false); }
   };
@@ -73,16 +71,9 @@ function Setup({ onOpen }: { onOpen: (id: number) => void }) {
           <label className="row hint" style={{ marginTop: 10 }}><input type="checkbox" checked={sub} onChange={(e) => setSub(e.target.checked)} /> 包含子文件夹</label>
         </div>
         <div className="field">
-          <span className="label">拍摄地区</span>
-          <div className="row">
-            <select aria-label="国家" value={country} onChange={(e) => { setCountry(e.target.value); setState(regions[e.target.value]?.[0] ?? ""); }}>
-              {Object.keys(regions).map((c) => <option key={c}>{c}</option>)}
-            </select>
-            <select aria-label="州 / 省" value={state} onChange={(e) => setState(e.target.value)}>
-              {(regions[country] ?? []).map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-          <p className="hint">照片自带位置时，以照片为准。地区修正 <span className="tbd">待定</span></p>
+          <span className="label">拍摄地点</span>
+          <LocationPicker value={place} onChange={setPlace} catalogue={catalogue} />
+          <p className="hint">照片自带 GPS 时以照片为准；没有 GPS 的照片用这里的位置和拍摄日期修正鸟种。不选也能扫，只凭图像。</p>
         </div>
         <div className="field">
           <span className="label" id="lb-ratio">留片比例</span>
@@ -129,8 +120,8 @@ function App() {
   const q = new URLSearchParams(location.search);
   const [scanId, setScanId] = useState<number | null>(() => Number(q.get("scan")) || null);
   const [view, setView] = useState<"batch" | "single">(q.get("view") === "single" ? "single" : "batch");
-  const [regions, setRegions] = useState<Record<string, string[]>>({});
-  useEffect(() => { get<Record<string, string[]>>("/api/regions").then(setRegions).catch(() => {}); }, []);
+  const [catalogue, setCatalogue] = useState<Country[]>([]);
+  useEffect(() => { get<Country[]>("/api/regions").then(setCatalogue).catch(() => {}); }, []);
   const open = (id: number | null) => {
     history.replaceState(null, "", id ? `?scan=${id}` : location.pathname);
     setScanId(id);
@@ -151,8 +142,8 @@ function App() {
           </nav>
         </div>
       </header>
-      <main>{view === "single" ? <Singles regions={regions} />
-        : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} /> : <Setup onOpen={open} />}</main>
+      <main>{view === "single" ? <Singles catalogue={catalogue} />
+        : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} /> : <Setup onOpen={open} catalogue={catalogue} />}</main>
     </>
   );
 }

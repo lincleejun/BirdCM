@@ -17,10 +17,18 @@ from birdcm.geometry import SIZE
 VISION = {"image_size": 224, "layers": 32, "width": 1280, "head_width": 80, "patch_size": 14}
 MEAN, STD = (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)
 PATCH, GRID, LAYER = 14, 16, 15
-# Image-only naming level (gardener's rule, before any location prior): species when the first name has at least
-# SPECIES_P and leads the second by SPECIES_MARGIN; else the genus when its names together reach GENUS_P; else
-# uncertain. Constants until the geo research replaces them (docs/deviations.md).
-SPECIES_P, SPECIES_MARGIN, GENUS_P = 0.5, 0.3, 0.6
+# Naming level, on the posterior (location prior applied): species when the first name has at least SPECIES_P and
+# leads the second by SPECIES_MARGIN; else the genus when its names together reach GENUS_P; else uncertain.
+# Chosen on the evaluation set only (bench/calibrate.py, 5-fold CV by species, docs/eval.md): precision among confirmed
+# species >= 97 % at the highest coverage. The margin added nothing once P is this high, so it is 0.
+SPECIES_P, SPECIES_MARGIN, GENUS_P = 0.94, 0.0, 0.94
+RANGE_EPS, RANGE_TAU = 0.01, 0.05       # gardener's rules.py: p_geo below EPS = not here; a congener at TAU or more is
+
+
+def level_of(p1: float, p2: float, genus_p: float) -> str:
+    if p1 >= SPECIES_P and p1 - p2 >= SPECIES_MARGIN:
+        return "species"
+    return "genus" if genus_p >= GENUS_P else "uncertain"
 EYE_VISIBLE = 0.5
 ZH = Path(__file__).with_name("data") / "names-zh.csv"
 
@@ -62,16 +70,26 @@ class Tower:
         return {"sci": self.sci[i], "en": self.en[i], "zh": self.zh.get(self.sci[i]), "p": round(p, 4)}
 
     @torch.no_grad()
-    def __call__(self, crops: list[Image.Image]) -> list[dict]:
-        """Per crop (any size; squared here): {top5, level, label, beak, eyes, p_fly} with points in 224 pixels."""
-        if not crops:
+    def __call__(self, items: list) -> list[dict]:
+        """Per item, a crop or (crop, p_geo or None): {top5, level, label, genus, beak, eyes, p_fly, clear, max_cos}, points
+        in 224 pixels. With p_geo the location prior weighs the whole 11,172-name distribution before anything is cut."""
+        if not items:
             return []
+        crops = [it[0] if isinstance(it, tuple) else it for it in items]
+        priors = [it[1] if isinstance(it, tuple) else None for it in items]
         x = torch.from_numpy(np.stack([np.asarray(square(c), np.float32) / 255 for c in crops])).permute(0, 3, 1, 2).to(self.device)
         f = self.model(((x - self.mean) / self.std).to(self.dtype)).float()
         f = f / f.norm(dim=-1, keepdim=True)
         cos = f @ self.matrix.T                                                   # (b, 11172) float32
         p = (self.scale * cos).softmax(-1)
-        clear = self._clear(f, cos.max(-1).values)
+        if any(g is not None for g in priors):
+            from birdcm.geo import FLOOR
+            w = torch.stack([torch.from_numpy(np.asarray(g, np.float32)) + FLOOR if g is not None else torch.ones(p.shape[1])
+                             for g in priors]).to(self.device)
+            p = p * w
+            p = p / p.sum(-1, keepdim=True).clamp_min(1e-30)
+        max_cos = cos.max(-1).values
+        clear = self._clear(f, max_cos)
         gmass = torch.zeros(len(crops), len(self.genera), device=self.device).index_add_(1, self.genus_of, p)
         tokens = self.got["t"][:, 1:].float()                                     # (b, 256, 1280); token 0 = class
         pts, vis = self._parts(tokens)
@@ -81,13 +99,19 @@ class Tower:
         for b in range(len(crops)):
             ids, ps = top.indices[b].tolist(), top.values[b].tolist()
             g = int(gmass[b].argmax())
-            if ps[0] >= SPECIES_P and ps[0] - ps[1] >= SPECIES_MARGIN:
-                level, label = "species", self.name(ids[0], ps[0])
-            elif float(gmass[b, g]) >= GENUS_P:
-                level, label = "genus", {"sci": self.genera[g] + " sp.", "en": None, "zh": None, "p": round(float(gmass[b, g]), 4)}
-            else:
-                level, label = "uncertain", None
-            out.append({"top5": [self.name(i, s) for i, s in zip(ids, ps)], "level": level, "label": label,
+            genus = {"sci": self.genera[g] + " sp.", "en": None, "zh": None, "p": round(float(gmass[b, g]), 4)}
+            level = level_of(ps[0], ps[1], genus["p"])
+            pg = priors[b]
+            if pg is not None and pg[ids[0]] < RANGE_EPS:          # gardener's range veto: "not found here" cannot be confirmed
+                level = level_of(0.0, 0.0, genus["p"])
+                gen = self.sci[ids[0]].split(" ")[0]
+                k = next((k for k, i in enumerate(ids) if self.sci[i].split(" ")[0] == gen and pg[i] >= RANGE_TAU), None)
+                if k:                                              # a congener that does live here goes first
+                    ids.insert(0, ids.pop(k))
+                    ps.insert(0, ps.pop(k))
+            label = self.name(ids[0], ps[0]) if level == "species" else genus if level == "genus" else None
+            out.append({"top5": [self.name(i, s) for i, s in zip(ids, ps)], "level": level, "label": label, "genus": genus,
+                        "max_cos": round(float(max_cos[b]), 4),
                         "beak": pts[b, 0].tolist(), "eyes": [pts[b, 1].tolist(), pts[b, 2].tolist()],
                         "p_beak": float(vis[b, 0]), "p_eyes": [float(vis[b, 1]), float(vis[b, 2])],
                         "p_fly": float(fly[b]), "clear": clear[b]})

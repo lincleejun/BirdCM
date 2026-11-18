@@ -22,11 +22,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from birdcm import config, decode, geometry, models
+from birdcm import config, decode, geo, geometry, models
+from birdcm.rarity import Rarity
 from birdcm.result import PhotoResult
 from birdcm.sharpness import head_sharpness
 
-PIPELINE_VERSION = 2            # bump when any step's output changes: old results stop being reused
+PIPELINE_VERSION = 3            # bump when any step's output changes: old results stop being reused
 SETTINGS = {"frame": decode.FRAME, "embedded_min": decode.EMBEDDED_MIN, "min_crop": geometry.MIN_CROP,
             "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR, "max_boxes": 5}
 DECODE_TIMEOUT = 120.0          # seconds one decode may run before its pool is killed and the file isolated
@@ -35,15 +36,19 @@ EXIF_CHUNK = 16
 MAX_BOXES = 5            # boxes looked at per photo (strongest first); ponytail: raise if flocks matter
 
 
-def fingerprint(region: str | None, model_digest: str | None = None) -> str:
+def fingerprint(region, model_digest: str | None = None) -> str:
     """Models (role -> sha256), bundled data (Chinese names), pipeline version, settings and the effective region: a
     stored result is reused only when this and the file's (size, mtime) match. An Engine passes the digest of the
     manifest it actually loaded (Engine.fingerprint)."""
     from birdcm import detect, tower
     cfg = {**SETTINGS, "det": [detect.FLOOR, detect.SECOND, detect.SECOND_TOP],
-           "level": [tower.SPECIES_P, tower.SPECIES_MARGIN, tower.GENUS_P]}
-    zh = hashlib.sha256(tower.ZH.read_bytes()).hexdigest()[:16]
-    s = json.dumps([model_digest or models.digest(), zh, PIPELINE_VERSION, cfg, region], sort_keys=True)
+           "level": [tower.SPECIES_P, tower.SPECIES_MARGIN, tower.GENUS_P, tower.RANGE_EPS, tower.RANGE_TAU]}
+    data = hashlib.sha256(b"".join(f.read_bytes() for f in (tower.ZH, geo.REGIONS, geo.COUNTRIES, geo.INDEX))).hexdigest()[:16]
+    from birdcm import rarity
+    cfg["iucn"] = rarity.SHOW_IUCN
+    cfg["geo_grid"] = geo.GRID
+    cfg["geo_floor"] = geo.FLOOR
+    s = json.dumps([model_digest or models.digest(), data, PIPELINE_VERSION, cfg, geo.fingerprint_key(region)], sort_keys=True)
     return hashlib.sha256(s.encode()).hexdigest()[:16]
 
 
@@ -93,13 +98,15 @@ class Engine:
         self.detector = Detector(str(p["detector:owlv2-int8"]), self.device, half=det_half and self.device != "cpu")
         self.tower = Tower(str(p["tower"]), str(p["names"]), str(p["parts"]), str(p["flight"]), self.device,
                            clear=str(p["clear"]), aesthetic=str(p["aesthetic"]))
+        self.geo = geo.Geo(str(p["geo"]), self.tower.sci)
+        self.rarity = Rarity(str(p["rarity"]))
         self.exif, self._own_exif = exif or decode.ExifTool(), exif is None
         self.workers, self.det_batch, self.tower_batch, self.mode = workers, det_batch, tower_batch, mode
         self.stats: dict[str, float] = {}
         self.decode_fn = decode.decode          # a module-level function (spawned workers import it); tests swap it
         self._pool: ProcessPoolExecutor | None = None
 
-    def fingerprint(self, region: str | None) -> str:
+    def fingerprint(self, region) -> str:
         return fingerprint(region, self.model_digest)
 
     def close(self) -> None:
@@ -257,13 +264,16 @@ class Engine:
                 exif = exif_futs.pop(it["path"]).result(timeout=60).get(it["path"], {})
             except Exception:  # noqa: BLE001
                 exif = {}
+            if it.get("gps") is not None or it.get("taken_at"):          # the evaluation list's own place and date
+                exif = {**exif, "gps": it.get("gps") or exif.get("gps"), "taken_at": it.get("taken_at") or exif.get("taken_at")}
             boxes = boxes[:MAX_BOXES]
             fh, fw = d["frame"].shape[:2]
             rects = [geometry.crop_rect(b, fw, fh) for _, b in boxes]
             im = Image.fromarray(d["frame"])
             first = len(crops)
-            crops += [im.crop(r) for r in rects]
-            rows.append((it, d, (exif, boxes, rects, first)))
+            where = self._place(exif, region)
+            crops += [(im.crop(r), where["p_geo"] if where else None) for r in rects]
+            rows.append((it, d, (exif, boxes, rects, first, where)))
         looks = [r for i in range(0, len(crops), self.tower_batch) for r in per_item(self.tower, crops[i:i + self.tower_batch])]
         self._sync()
         self._add("tower", time.perf_counter() - t)
@@ -273,18 +283,22 @@ class Engine:
             if isinstance(x, Exception):
                 built.append((it, None, _err(x)))
                 continue
-            exif, boxes, rects, first = x
+            exif, boxes, rects, first, where = x
             mine = looks[first:first + len(boxes)]
             bad = next((m for m in mine if isinstance(m, Exception)), None)
             if bad is not None:
                 built.append((it, None, _err(bad)))
                 continue
             try:
-                built.append((it, build(it, d, exif, boxes, rects, mine, region, gate=it.get("boxes") is None), None))
+                built.append((it, build(it, d, exif, boxes, rects, mine, region, gate=it.get("boxes") is None, where=where), None))
             except Exception as e:  # noqa: BLE001
                 built.append((it, None, _err(e)))
         self._add("post", time.perf_counter() - t)
         t = time.perf_counter()
+        for _, r, _ in built:
+            if r and r["species"]:
+                r["rarity"] = self.rarity_of(r["species"], r)
+                r["pending"] = [x for x in r["pending"] if x != "rarity"]
         keep = [(n, r) for n, (_, r, _) in enumerate(built) if r and not r["rejected"]]
         frames = [batch[n][1]["frame"] for n, _ in keep]
         scores = [s for i in range(0, len(frames), self.tower_batch) for s in per_item(self.tower.aesthetic, frames[i:i + self.tower_batch])]
@@ -296,10 +310,35 @@ class Engine:
         self._add("aesthetic", time.perf_counter() - t)
         yield from built
 
+    def rarity_of(self, species: dict, r: dict) -> dict | None:
+        return rarity_for(getattr(self, "rarity", None), species, r)
+
+    def _place(self, exif: dict, region: str | None) -> dict | None:
+        """Where and when the prior looks: photo GPS, else the scan's region; with the capture week. None = no prior."""
+        if self.geo is None:
+            return None
+        pl = geo.place(exif.get("gps"), region)
+        if pl is None:
+            return None
+        lat, lon, src = pl
+        return {"lat": round(lat, 5), "lon": round(lon, 5), "source": src, "week": geo.week_of(exif.get("taken_at")),
+                "p_geo": self.geo.p_geo(lat, lon, exif.get("taken_at"))}
+
     def _sync(self) -> None:
         import torch
         if self.device == "mps":
             torch.mps.synchronize()
+
+
+def rarity_for(table, species: dict | None, r: dict) -> dict | None:
+    """Rarity of a confirmed species at the photo's place (the prior's point, else the scan's region label) and month."""
+    if table is None or not species or species.get("level") != "species" or not species.get("label"):
+        return None
+    pr = r["region"].get("prior") or {}
+    label = r["region"].get("name") if pr.get("source") in (None, "region") else None
+    taken = r["exif"].get("taken_at") or ""
+    month = int(taken[5:7]) if len(taken) >= 7 and taken[5:7].isdigit() else None
+    return table.lookup(species["label"]["sci"], pr.get("lat"), pr.get("lon"), label, month)
 
 
 def _err(e: Exception) -> str:
@@ -309,7 +348,7 @@ def _err(e: Exception) -> str:
 
 
 def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, region: str | None,
-          gate: bool = True) -> PhotoResult:
+          gate: bool = True, where: dict | None = None) -> PhotoResult:
     """One photo's result from its boxes and the tower's look at each. gate=False (boxes the person drew or "use the
     whole photo") keeps every box even when the clear-bird gate says no."""
     fh, fw = d["frame"].shape[:2]
@@ -323,7 +362,8 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         k = 0 if lk["p_eyes"][0] >= lk["p_eyes"][1] else 1
         clear = lk["clear"] is not False
         dets.append({"box": [round(v, 5) for v in b], "score": round(score, 4), "clear": lk["clear"],
-                     "species": {"level": lk["level"], "label": lk["label"], "top5": lk["top5"], "geo": False},
+                     "species": {"level": lk["level"], "label": lk["label"], "top5": lk["top5"], "geo": where is not None,
+                                 "genus": lk.get("genus"), "max_cos": lk.get("max_cos")},
                      # eyes, beak and flight only for a clear bird (the gate exists because they are noise otherwise)
                      "eye": to(lk["eyes"][k], rect) if clear else None, "eye_p": round(lk["p_eyes"][k], 4) if clear else None,
                      "beak": to(lk["beak"], rect) if clear else None, "beak_p": round(lk["p_beak"], 4) if clear else None,
@@ -340,7 +380,9 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
     return {
         "file": os.path.basename(it["path"]), "width": W, "height": H, "orientation": d["orientation"],
         "source": d["source"], "exif": ex,
-        "region": {"name": region, "source": "photo" if ex["gps"] else ("scan" if region else None), "gps": ex["gps"]},
+        "region": {"name": region.get("label") if isinstance(region, dict) else region,
+                   "source": "photo" if ex["gps"] else ("scan" if region else None), "gps": ex["gps"],
+                   "prior": {k: where[k] for k in ("lat", "lon", "source", "week")} if where else None},
         "focus": [round(v, 5) for v in focus] if focus else None, "boxes": dets, "subject": subject,
         "species": s["species"] if s else None,
         "eye": s["eye"] if s else None, "eye_p": s["eye_p"] if s else None,
@@ -352,7 +394,7 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         "sharpness_window": sharp["window"] if sharp else None,
         "aesthetic": None, "rarity": None,
         "rejected": s is None, "reject_reason": reason,
-        "pending": ["aesthetic", "geo", "rarity"] if s else ["geo", "rarity"],
+        "pending": (["aesthetic"] if s else []) + ([] if where else ["geo"]) + ["rarity"],
     }
 
 

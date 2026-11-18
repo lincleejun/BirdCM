@@ -5,7 +5,7 @@
 # at revision cfd3195ba4ea9592eec887ded089f4c08eff231d is all defaults plus four values, inlined in detect.py,
 # and the one prompt "a bird" is pre-tokenised there (see docs/deviations.md). Nothing is fetched at run time.
 #
-# Not yet listed: the rarity table and the BirdNET geo data (research still running). Their steps report "待定".
+# The rarity table covers US / CA / CN for now; a global one with the same schema replaces it later.
 
 [detector]
 use = "owlv2-int8"
@@ -65,3 +65,19 @@ url     = "https://github.com/lincleejun/bioclip-bird-heads/releases/download/v0
 sha256  = "418430e07cb922400cdb80510f703d990e1f258e52b795579fafb5c6e133b46a"
 bytes   = 10760
 license = "EVA scores CC0; the EVA (AVA) images' own licence is not established (AESTHETIC-WEIGHTS-LICENSE.md)"
+
+[[file]]
+name    = "BirdNET+_Geomodel_V3.0.4_Global_14K_FP32.onnx"
+role    = "geo"
+url     = "https://github.com/birdnet-team/geomodel/releases/download/v3.0.4/BirdNET+_Geomodel_V3.0.4_Global_14K_FP32.onnx"
+sha256  = "0de81d222c23dcb6fa428e958b4dac978783191357e01b7268a103fc6f08e61a"
+bytes   = 15503473
+license = "Apache-2.0 per the geomodel repo's LICENSE-MODELS.md; the birdnet pip package README says CC BY-NC-SA 4.0 (see NOTICE.md)"
+
+[[file]]
+name    = "rarity-us-ca-cn.sqlite"
+role    = "rarity"
+url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/rarity-us-ca-cn.sqlite"
+sha256  = "84ca30397294c2862ea71e657062ff19bc18add8f7468c99fc64696850845592"
+bytes   = 6455296
+license = "GBIF.org record counts (cite GBIF.org, accessed 2026-11-17); IUCN Red List categories (terms unclear, can be switched off)"

@@ -41,12 +41,22 @@ def score(rows: list[dict]) -> dict:
         t1 = bool(sp) and sp["top5"][0]["sci"] == truth
         c["top1"] += t1
         c["top5"] += bool(sp) and any(x["sci"] == truth for x in sp["top5"])
+        lvl = sp.get("level") if sp else None
+        c[f"level_{lvl or 'none'}"] = c.get(f"level_{lvl or 'none'}", 0) + 1
+        if lvl == "species":
+            c["species_right"] = c.get("species_right", 0) + (sp["label"]["sci"] == truth)
+        if lvl == "genus":
+            c["genus_right"] = c.get("genus_right", 0) + (sp["label"]["sci"].split(" ")[0] == truth.split(" ")[0])
         some = any(b.get("species") and b["species"]["top5"][0]["sci"] == truth for b in boxes)
         c["oracle_top1"] += some
         c["subject_right_when_some_box_right"] += some and t1
-    pct = lambda k, d=n: round(100 * c[k] / d, 2) if d else None      # noqa: E731
+    pct = lambda k, d=n: round(100 * c.get(k, 0) / d, 2) if d else None      # noqa: E731
     out = {**c, **{f"{k}_pct": pct(k) for k in ("bird_found", "kept", "rejected_by_gate", "top1", "top5", "oracle_top1", "failed")}}
     out["subject_choice_pct"] = pct("subject_right_when_some_box_right", c["oracle_top1"])
+    for k in ("level_species", "level_genus", "level_uncertain", "level_none"):
+        out[f"{k}_pct"] = pct(k) if k in c else 0.0
+    out["precision_confirmed_species_pct"] = pct("species_right", c.get("level_species", 0)) if c.get("level_species") else None
+    out["precision_genus_pct"] = pct("genus_right", c.get("level_genus", 0)) if c.get("level_genus") else None
     mammals = [r for r in rows if r["kind"] == "mammal"]
     if mammals:
         rej = sum(1 for r in mammals if r["result"] is None or r["result"]["rejected"])
@@ -55,7 +65,7 @@ def score(rows: list[dict]) -> dict:
 
 
 def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit: int | None = None,
-        out: str | None = None, workers: int = 4) -> dict:
+        out: str | None = None, workers: int = 4, prior: bool = True) -> dict:
     from birdcm import config
     from birdcm.pipeline import Engine
     config.check_own_dirs(photos)                      # thumbnails go to the cache dir: never inside the photos
@@ -69,7 +79,10 @@ def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit
             missing.append(str(p))
             continue
         st = p.stat()
-        items.append({"id": i, "path": str(p), "size": st.st_size, "mtime_ns": st.st_mtime_ns})
+        it = {"id": i, "path": str(p), "size": st.st_size, "mtime_ns": st.st_mtime_ns}
+        if prior and r.get("lat") and r.get("lon"):                  # the list's own place and date, as gardener's eval
+            it.update(gps=[float(r["lat"]), float(r["lon"])], taken_at=r.get("taken_at") or None)
+        items.append(it)
     e = Engine(workers=workers)
     t0 = time.perf_counter()
     got = {}
@@ -81,7 +94,7 @@ def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit
     rows = [{"kind": r["kind"], "truth": r["scientific"], "path": r["path"],
              "result": got.get(i, (None, "missing"))[0], "error": got.get(i, (None, "missing"))[1]} for i, r in enumerate(gt)]
     report = {**score(rows), "missing_files": len(missing), "seconds": round(time.perf_counter() - t0, 1),
-              "location_prior": False, "fingerprint": e.fingerprint(None)}
+              "location_prior": prior, "fingerprint": e.fingerprint(None)}
     names = set(e.tower.sci)
     report["truth_not_in_names"] = sum(1 for r in gt if r["kind"] == "bird" and r["scientific"] not in names)
     if out:
@@ -89,6 +102,11 @@ def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit
         with open(out, "w") as f:
             json.dump({"report": report, "rows": [{k: v for k, v in r.items() if k != "result"} |
                                                    {"top5": [c["sci"] for c in ((r["result"] or {}).get("species") or {}).get("top5", [])],
+                                                    "top5p": [c["p"] for c in ((r["result"] or {}).get("species") or {}).get("top5", [])],
+                                                    "level": ((r["result"] or {}).get("species") or {}).get("level"),
+                                                    "genus": (((r["result"] or {}).get("species") or {}).get("genus") or {}).get("sci"),
+                                                    "genus_p": (((r["result"] or {}).get("species") or {}).get("genus") or {}).get("p"),
+                                                    "max_cos": ((r["result"] or {}).get("species") or {}).get("max_cos"),
                                                     "rejected": (r["result"] or {}).get("rejected"),
                                                     "reject_reason": (r["result"] or {}).get("reject_reason"),
                                                     "boxes": len((r["result"] or {}).get("boxes") or [])} for r in rows]},

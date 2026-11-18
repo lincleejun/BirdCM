@@ -37,7 +37,9 @@ class Species(TypedDict):
     level: Literal["species", "genus", "uncertain"]
     label: Name | None              # what to show; None when uncertain
     top5: list[Name]
-    geo: bool                       # location prior applied (False until geo.py exists)
+    geo: bool                       # location prior applied
+    genus: Name | None              # the genus with the largest summed probability ("Xxx sp.")
+    max_cos: float | None           # best cosine of the image vector to any name
 
 
 class Detection(TypedDict):        # every box the tower looked at (at most 5, strongest first)
@@ -56,6 +58,7 @@ class Region(TypedDict):
     name: str | None                # "美国 · 加利福尼亚州"
     source: Literal["photo", "scan"] | None   # photo GPS or the scan's chosen region
     gps: list[float] | None
+    prior: dict | None              # {lat, lon, source: photo|region, week} the location prior used; None = no prior
 
 
 class Rarity(TypedDict):

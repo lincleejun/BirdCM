@@ -16,6 +16,7 @@ dependencies = [
     "uvicorn>=0.30",
     "opencv-python-headless>=4.10",
     "python-multipart>=0.0.9",
+    "onnxruntime>=1.18",
 ]
 
 [project.scripts]

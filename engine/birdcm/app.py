@@ -22,19 +22,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from birdcm import config, decode, models, stars
+from birdcm import config, decode, geo, models, stars
 from birdcm.pipeline import fingerprint, image_paths
 from birdcm.queue import Scheduler
 from birdcm.store import Store
 
 WEB = Path(os.environ.get("BIRDCM_WEB_DIR") or Path(__file__).resolve().parents[2] / "web" / "dist")
 WRITE = {"POST", "PUT", "PATCH", "DELETE"}
-# ponytail: names only, enough for the setup form; representative coordinates arrive with geo.py.
-REGIONS = {
-    "美国": ["加利福尼亚州", "俄勒冈州", "华盛顿州", "内华达州", "亚利桑那州", "得克萨斯州", "佛罗里达州", "纽约州", "其他"],
-    "加拿大": ["不列颠哥伦比亚省", "艾伯塔省", "安大略省", "魁北克省", "其他"],
-    "中国": ["北京市", "上海市", "云南省", "四川省", "广东省", "青海省", "其他"],
-}
 
 
 MAX_UPLOAD = 300 << 20           # bytes, one uploaded photo
@@ -54,6 +48,16 @@ def check_pixels(path: Path) -> None:
         raise ValueError(f"打不开这张照片：{e}") from None
     if n > MAX_PIXELS:
         raise ValueError(f"照片太大（{n / 1e6:.0f} MP），上限 {MAX_PIXELS / 1e6:.0f} MP")
+
+
+def check_location(loc) -> None:
+    """A location from a client: a label, or {lat, lon, label?, source?} with a real point."""
+    if loc is None or isinstance(loc, str):
+        return
+    if not geo.valid(loc.get("lat"), loc.get("lon")) or loc.get("source", "map") not in ("map", "device", "region"):
+        raise ValueError("位置要有合法的经纬度（纬度 −90–90，经度 −180–180），来源是 map / device / region")
+    if not isinstance(loc.get("label", ""), str) or len(loc.get("label", "")) > 200:
+        raise ValueError("位置名称要是文字")
 
 
 def slim_result(res: dict | None, subject: int | None) -> dict | None:
@@ -143,14 +147,14 @@ def sse(e: dict) -> str:
 
 class Identify(BaseModel):
     box: list[float] | None = None          # normalised x0, y0, x1, y1 the person drew; [0, 0, 1, 1] = whole photo
-    region: str | None = None
+    region: str | dict | None = None
     subject: int | None = None              # only switch the shown bird, no recompute
 
 
 class NewScan(BaseModel):
     folder: str
     recursive: bool = False
-    region: str | None = None
+    region: str | dict | None = None        # {lat, lon, label, source: map|device|region} or a label
     ratio: dict = {"preset": "std", "p3": 30, "p2": 30}
 
 
@@ -194,7 +198,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
 
     @api.get("/api/regions")
     def regions():
-        return REGIONS
+        return geo.catalogue()
 
     @api.post("/api/pick-folder")
     def pick_folder():
@@ -213,6 +217,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         try:
             config.check_own_dirs(folder)
             stars.validate(body.ratio)
+            check_location(body.region)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         try:
@@ -364,8 +369,16 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             (singles_dir / stored).unlink(missing_ok=True)
             raise HTTPException(400, str(e)) from None
         region = form.get("region") or None
-        sid = store.add_single(stored, Path(f.filename or "照片").name[:200], region if isinstance(region, str) else None)
-        return await run_in_threadpool(run_single, sid, region if isinstance(region, str) else None, None)
+        region = region if isinstance(region, str) else None
+        if region and region.startswith("{"):          # a location object sent as JSON text in the form
+            try:
+                region = json.loads(region)
+                check_location(region)
+            except ValueError:
+                (singles_dir / stored).unlink(missing_ok=True)
+                raise HTTPException(400, "位置格式不对") from None
+        sid = store.add_single(stored, Path(f.filename or "照片").name[:200], region)
+        return await run_in_threadpool(run_single, sid, region, None)
 
     @api.post("/api/singles/{sid}/identify")
     def reidentify(sid: int, body: Identify):
@@ -378,6 +391,10 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                 raise HTTPException(400, "没有这只鸟")
             store.update_single(sid, subject=body.subject)
             return store.single(sid)
+        try:
+            check_location(body.region)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
         box = body.box
         if box is not None and not (len(box) == 4 and 0 <= box[0] < box[2] <= 1 and 0 <= box[1] < box[3] <= 1):
             raise HTTPException(400, "框的坐标不对")

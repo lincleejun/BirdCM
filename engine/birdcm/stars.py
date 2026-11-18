@@ -165,18 +165,64 @@ def focus_class(res: dict) -> str | None:
     return "bird" if inside else "outside"
 
 
-def _name(res: dict) -> str:
-    lab = (res.get("species") or {}).get("label") or {}
+def _name(res: dict, fix: dict | None = None) -> str:
+    lab = ((fix or res.get("species")) or {}).get("label") or {}
     return lab.get("zh") or lab.get("en") or lab.get("sci") or "未定种"
 
 
-def rate(rows: list[dict], ratio: dict | None) -> dict[int, dict]:
+def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
+    """One burst's (id, PhotoResult) of the photos that were not rejected -> id: corrected species, for the frames that
+    disagree with a species held by a strict majority of the burst.
+
+    A frame supports species s when s is its own confirmed species, or when s is among its own five candidates.
+    Candidates are the confirmed species of the burst; the winner has the most support, then the larger summed
+    probability, then the name (deterministic). With support > half the frames, every frame not already confirmed
+    as it (another species, genus level, 不确定) takes it; its own result stays in the PhotoResult."""
+    named = [(i, r["species"]) for i, r in frames if r.get("species")]
+    if len(named) < 2:
+        return {}
+    cands = {sp["label"]["sci"] for _, sp in named if sp["level"] == "species" and sp.get("label")}
+    if not cands:
+        return {}
+
+    def p_of(sp: dict, sci: str) -> float | None:
+        return next((c["p"] for c in sp.get("top5", []) if c["sci"] == sci), None)
+    score = {}
+    for s in cands:
+        support = sum(1 for _, sp in named if (sp["level"] == "species" and sp["label"]["sci"] == s) or p_of(sp, s) is not None)
+        score[s] = (support, sum(p_of(sp, s) or 0.0 for _, sp in named))
+    best = min(cands, key=lambda s: (-score[s][0], -score[s][1], s))
+    if score[best][0] * 2 <= len(named):
+        return {}
+    label = next(sp["label"] for _, sp in named if sp["level"] == "species" and sp["label"]["sci"] == best)
+    out = {}
+    for i, sp in named:
+        if sp["level"] == "species" and sp["label"]["sci"] == best:
+            continue
+        p = p_of(sp, best)
+        out[i] = {"level": "species", "label": {**label, "p": round(p, 4) if p is not None else None}, "top5": sp.get("top5", []),
+                  "geo": sp.get("geo", False), "consensus": {"support": score[best][0], "frames": len(named)}}
+    return out
+
+
+def rate(rows: list[dict], ratio: dict | None, rarity=None) -> dict[int, dict]:
     """rows: {id, result (PhotoResult or None)} -> id: {stars, star_reason, burst_group, burst_rank, burst_size, q}."""
     c = Config.from_ratio(ratio)
     res = {r["id"]: r.get("result") for r in rows}
     bursts = group_bursts([{"id": i, "camera": (x or {}).get("exif", {}).get("camera"),
                             "taken_at": (x or {}).get("exif", {}).get("taken_at")} for i, x in res.items()], c.burst_gap)
-    out = {i: {"stars": None, "star_reason": None, "q": None} for i in res}
+    members: dict[int, list[tuple[int, dict]]] = defaultdict(list)
+    for i, x in res.items():
+        if x and not x.get("rejected"):
+            members[bursts[i][0]].append((i, x))
+    fixes: dict[int, dict] = {}
+    for frames in members.values():
+        fixes.update(consensus(frames))
+    if rarity is not None:                                         # a corrected frame shows its new species' rarity
+        from birdcm.pipeline import rarity_for
+        for i, fix in fixes.items():
+            fix["rarity"] = rarity_for(rarity, fix, res[i])
+    out = {i: {"stars": None, "star_reason": None, "q": None, "species_fix": fixes.get(i)} for i in res}
     ok = []
     for r in rows:
         i, x = r["id"], r.get("result")
@@ -214,6 +260,8 @@ def rate(rows: list[dict], ratio: dict | None) -> dict[int, dict]:
         out[i]["q"] = round(q, 6)
 
     def species(i: int) -> str | None:
+        if i in fixes:                                             # corrected by its burst: counts as that species
+            return fixes[i]["label"]["sci"]
         sp = res[i].get("species") or {}
         lab = sp.get("label")
         return lab["sci"] if sp.get("level") == "species" and lab and lab["p"] >= c.species_min_p else None
@@ -225,7 +273,7 @@ def rate(rows: list[dict], ratio: dict | None) -> dict[int, dict]:
     for sp, idx in groups.items():
         idx.sort(key=lambda i: (-out[i]["q"], seq[i]))
         n, n3, n2 = len(idx), round(c.q3 * len(idx)), round(c.q2 * len(idx))
-        who = _name(res[idx[0]]) if sp else "未确认鸟种的照片中"
+        who = _name(res[idx[0]], fixes.get(idx[0])) if sp else "未确认鸟种的照片中"
         got3 = got2 = 0
         for rank, i in enumerate(idx, 1):
             x, b = res[i], bursts[i][0]

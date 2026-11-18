@@ -22,6 +22,7 @@ def fake_engine():
     e.workers, e.det_batch, e.tower_batch, e.mode, e.device = 2, 4, 8, "embedded", "cpu"
     e.stats, e._pool, e.exif, e._own_exif = {}, None, NoExif(), False
     e.decode_fn = crashy.decode
+    e.geo = None
     e.detector = lambda frames: [[(0.9, (0.1, 0.1, 0.5, 0.5))] for _ in frames]
     e.tower = FakeTower()
     e._sync = lambda: None
@@ -40,6 +41,7 @@ class FakeTower:
         self.oom, self.clear, self.calls = set(oom), clear, 0
 
     def __call__(self, crops):
+        crops = [c[0] if isinstance(c, tuple) else c for c in crops]       # (crop, p_geo) as the engine passes them
         self.calls += 1
         if any(c.getpixel((0, 0))[0] in self.oom for c in crops):
             raise RuntimeError("MPS backend out of memory")

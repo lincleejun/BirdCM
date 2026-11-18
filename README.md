@@ -4,8 +4,10 @@ Local web app for bird photographers: cull a shoot of ~1,500 RAW photos (find th
 flying or not) on your own Mac. Photos never leave the computer and the photo folder is only read.
 
 Status: batch culling (find, name, eye / beak, flying, clear-bird gate, head sharpness, aesthetic, stars, CSV / JSON
-export), the single-photo view with history, and `birdcm eval` work end to end. The location prior and rarity are
-pending (the UI shows them as 待定). Star defaults are the recorded strategy, not yet validated on the owner's keeps.
+export), the location prior (BirdNET geo, anywhere in the world: photo GPS, a map pin, the device's location or a
+country / first-level division), burst consensus, rarity (US / CA / CN for now) and IUCN, the single-photo view
+with history, and `birdcm eval` work end to end. Star defaults are the recorded strategy, not yet validated on the
+owner's keeps. The map dialog is the app's only network use (OpenStreetMap tiles, loaded when it is opened).
 
 ## Run
 

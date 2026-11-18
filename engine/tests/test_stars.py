@@ -112,3 +112,52 @@ def test_validate_star_settings():
                 {"w_sharp": float("nan")}, {"min_aes": True}):
         with pytest.raises(ValueError):
             validate(bad)
+
+
+def sp(sci, p, level="species", top=()):
+    top5 = [{"sci": sci, "en": sci, "zh": None, "p": p}] + [{"sci": s, "en": s, "zh": None, "p": q} for s, q in top]
+    return {"level": level, "label": {"sci": sci, "en": sci, "zh": None, "p": p} if level != "uncertain" else None, "top5": top5}
+
+
+def burst(*species, t0=0.0):
+    return [res(t0 + 0.5 * k, 1, 0.5, species=s) for k, s in enumerate(species)]
+
+
+def test_consensus_majority_corrects_the_odd_frame():
+    rs = burst(sp("Pyrocephalus rubinus", 0.91), sp("Pyrocephalus rubinus", 0.95),
+               sp("Xenopsaris albinucha", 0.81, top=[("Pyrocephalus rubinus", 0.1)]))
+    o = run(rs)
+    assert o[0]["species_fix"] is None and o[1]["species_fix"] is None
+    fix = o[2]["species_fix"]
+    assert fix["label"]["sci"] == "Pyrocephalus rubinus" and fix["label"]["p"] == 0.1 and fix["consensus"]["support"] == 3
+    assert rs[2]["species"]["label"]["sci"] == "Xenopsaris albinucha"           # the frame's own result is kept
+
+
+def test_consensus_genus_and_uncertain_frames_adopt_it():
+    o = run(burst(sp("A b", 0.97), sp("A b", 0.96), sp("A b", 0.98), sp("A sp.", 0.95, level="genus"), sp("Z z", 0.4, level="uncertain")))
+    assert o[3]["species_fix"]["label"]["sci"] == "A b" and o[4]["species_fix"]["label"]["sci"] == "A b"   # 3 of 5
+    assert o[4]["species_fix"]["label"]["p"] is None                           # not among its own candidates
+    o = run(burst(sp("A b", 0.97), sp("A b", 0.96), sp("A sp.", 0.95, level="genus"), sp("Z z", 0.4, level="uncertain")))
+    assert all(x["species_fix"] is None for x in o)                            # 2 of 4 is not a majority
+
+
+def test_consensus_needs_a_strict_majority():
+    o = run(burst(sp("A b", 0.97), sp("C d", 0.97)))                           # 1 vs 1 of 2: no majority
+    assert all(x["species_fix"] is None for x in o)
+    o = run(burst(sp("A b", 0.97), sp("C d", 0.97), sp("E f", 0.5, level="uncertain")))
+    assert all(x["species_fix"] is None for x in o)
+
+
+def test_consensus_tie_broken_by_summed_probability():
+    o = run(burst(sp("A b", 0.97, top=[("C d", 0.02)]), sp("C d", 0.99, top=[("A b", 0.005)]), sp("Q q", 0.3, level="uncertain")))
+    assert o[0]["species_fix"]["label"]["sci"] == "C d"                         # both have support 2; C d sums 1.01 > 0.975
+    assert o[1]["species_fix"] is None and o[2]["species_fix"]["label"]["sci"] == "C d"    # 不确定 adopts the majority
+
+
+def test_consensus_skips_rejected_and_single_frames_and_feeds_quotas():
+    rs = burst(sp("A b", 0.97), sp("A b", 0.96), sp("C d", 0.97))
+    rs.append(res(1.5, 1, 0.5, rejected=True, reject_reason="没有清楚的鸟", species=None))
+    rs.append(res(500.0, 1, 0.5, species=sp("C d", 0.97)))                    # its own burst: unchanged
+    o = run(rs)
+    assert o[2]["species_fix"]["label"]["sci"] == "A b" and o[3]["species_fix"] is None and o[4]["species_fix"] is None
+    assert o[3]["stars"] == -1 and o[4]["stars"] >= 2                          # C d keeps its floor from its own burst

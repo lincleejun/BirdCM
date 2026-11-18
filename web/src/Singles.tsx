@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { del, get, post, upload } from "./api";
+import LocationPicker, { type Country, placeText } from "./Location";
 import { Candidates, named, SpName } from "./names";
 import { nameOf } from "./Results";
-import type { Box, Detection, PhotoResult, Species } from "./types";
+import type { Box, Detection, PhotoResult, Place, Species } from "./types";
 
 // Single photo + history, laid out like prototype/mobile.html's result page: photo on top, then reading order.
 interface Single {
-  id: number; name: string; created_at: number; region: string | null; subject: number | null;
+  id: number; name: string; created_at: number; region: string | Place | null; subject: number | null;
   boxes: Box[] | null; result: PhotoResult | null; error: string | null;
 }
 interface Slim {
-  id: number; name: string; created_at: number; region: string | null; error: string | null;
+  id: number; name: string; created_at: number; region: string | Place | null; error: string | null;
   result: { species: Species | null; rejected: boolean; reject_reason: string | null; taken_at: string | null; gps: number[] | null } | null;
 }
 
@@ -22,7 +23,7 @@ function spName(sp: Species | null | undefined): string {
   return named(sp).title;
 }
 
-export default function Singles({ regions }: { regions: Record<string, string[]> }) {
+export default function Singles({ catalogue }: { catalogue: Country[] }) {
   const [list, setList] = useState<Slim[]>([]);
   const [rec, setRec] = useState<Single | null>(null);
   const [busy, setBusy] = useState("");
@@ -58,7 +59,7 @@ export default function Singles({ regions }: { regions: Record<string, string[]>
     refresh();
   };
 
-  if (rec) return <Result rec={rec} busy={busy} err={err} regions={regions} onBack={() => { setRec(null); refresh(); }}
+  if (rec) return <Result rec={rec} busy={busy} err={err} catalogue={catalogue} onBack={() => { setRec(null); refresh(); }}
     onAct={act} onDelete={() => remove(rec.id)} onPick={send} />;
   return (
     <section className="single" aria-labelledby="h-single">
@@ -83,7 +84,7 @@ export default function Singles({ regions }: { regions: Record<string, string[]>
                     {h.result && !h.result.rejected && h.result.species && (() => { const n = named(h.result.species);
                       return <span className="history-meta">{n.sub}{n.sub ? " · " : ""}<i>{n.sci}</i></span>; })()}
                     <span className="history-meta">{fmtTime(h.result?.taken_at)} · {h.name}</span>
-                    <span className="history-meta">{h.result?.gps ? "照片自带位置" : h.region ?? "地区未记录"}</span></span>
+                    <span className="history-meta">{h.result?.gps ? "照片自带位置" : h.region ? placeText(h.region) : "地点未记录"}</span></span>
                 </button>
                 <button type="button" className="history-delete" onClick={() => remove(h.id)} aria-label={`删除这条记录（${name}）`}>删除</button>
               </li>
@@ -108,8 +109,8 @@ function Drop({ onFile, busy }: { onFile: (f: File) => void; busy: string }) {
   );
 }
 
-function Result({ rec, busy, err, regions, onBack, onAct, onDelete, onPick }: {
-  rec: Single; busy: string; err: string; regions: Record<string, string[]>; onBack: () => void;
+function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick }: {
+  rec: Single; busy: string; err: string; catalogue: Country[]; onBack: () => void;
   onAct: (body: object, label?: string) => void; onDelete: () => void; onPick: (f: File) => void;
 }) {
   const r = rec.result;
@@ -188,7 +189,8 @@ function Result({ rec, busy, err, regions, onBack, onAct, onDelete, onPick }: {
           {!sure && sp?.level !== "genus" && <p className="hint">照片里的特征不够清楚。</p>}
           <p className="facts-inline">
             <strong>{b.p_fly == null ? "姿态未知" : b.p_fly >= 0.5 ? "在飞" : "不在飞"}</strong>
-            <span>稀有度 <span className="tbd">待定</span></span><span>IUCN <span className="tbd">待定</span></span>
+            {i === r.subject && r.rarity ? <><span>当地当月 <strong>{r.rarity.label}</strong></span>{r.rarity.iucn && <span>IUCN {r.rarity.iucn}</span>}</>
+              : <span>稀有度 —</span>}
             {b.clear === false && <span>框里的鸟不够清楚</span>}
           </p>
           {multi && (
@@ -204,7 +206,7 @@ function Result({ rec, busy, err, regions, onBack, onAct, onDelete, onPick }: {
           <section className="result-section" aria-labelledby="cand-h">
             <h3 id="cand-h">{sure ? "其他候选" : "前 5 个候选"}</h3>
             <Candidates sp={sp!} skipFirst={sure} />
-            <p className="hint">只凭图像判断，地区修正 <span className="tbd">待定</span></p>
+            <p className="hint">{sp?.geo ? "已按拍摄地点和季节修正" : "没有拍摄地点，只凭图像判断"}</p>
           </section>
           <section className="result-section" aria-labelledby="exif-h">
             <h3 id="exif-h">拍摄信息</h3>
@@ -215,34 +217,16 @@ function Result({ rec, busy, err, regions, onBack, onAct, onDelete, onPick }: {
           <section className="result-section" aria-labelledby="region-h">
             <h3 id="region-h">拍摄地区</h3>
             {e?.gps ? <div className="location"><span>GPS {e.gps.map((v) => v.toFixed(4)).join(", ")}</span><span className="hint">照片自带位置</span></div>
-              : askRegion ? <RegionPicker regions={regions} initial={rec.region} onPick={(region) => { setAskRegion(false); onAct({ region }); }} onCancel={() => setAskRegion(false)} />
+              : askRegion ? <LocationPicker compact value={typeof rec.region === "object" ? rec.region : null} catalogue={catalogue}
+                  onChange={(p) => { setAskRegion(false); onAct({ region: p ?? "" }); }} />
               : <div className="location">
-                  <span className={rec.region ? "" : "hint"}>{rec.region ?? "未记录地区，暂无法判断当地稀有度。"}</span>
-                  <button className="btn" onClick={() => setAskRegion(true)}>{rec.region ? "改地区" : "补充地区"}</button>
+                  <span className={rec.region ? "" : "hint"}>{rec.region ? placeText(rec.region) : "没有拍摄地点：只凭图像认，不知道当地有没有这种鸟。"}</span>
+                  <button className="btn" onClick={() => setAskRegion(true)}>{rec.region ? "改地点" : "补充地点"}</button>
                 </div>}
-            {!e?.gps && <p className="hint">地区修正还在调研，选了地区现在不改变识别结果。</p>}
+            {!e?.gps && <p className="hint">补充地点后会按当地、当季可能出现的鸟重新判断。</p>}
           </section>
         </div>
       )}
     </section>
-  );
-}
-
-function RegionPicker({ regions, initial, onPick, onCancel }: { regions: Record<string, string[]>; initial: string | null;
-  onPick: (r: string) => void; onCancel: () => void }) {
-  const [c0, s0] = (initial ?? "").split(" · ");
-  const [country, setCountry] = useState(c0 && regions[c0] ? c0 : Object.keys(regions)[0] ?? "");
-  const [state, setState] = useState(s0 ?? regions[country]?.[0] ?? "");
-  return (
-    <div className="row" style={{ marginTop: 6 }}>
-      <select aria-label="国家" value={country} onChange={(e) => { setCountry(e.target.value); setState(regions[e.target.value]?.[0] ?? ""); }}>
-        {Object.keys(regions).map((c) => <option key={c}>{c}</option>)}
-      </select>
-      <select aria-label="州 / 省" value={state} onChange={(e) => setState(e.target.value)}>
-        {(regions[country] ?? []).map((s) => <option key={s}>{s}</option>)}
-      </select>
-      <button className="btn primary" onClick={() => onPick(`${country} · ${state}`)}>确定</button>
-      <button className="btn link" onClick={onCancel}>取消</button>
-    </div>
   );
 }

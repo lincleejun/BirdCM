@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post } from "./api";
+import { placeText } from "./Location";
 import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks } from "./names";
 import type { Exif, PhotoResult, PhotoRow, Scan, Snapshot } from "./types";
 
@@ -17,6 +18,11 @@ const pct = (p: number) => `${Math.round(p * 100)}%`;
 const evText = (ev: number | null) => (ev === null ? "— EV" : `${ev > 0 ? "+" : ""}${+ev.toFixed(1)} EV`);
 const sharpTxt = (v: number | null | undefined) => (v == null ? "—" : v.toFixed(2));
 const REGION: Record<string, string> = { eye: "眼睛周围", head: "头部", box: "整个鸟框" };
+const RARITY_NOTE = "按 GBIF 观察记录在当地当月所占比例分级：常见 ≥0.2%，不常见 ≥0.02%，少见 ≥0.002%，更低为罕见。记录多少反映的是有多少人报告，不是鸟有多少。";
+const IUCN_ZH: Record<string, string> = { LC: "无危", NT: "近危", VU: "易危", EN: "濒危", CR: "极危", DD: "数据缺乏", EX: "灭绝", EW: "野外灭绝", NE: "未评估" };
+// rarer first: 罕见 1, 少见 2, 不常见 3, 常见 4; 无记录 (0) counts as rarest, unknown last
+const rank = (p: PhotoRow) => { const t = p.result?.rarity?.tier; return t == null ? 9 : t === 0 ? 0.5 : t; };
+const PRIOR_SRC: Record<string, string> = { photo: "照片 GPS", map: "地图选点", device: "本机定位", region: "地区中心点" };
 const fmtTime = (t: string | null | undefined) => (t ? t.slice(0, 19).replace("T", " ") : "时间未知");
 
 export function nameOf(r: PhotoResult): string {
@@ -71,6 +77,11 @@ function Photo({ row, marks, big, show, alt = "" }: { row: PhotoRow; marks: Mark
   );
 }
 
+function withFix(p: PhotoRow): PhotoRow {
+  if (!p.species_fix || !p.result) return p;
+  return { ...p, result: { ...p.result, species: p.species_fix, species_own: p.result.species, rarity: p.species_fix.rarity ?? null } };
+}
+
 // ---------- export ----------
 function exportRow(p: PhotoRow) {
   const r = p.result, e = r?.exif, s = r?.species, l = s?.level === "species" ? s.label : null;
@@ -78,17 +89,20 @@ function exportRow(p: PhotoRow) {
     文件: p.file, 路径: p.path, 状态: p.state === "failed" ? "失败" : p.state === "done" ? "已识别" : "未扫描", 错误: p.error ?? "",
     星级: starLabel(p.stars), 理由: p.star_reason ?? "",
     中文名: l?.zh ?? "", 英文名: l?.en ?? "", 学名: l?.sci ?? (s ? named(s).sci : ""),
+    按连拍组修正: r?.species_own ? "是" : "", 原识别: r?.species_own ? `${named(r.species_own).title} · ${named(r.species_own).sci} · ${pct(r.species_own.top5[0]?.p ?? 0)}` : "",
     识别结果: r ? nameOf(r) : "", 识别层级: s?.level ?? "", 把握: s?.label?.p ?? s?.top5[0]?.p ?? "",
     候选: s ? s.top5.map((c) => [c.zh, c.en, c.sci, pct(c.p)].filter(Boolean).join(" · ")).join(" / ") : "",
     在飞: r?.flying == null ? "" : r.flying ? "是" : "否", 在飞概率: r?.p_fly ?? "",
     鸟框: r && r.subject != null ? r.boxes[r.subject].box.join(" ") : "", 眼睛位置: r?.eye?.join(" ") ?? "", 对焦点: r?.focus?.join(" ") ?? "",
     眼睛: r?.eye_visible == null ? "" : r.eye_visible ? "看得见" : "看不见", 头部清晰度: r?.sharpness ?? "", 清晰度测量处: r?.sharpness_region ?? "",
     美学分: r?.aesthetic ?? "", 清楚的鸟: r?.clear == null ? "" : r.clear ? "是" : "否",
-    稀有度: r?.rarity ? r.rarity.tier : "待定", IUCN: r?.rarity?.iucn ?? "待定", 连拍组: p.burst_group ?? "", 组内排名: p.burst_rank ?? "", 连拍组张数: p.burst_size ?? "",
+    稀有度: r?.rarity?.label ?? "", 稀有度地区: r?.rarity?.region ?? "", IUCN: r?.rarity?.iucn ?? "", 连拍组: p.burst_group ?? "", 组内排名: p.burst_rank ?? "", 连拍组张数: p.burst_size ?? "",
     相机: e?.camera ?? "", 镜头: e?.lens ?? "", 焦距毫米: e?.focal_mm ?? "", 光圈: e?.aperture ?? "", 快门秒: e?.shutter ?? "", ISO: e?.iso ?? "",
     曝光补偿EV: e?.ev ?? "", 对焦模式: e?.focus_mode ?? "", 拍摄时间: e?.taken_at ?? "", 拍摄时间显示: e?.taken_at ? fmtTime(e.taken_at) : "",
     地区: r?.region.source === "photo" ? `GPS ${r.region.gps!.map((v) => v.toFixed(5)).join(", ")}` : r?.region.name ?? "",
     地区来源: r?.region.source === "photo" ? "照片自带" : r?.region.source === "scan" ? "批次设定" : "",
+    修正用的位置: r?.region.prior ? `${r.region.prior.lat}, ${r.region.prior.lon}` : "",
+    位置来源: r?.region.prior ? PRIOR_SRC[r.region.prior.source] : "没有位置（只凭图像）", 拍摄周: r?.region.prior?.week ?? "",
   };
 }
 function save(name: string, text: string, type: string) {
@@ -113,7 +127,9 @@ function csv(rows: ReturnType<typeof exportRow>[]): string {
 // ---------- the view ----------
 export default function Results({ scanId, onBack }: { scanId: number; onBack: () => void }) {
   const [scan, setScan] = useState<Scan | null>(null);
-  const [photos, setPhotos] = useState<PhotoRow[]>([]);
+  const [raw, setPhotos] = useState<PhotoRow[]>([]);
+  // what the page shows: a burst's majority species replaces a frame's own (kept as species_own) when stars.py says so
+  const photos = useMemo(() => raw.map(withFix), [raw]);
   const [error, setError] = useState("");
   const index = useRef(new Map<number, number>());
   const lastN = useRef(0);          // newest event seen (dedupe)
@@ -173,6 +189,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   const [fs, setFs] = useState("all");
   const [fsp, setFsp] = useState("");
   const [ffly, setFfly] = useState("all");
+  const [frar, setFrar] = useState("0");
   const [sort, setSort] = useState("queue");
   const [marks, setMarks] = useMarks();
   const [selected, setSelected] = useState<number | null>(null);
@@ -193,14 +210,16 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   // "只看这一组": the list shows one burst, whatever the other filters say (they are kept, and come back on clearing)
   const [groupOnly, setGroupOnly] = useState<number | null>(null);
   const view = useMemo(() => {
-    const usesResults = fsp || ffly !== "all";
+    const usesResults = fsp || ffly !== "all" || frar !== "0";
     const v = photos.filter((p) => {
       if (groupOnly !== null) return p.burst_group === groupOnly;
       if (starsReady && fs !== "all" && p.stars !== +fs) return false;
       if (!usesResults) return true;
       const r = p.result;
       if (!r || r.rejected) return false;
-      return (!fsp || (fsp === "unsure" ? !confirmed(r) : speciesKey(r) === fsp)) && (ffly === "all" || (ffly === "fly") === !!r.flying);
+      const t = r.rarity?.tier;
+      return (!fsp || (fsp === "unsure" ? !confirmed(r) : speciesKey(r) === fsp)) && (ffly === "all" || (ffly === "fly") === !!r.flying)
+        && (frar === "0" || (t != null && t > 0 && t <= +frar));
     });
     const ready = (p: PhotoRow) => (p.result ? 1 : 0);
     const cmp: Record<string, (a: PhotoRow, b: PhotoRow) => number> = {
@@ -210,11 +229,12 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
       species: (a, b) => nameOf(a.result!).localeCompare(nameOf(b.result!), "zh-CN") || a.seq - b.seq,
       fly: (a, b) => (b.result?.p_fly ?? 0) - (a.result?.p_fly ?? 0),
       eye: (a, b) => (b.result?.sharpness ?? -1) - (a.result?.sharpness ?? -1),
+      rar: (a, b) => rank(a) - rank(b) || (b.stars ?? -2) - (a.stars ?? -2) || a.seq - b.seq,
     };
     // finished photos first in the chosen order; the ones still waiting stay behind them in queue order
     v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp[sort](a, b) : a.seq - b.seq));
     return v;
-  }, [photos, fs, fsp, ffly, sort, starsReady, groupOnly]);
+  }, [photos, fs, fsp, ffly, frar, sort, starsReady, groupOnly]);
 
   // a photo picked from the burst strip may be outside the filtered list: it is still the one shown
   const current = view.find((p) => p.id === selected) ?? (selected !== null ? photos.find((p) => p.id === selected) : undefined) ?? view[0] ?? null;
@@ -265,6 +285,12 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   const c = { total: photos.length, done: photos.filter((p) => p.state === "done").length, failed: photos.filter((p) => p.state === "failed").length };
   const finished = c.done + c.failed;
   const rejected = photos.filter((p) => p.result?.rejected).length;
+  const rare = new Map<string, string>();
+  for (const p of photos) {
+    const t = p.result?.rarity?.tier, l = p.result?.species?.label;
+    if (t != null && t > 0 && t <= 2 && l && !p.result!.rejected) rare.set(l.sci, `${l.zh || l.en || l.sci}（${p.result!.rarity!.label}）`);
+  }
+  const rareNames = [...rare.values()].join("、");
   const copy = complete ? `已完成 · ${c.total} 张${c.failed ? `（${c.failed} 张失败）` : ""}`
     : `${phase === "paused" ? (scan.state === "failed" ? "出错已停" : "已停止") : scan.state === "stopping" ? "正在停止" : scan.state === "finalizing" ? "正在汇总" : "扫描中"} · 已完成 ${finished} / ${c.total}`;
   const stepText = complete ? "" : scan.state === "failed" ? ` · ${scan.error ?? ""}` : phase === "paused" ? " · 等待继续"
@@ -275,7 +301,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
     <section id="s-res" data-phase={phase} aria-labelledby="h-res">
       <div className="topbar">
         <div><h2 id="h-res" tabIndex={-1}>审片结果</h2>
-          <span className="sub">{scan.region ?? "未选地区"}{date ? ` · ${date.slice(0, 10)}` : ""}{scan.recursive ? " · 包含子文件夹" : ""} · {scan.folder}</span></div>
+          <span className="sub">{placeText(scan.region)}{date ? ` · ${date.slice(0, 10)}` : ""}{scan.recursive ? " · 包含子文件夹" : ""} · {scan.folder}</span></div>
         <div className="row"><button className="btn link" onClick={onBack}>换一批</button>
           <button className="btn primary" disabled={!complete} onClick={() => exportRef.current?.showModal()}>导出</button></div>
       </div>
@@ -300,7 +326,8 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
           </>
         ) : <div><b>{finished} / {c.total}</b><small>已扫描照片</small></div>}
         <div><b>{species.list.length}</b><small>已认出的鸟种</small></div>
-        <div><b className="rare-name">待定</b><small>少见和罕见（稀有度表调研中）</small></div>
+        <div><b className="rare-name">{rareNames || (complete ? "没有" : "尚未发现")}</b>
+          <small title={RARITY_NOTE}>少见和罕见（当地当月的观察记录比例）</small></div>
       </div>
 
       <div className="filters" role="group" aria-label="筛选和排序">
@@ -314,7 +341,9 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
           {species.list.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
           {species.unsure && <option value="unsure">不确定或只到属</option>}
         </select>
-        <select aria-label="稀有度" disabled title="稀有度待定"><option>稀有度 · 待定</option></select>
+        <select aria-label="稀有度" value={frar} onChange={(e) => setFrar(e.target.value)} title={RARITY_NOTE}>
+          <option value="0">所有稀有度</option><option value="3">不常见及以上</option><option value="2">少见及以上</option><option value="1">罕见</option>
+        </select>
         <select aria-label="是否在飞" value={ffly} onChange={(e) => setFfly(e.target.value)}>
           <option value="all">所有姿态</option><option value="fly">在飞</option><option value="still">不在飞</option>
         </select>
@@ -325,7 +354,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
             <option value="time">拍摄时间</option>
             <option value="species">按鸟种排序</option>
             <option value="fly">在飞的在前</option>
-            <option value="rar" disabled>稀有的在前（待定）</option>
+            <option value="rar">稀有的在前</option>
             <option value="eye">头部清晰的在前</option>
           </select>
         </label>
@@ -359,7 +388,8 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
                   onClick={() => { setSelected(p.id); if (matchMedia("(max-width: 720px)").matches) panelRef.current?.scrollIntoView({ block: "start" }); }}
                   onDoubleClick={() => { setSelected(p.id); viewerRef.current?.showModal(); }}>
                   <Photo row={p} marks={marks} show={!!r || active} />
-                  <span className="row-result">{r && !r.rejected ? <SpName sp={r.species} /> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
+                  <span className="row-result">{r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">按连拍组修正</span>}
+                    {r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}</> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
                     {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
                     {r && !r.rejected && r.flying !== null && <span className="pill">{r.flying ? "在飞" : "不在飞"}</span>}
                     {r && <span className="small reason-line" style={{ display: "block" }}>
@@ -439,7 +469,11 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
             ) : sp ? (
               <>
                 <SpName sp={sp} big />
-                <p className="conf-line">{sure ? "把握" : "最高候选"} {pct(sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p)} <span className="ref">· 仅凭图像，地区修正待定</span></p>
+                {r!.species_own && (
+                  <p className="fixed-note"><span className="tbd">按连拍组修正</span> 这一组 {sp.consensus?.frames} 张里 {sp.consensus?.support} 张支持它；
+                    这张自己认的是 {named(r!.species_own).title} <i>{named(r!.species_own).sci}</i>（{pct(r!.species_own.top5[0]?.p ?? 0)}）</p>
+                )}
+                <p className="conf-line">{sure ? "把握" : "最高候选"} {pct((sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p) ?? 0)} <span className="ref">· {sp.geo ? "已按拍摄地点和季节修正" : "没有位置，只凭图像"}</span></p>
                 <h4 className="panel-h">前 5 个候选</h4>
                 <Candidates sp={sp} />
               </>
@@ -449,8 +483,9 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
               <dt>眼睛</dt><dd>{r!.eye_visible == null ? "—" : r!.eye_visible ? "看得见" : "看不见"}</dd>
               <dt>头部清晰度</dt><dd>{sharpTxt(r!.sharpness)}{r!.sharpness_region && <span className="ref"> · 量在{REGION[r!.sharpness_region]}，只在本批内比较（阈值未标定）</span>}</dd>
               <dt>美学分</dt><dd>{r!.aesthetic != null ? r!.aesthetic.toFixed(2) : "—"} <span className="ref">仅供参考</span></dd>
-              <dt>稀有度</dt><dd><span className="tbd">待定</span></dd>
-              <dt>受威胁等级</dt><dd><span className="tbd">待定</span></dd>
+              <dt>稀有度</dt><dd title={RARITY_NOTE}>{r!.rarity ? <>{r!.rarity.label}{r!.rarity.region && <span className="ref"> · {r!.rarity.region}，当月</span>}</> : "—"}
+                <span className="ref"> · 观察记录多少，不是数量多少</span></dd>
+              <dt>受威胁等级</dt><dd>{r!.rarity?.iucn ? `IUCN ${IUCN_ZH[r!.rarity.iucn] ?? r!.rarity.iucn}（${r!.rarity.iucn}）` : "—"}</dd>
               <dt>连拍组</dt><dd>{!p.burst_group ? "扫完后分组" : p.burst_size === 1 ? `第 ${p.burst_group} 组 · 只有这一张`
                 : `第 ${p.burst_group} 组 · 组内排名第 ${p.burst_rank}，共 ${p.burst_size} 张${burst ? ` · 按拍摄顺序第 ${burst.order.get(p.id)} 张` : ""}`}</dd>
               <dt>鸟框</dt><dd>{r!.boxes.length} 个{r!.boxes.length > 1 && r!.subject != null ? `，主体按${r!.focus ? "对焦点" : "把握"}选取` : ""}</dd>
@@ -480,8 +515,8 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
         <dl className="facts">
           <dt>相机</dt><dd>{e?.camera ?? "—"}</dd><dt>镜头</dt><dd>{e?.lens ?? "—"}</dd>
           <dt>对焦模式</dt><dd>{e?.focus_mode ?? "—"}</dd><dt>拍摄时间</dt><dd>{fmtTime(e?.taken_at)}</dd>
-          {r && <><dt>地区</dt><dd>{r.region.source === "photo" ? `GPS ${r.region.gps!.map((v) => v.toFixed(4)).join(", ")}` : r.region.name ?? "—"}{" "}
-            <span className="ref">· {r.region.source === "photo" ? "照片自带" : "批次设定"}</span></dd></>}
+          {r && <><dt>地点</dt><dd>{r.region.source === "photo" ? `GPS ${r.region.gps!.map((v) => v.toFixed(4)).join(", ")}` : r.region.name ?? "—"}{" "}
+            <span className="ref">· {r.region.prior ? `${PRIOR_SRC[r.region.prior.source]}${r.region.prior.week ? `，第 ${r.region.prior.week} 周` : "，全年"}` : "没有位置，只凭图像"}</span></dd></>}
           <dt>文件</dt><dd>{p.file}<span className="ref path"> {p.path}</span></dd>
         </dl>
       </div>

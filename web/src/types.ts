@@ -8,13 +8,22 @@ export interface Exif {
   taken_at: string | null; gps: [number, number] | null;
 }
 export interface Name { sci: string; en: string | null; zh: string | null; p: number }
-export interface Species { level: "species" | "genus" | "uncertain"; label: Name | null; top5: Name[]; geo: boolean }
+export interface Species {
+  level: "species" | "genus" | "uncertain"; label: Name | null; top5: Name[]; geo: boolean;
+  genus?: Name | null; max_cos?: number | null;
+  consensus?: { support: number; frames: number };    // set on a burst correction (PhotoRow.species_fix)
+  rarity?: Rarity | null;                             // the corrected species' rarity
+}
 export interface Detection {
   box: Box; score: number; clear: boolean | null; species: Species;
   eye: Point | null; eye_p: number | null; beak: Point | null; beak_p: number | null; p_fly: number | null;
 }
-export interface Region { name: string | null; source: "photo" | "scan" | null; gps: [number, number] | null }
-export interface Rarity { tier: number; iucn: string | null }
+export interface Region {
+  name: string | null; source: "photo" | "scan" | null; gps: [number, number] | null;
+  prior?: { lat: number; lon: number; source: "photo" | "map" | "device" | "region"; week: number | null } | null;
+}
+export interface Place { lat: number; lon: number; label: string; source: "map" | "device" | "region" }
+export interface Rarity { tier: number | null; label: string; iucn: string | null; region: string | null }
 
 export interface PhotoResult {
   file: string; width: number; height: number; orientation: number; source: string;
@@ -27,6 +36,7 @@ export interface PhotoResult {
   aesthetic: number | null;       // 0-1, whole photo
   rarity: Rarity | null;          // pending
   rejected: boolean; reject_reason: string | null; pending: string[];
+  species_own?: Species | null;   // client side: the frame's own naming when its burst corrected it
 }
 
 export type PhotoState = "queued" | "working" | "done" | "failed";
@@ -35,13 +45,14 @@ export interface PhotoRow {
   result: PhotoResult | null; error: string | null; reused: number;
   // per scan (stars.py); null = 待定
   stars: number | null; star_reason: string | null; burst_group: number | null; burst_rank: number | null; burst_size: number | null;
+  species_fix: Species | null;    // the burst's majority species, when it differs from this frame's own
 }
 
 export type ScanState = "queued" | "running" | "stopping" | "paused" | "finalizing" | "completed" | "failed";
 export interface Counts { queued: number; working: number; done: number; failed: number; total: number }
 export interface Ratio { preset: string; p3: number; p2: number }
 export interface Scan {
-  id: number; folder: string; recursive: number; region: string | null; ratio: Ratio; state: ScanState;
+  id: number; folder: string; recursive: number; region: string | Place | null; ratio: Ratio; state: ScanState;
   error: string | null; created_at: number; counts: Counts;
 }
 export interface Snapshot { scan: Scan; photos: PhotoRow[]; cursor: number }

@@ -121,18 +121,29 @@ class Scheduler:
             return
         scan = self.store.scan(sid)
         try:
-            rating = stars.rate(self.store.rows_for_rating(sid), scan["ratio"])
+            rating = stars.rate(self.store.rows_for_rating(sid), scan["ratio"], rarity=self._rarity())
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             self.store.set_state(sid, "failed", error=f"标星出错：{type(e).__name__}: {e}"[:500])
             return
         self.store.write_rating(sid, rating, complete=True)
 
+    def _rarity(self):
+        """The rarity table for burst-corrected frames (they take the majority species' rarity); None when absent."""
+        if not hasattr(self, "_rarity_table"):
+            try:
+                from birdcm import models
+                from birdcm.rarity import Rarity
+                self._rarity_table = Rarity(str(models.paths()["rarity"]))
+            except Exception:  # noqa: BLE001 - no table (tests, missing file): corrected frames show no rarity
+                self._rarity_table = None
+        return self._rarity_table
+
     def rerate(self, sid: int) -> None:
         """Ratio changed on a completed scan: stars only, no rescan."""
         scan = self.store.scan(sid)
         if scan and scan["state"] == "completed":
             try:
-                self.store.write_rating(sid, stars.rate(self.store.rows_for_rating(sid), scan["ratio"]), complete=False)
+                self.store.write_rating(sid, stars.rate(self.store.rows_for_rating(sid), scan["ratio"], rarity=self._rarity()), complete=False)
             except Exception:  # noqa: BLE001 - keep the previous stars
                 traceback.print_exc()

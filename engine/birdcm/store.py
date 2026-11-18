@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS scan (
 CREATE TABLE IF NOT EXISTS photo (
   id INTEGER PRIMARY KEY, scan_id INTEGER NOT NULL REFERENCES scan(id), seq INTEGER NOT NULL, path TEXT NOT NULL,
   size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, state TEXT NOT NULL, fp TEXT, result TEXT, error TEXT, reused INTEGER DEFAULT 0,
-  stars INTEGER, star_reason TEXT, burst_group INTEGER, burst_rank INTEGER, burst_size INTEGER,
+  stars INTEGER, star_reason TEXT, burst_group INTEGER, burst_rank INTEGER, burst_size INTEGER, species_fix TEXT,
   UNIQUE (scan_id, path));
 CREATE INDEX IF NOT EXISTS photo_reuse ON photo(path, size, mtime_ns, fp) WHERE state = 'done';
 CREATE INDEX IF NOT EXISTS photo_scan_state ON photo(scan_id, state);
@@ -33,12 +33,23 @@ CREATE TABLE IF NOT EXISTS single (
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
 TERMINAL = ("done", "failed")
-PHOTO_COLS = "id, seq, path, size, mtime_ns, state, result, error, reused, stars, star_reason, burst_group, burst_rank, burst_size"
+PHOTO_COLS = "id, seq, path, size, mtime_ns, state, result, error, reused, stars, star_reason, burst_group, burst_rank, burst_size, species_fix"
+
+
+def location(v):
+    """A scan's stored location: a JSON object {lat, lon, label, source} or, for older scans, a plain label."""
+    if isinstance(v, str) and v.startswith("{"):
+        try:
+            return json.loads(v)
+        except ValueError:
+            return v
+    return v
 
 
 def photo_row(r: sqlite3.Row) -> dict:
     d = dict(r)
     d["result"] = json.loads(d["result"]) if d["result"] else None
+    d["species_fix"] = json.loads(d["species_fix"]) if d.get("species_fix") else None
     d["file"] = Path(d["path"]).name
     return d
 
@@ -50,7 +61,10 @@ class Store:
         self.lock = threading.Lock()
         self._local = threading.local()
         with self.lock:
-            self._db().executescript(SCHEMA)
+            db = self._db()
+            db.executescript(SCHEMA)
+            if "species_fix" not in {r[1] for r in db.execute("PRAGMA table_info(photo)")}:   # databases from before it
+                db.execute("ALTER TABLE photo ADD COLUMN species_fix TEXT")
 
     def _db(self) -> sqlite3.Connection:
         """One connection per thread, autocommit (transactions are explicit)."""
@@ -98,13 +112,14 @@ class Store:
 
     # ---- scans --------------------------------------------------------------------------------------------------
 
-    def create_scan(self, folder: str, recursive: bool, region: str | None, ratio: dict, fp: str,
+    def create_scan(self, folder: str, recursive: bool, region, ratio: dict, fp: str,
                     files: list[tuple[str, int, int]]) -> int:
         """files: (path, size, mtime_ns). Photos whose (path, size, mtime, fingerprint) match a finished result of an
         earlier scan are done at once with that result copied; the rest are queued."""
         def go(db):
             sid = db.execute("INSERT INTO scan (folder, recursive, region, ratio, fp, state, created_at) VALUES (?,?,?,?,?,?,?)",
-                             (folder, int(recursive), region, json.dumps(ratio), fp, "queued", time.time())).lastrowid
+                             (folder, int(recursive), json.dumps(region, ensure_ascii=False) if isinstance(region, dict) else region,
+                              json.dumps(ratio), fp, "queued", time.time())).lastrowid
             for seq, (path, size, mtime) in enumerate(files):
                 old = db.execute("SELECT result FROM photo WHERE path=? AND size=? AND mtime_ns=? AND fp=? AND state='done' "
                                  "ORDER BY id DESC LIMIT 1", (path, size, mtime, fp)).fetchone()
@@ -120,6 +135,7 @@ class Store:
         for r in db.execute("SELECT id, folder, recursive, region, ratio, state, error, created_at FROM scan ORDER BY id DESC"):
             d = dict(r)
             d["ratio"] = json.loads(d["ratio"])
+            d["region"] = location(d["region"])
             d["counts"] = self._counts(db, r["id"])
             out.append(d)
         return out
@@ -130,6 +146,7 @@ class Store:
             return None
         d = dict(r)
         d["ratio"] = json.loads(d["ratio"])
+        d["region"] = location(d["region"])
         return d
 
     def state(self, scan_id: int) -> str | None:
@@ -148,6 +165,7 @@ class Store:
             cursor = db.execute("SELECT coalesce(max(n), 0) FROM event WHERE scan_id = ?", (scan_id,)).fetchone()[0]
             scan = dict(s)
             scan["ratio"] = json.loads(scan["ratio"])
+            scan["region"] = location(scan["region"])
             scan["counts"] = self._counts(db, scan_id)
             return {"scan": scan, "photos": rows, "cursor": cursor}
         finally:
@@ -217,7 +235,7 @@ class Store:
         def go(db):
             db.execute("UPDATE scan SET fp = ? WHERE id = ?", (fp, scan_id))
             db.execute("UPDATE photo SET state='queued', result=NULL, error=NULL, reused=0, fp=?, stars=NULL, star_reason=NULL, "
-                       "burst_group=NULL, burst_rank=NULL, burst_size=NULL WHERE scan_id = ?", (fp, scan_id))
+                       "burst_group=NULL, burst_rank=NULL, burst_size=NULL, species_fix=NULL WHERE scan_id = ?", (fp, scan_id))
             self._event(db, scan_id, "stars", {})                 # clients refetch the snapshot
             self._scan_event(db, scan_id)
         self._write(go)
@@ -243,8 +261,10 @@ class Store:
         """Per-scan fields (stars, reason, burst) for every photo, then one `stars` event (+ completed), atomically."""
         def go(db):
             for pid, f in fields.items():
-                db.execute("UPDATE photo SET stars=?, star_reason=?, burst_group=?, burst_rank=?, burst_size=? WHERE id=? AND scan_id=?",
-                           (f.get("stars"), f.get("star_reason"), f.get("burst_group"), f.get("burst_rank"), f.get("burst_size"), pid, scan_id))
+                fix = f.get("species_fix")
+                db.execute("UPDATE photo SET stars=?, star_reason=?, burst_group=?, burst_rank=?, burst_size=?, species_fix=? WHERE id=? AND scan_id=?",
+                           (f.get("stars"), f.get("star_reason"), f.get("burst_group"), f.get("burst_rank"), f.get("burst_size"),
+                            json.dumps(fix, ensure_ascii=False) if fix else None, pid, scan_id))
             self._event(db, scan_id, "stars", {})
             if complete and db.execute("UPDATE scan SET state='completed', error=NULL WHERE id=? AND state='finalizing'", (scan_id,)).rowcount:
                 self._scan_event(db, scan_id)
@@ -270,14 +290,17 @@ class Store:
         d = dict(r)
         d["result"] = json.loads(d["result"]) if d["result"] else None
         d["boxes"] = json.loads(d["boxes"]) if d["boxes"] else None
+        d["region"] = location(d["region"])
         return d
 
-    def add_single(self, stored: str, name: str, region: str | None) -> int:
+    def add_single(self, stored: str, name: str, region) -> int:
+        reg = json.dumps(region, ensure_ascii=False) if isinstance(region, dict) else region
         return self._write(lambda db: db.execute("INSERT INTO single (stored, name, created_at, region) VALUES (?,?,?,?)",
-                                                 (stored, name, time.time(), region)).lastrowid)
+                                                 (stored, name, time.time(), reg)).lastrowid)
 
     def update_single(self, sid: int, **f) -> None:
-        cols = {"region": f.get("region"), "boxes": json.dumps(f["boxes"]) if f.get("boxes") is not None else None,
+        reg = f.get("region")
+        cols = {"region": json.dumps(reg, ensure_ascii=False) if isinstance(reg, dict) else reg, "boxes": json.dumps(f["boxes"]) if f.get("boxes") is not None else None,
                 "subject": f.get("subject"), "result": json.dumps(f["result"], ensure_ascii=False) if f.get("result") else None,
                 "error": f.get("error")}
         keys = [k for k in cols if k in f]
