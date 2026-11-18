@@ -23,6 +23,11 @@ uv run birdcm eval --photos /path/to/eval/photos --kinds bird,mammal   # docs/ev
 uv run pytest                     # tests (the real-model smoke test is skipped without models)
 ```
 
+**Not released yet** (so a fresh `models fetch` reports them missing): `clear.safetensors` (clear-bird gate),
+`aesthetic.safetensors` (aesthetic head) and `rarity-us-ca-cn.sqlite` (rarity + IUCN table). They will be attached to
+the model repositories' releases once their data licences are settled; see `NOTICE.md`. The home-page photo and the
+prototype's sample crops are the author's own pictures and are not in this repository.
+
 Development with local model copies: `BIRDCM_MODEL_DIR=/…/bioclip-bird/release:/…/bioclip-bird/heads-repo-release`.
 `BIRDCM_DATA_DIR` (SQLite) and `BIRDCM_CACHE_DIR` (thumbnails, models) move BirdCM's own files; it refuses to scan a
 folder that contains either. UI development: `birdcm serve --no-open` plus `cd web && npm run dev`.
