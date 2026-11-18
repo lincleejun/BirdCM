@@ -211,3 +211,20 @@ def test_preview_pool_survives_a_crashing_decode(tmp_path, monkeypatch):
         p.make({"path": "/x/ok", "size": 1, "mtime_ns": 1})                    # a fresh pool after the crash
     finally:
         p.close()
+
+
+def test_images_by_id_are_revalidated_not_cached(env, monkeypatch):
+    """ids restart with a new database: an image under /api/photos/{id} must never be served from a day-long cache."""
+    c, api, tmp = env
+    from birdcm import app as appmod
+    photos = tmp / "shoot"
+    photos.mkdir()
+    from PIL import Image
+    Image.new("RGB", (64, 48), (200, 10, 10)).save(photos / "a.jpg")
+    h = {**OK, "x-birdcm-token": "tok"}
+    c.post("/api/scans", json={"folder": str(photos)}, headers=h)
+    pid = api.state.store.queued(1)[0]["id"]
+    monkeypatch.setattr(appmod.Previews, "make", lambda self, job: appmod.decode.decode(job))   # in-process for the test
+    r = c.get(f"/api/photos/{pid}/thumb", headers=OK)
+    assert r.status_code == 200 and "max-age" not in r.headers["cache-control"] and "no-cache" in r.headers["cache-control"]
+    assert r.headers.get("etag")

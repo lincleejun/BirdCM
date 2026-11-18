@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post } from "./api";
+import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks } from "./names";
 import type { Exif, PhotoResult, PhotoRow, Scan, Snapshot } from "./types";
 
 export const STATE_LABEL: Record<string, string> = { queued: "排队中", running: "扫描中", stopping: "正在停止", paused: "已停止",
@@ -38,22 +39,25 @@ function Settings({ e }: { e: Partial<Exif> | null | undefined }) {
   );
 }
 
-function Marks({ r }: { r: PhotoResult }) {
+function Marks({ r, m }: { r: PhotoResult; m: MarkSet }) {
   const at = (p: [number, number]) => ({ left: `${p[0] * 100}%`, top: `${p[1] * 100}%` });
   return (
     <>
-      {r.boxes.map((d, i) => (
+      {m.box && r.boxes.map((d, i) => (
         <span key={i} className={`mk box${i === r.subject ? "" : " other"}`} style={{ left: `${d.box[0] * 100}%`, top: `${d.box[1] * 100}%`,
           width: `${(d.box[2] - d.box[0]) * 100}%`, height: `${(d.box[3] - d.box[1]) * 100}%` }} />
       ))}
-      {r.eye && r.eye_visible && <span className="mk eye" style={at(r.eye)} />}
-      {r.focus && <span className="mk af" style={at(r.focus)} />}
+      {m.eye && r.eye && r.eye_visible && <span className="mk eye" style={at(r.eye)} />}
+      {m.beak && r.beak && (r.beak_p ?? 0) >= 0.5 && <span className="mk beak" style={at(r.beak)} />}
+      {m.focus && r.focus && <span className="mk af" style={at(r.focus)} />}
     </>
   );
 }
 
-function Photo({ row, marks, big, show, alt = "" }: { row: PhotoRow; marks: boolean; big?: boolean; show: boolean; alt?: string }) {
-  const src = `/api/photos/${row.id}/${big ? "preview" : "thumb"}`;
+function Photo({ row, marks, big, show, alt = "" }: { row: PhotoRow; marks: MarkSet | null; big?: boolean; show: boolean; alt?: string }) {
+  // the URL names the file version too: ids restart with a new database, and a browser may still hold an image cached
+  // for a day under the same id by an older build
+  const src = `/api/photos/${row.id}/${big ? "preview" : "thumb"}?v=${row.size}-${row.mtime_ns}`;
   const r = row.result;
   if (!show) return <span className="ph"><span className="placeholder">{row.file}</span></span>;
   if (!r) return <span className="ph"><img src={src} alt={alt} loading="lazy" /></span>;
@@ -61,28 +65,21 @@ function Photo({ row, marks, big, show, alt = "" }: { row: PhotoRow; marks: bool
     <span className="ph">
       <span className={`frame ${r.width >= r.height ? "land" : "port"}`} style={{ aspectRatio: `${r.width} / ${r.height}` }}>
         <img src={src} alt={alt} loading="lazy" decoding="async" />
-        {marks && <Marks r={r} />}
+        {marks && <Marks r={r} m={marks} />}
       </span>
     </span>
   );
 }
 
-function Legend({ r }: { r: PhotoResult }) {
-  return (
-    <div className="legend"><span><i className="l-box"></i>鸟框</span>{r.eye && r.eye_visible && <span><i className="l-eye"></i>眼睛</span>}
-      {r.focus ? <span><i className="l-af"></i>相机对焦点</span> : <span>对焦点不可用</span>}</div>
-  );
-}
-
 // ---------- export ----------
 function exportRow(p: PhotoRow) {
-  const r = p.result, e = r?.exif, s = r?.species, ok = confirmed(r);
+  const r = p.result, e = r?.exif, s = r?.species, l = s?.level === "species" ? s.label : null;
   return {
     文件: p.file, 路径: p.path, 状态: p.state === "failed" ? "失败" : p.state === "done" ? "已识别" : "未扫描", 错误: p.error ?? "",
     星级: starLabel(p.stars), 理由: p.star_reason ?? "",
-    中文名: ok ? s!.label!.zh ?? "" : "", 英文名: ok ? s!.label!.en ?? "" : "", 学名: s?.label?.sci ?? "",
+    中文名: l?.zh ?? "", 英文名: l?.en ?? "", 学名: l?.sci ?? (s ? named(s).sci : ""),
     识别结果: r ? nameOf(r) : "", 识别层级: s?.level ?? "", 把握: s?.label?.p ?? s?.top5[0]?.p ?? "",
-    候选: s ? s.top5.map((c) => `${c.zh ?? c.en} · ${c.sci} · ${pct(c.p)}`).join(" / ") : "",
+    候选: s ? s.top5.map((c) => [c.zh, c.en, c.sci, pct(c.p)].filter(Boolean).join(" · ")).join(" / ") : "",
     在飞: r?.flying == null ? "" : r.flying ? "是" : "否", 在飞概率: r?.p_fly ?? "",
     鸟框: r && r.subject != null ? r.boxes[r.subject].box.join(" ") : "", 眼睛位置: r?.eye?.join(" ") ?? "", 对焦点: r?.focus?.join(" ") ?? "",
     眼睛: r?.eye_visible == null ? "" : r.eye_visible ? "看得见" : "看不见", 头部清晰度: r?.sharpness ?? "", 清晰度测量处: r?.sharpness_region ?? "",
@@ -177,7 +174,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   const [fsp, setFsp] = useState("");
   const [ffly, setFfly] = useState("all");
   const [sort, setSort] = useState("queue");
-  const [showMarks, setShowMarks] = useState(true);
+  const [marks, setMarks] = useMarks();
   const [selected, setSelected] = useState<number | null>(null);
   const sortTouched = useRef(false);
   useEffect(() => { if (starsReady && !sortTouched.current) setSort("star"); }, [starsReady]);
@@ -186,7 +183,8 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
     const m = new Map<string, string>();
     let unsure = false;
     for (const p of photos) {
-      if (confirmed(p.result)) m.set(speciesKey(p.result), nameOf(p.result!));
+      const l = p.result?.species?.label;
+      if (confirmed(p.result) && l) m.set(speciesKey(p.result), l.zh ? `${l.zh} ${l.en ?? ""}` : l.en ?? l.sci);
       else if (p.result && !p.result.rejected) unsure = true;
     }
     return { list: [...m].sort((a, b) => a[1].localeCompare(b[1], "zh-CN")), unsure };
@@ -225,18 +223,19 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
     get<Exif>(`/api/photos/${current.id}/exif`).then((e) => setExifs((x) => ({ ...x, [current.id]: e }))).catch(() => {});
   }, [current, exifs]);
 
-  // dialogs
-  const detailRef = useRef<HTMLDialogElement>(null);
+  // dialogs: export, and a plain large-photo viewer (Enter / double-click / click on the panel photo)
+  const viewerRef = useRef<HTMLDialogElement>(null);
   const exportRef = useRef<HTMLDialogElement>(null);
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const [exportFiltered, setExportFiltered] = useState(false);
-  const readyView = view.filter((p) => p.result);
-  const openDetail = (p: PhotoRow | null | undefined) => {
-    if (!p || !p.result) return;
-    setDetailId(p.id);
-    if (!detailRef.current?.open) detailRef.current?.showModal();
+  const openViewer = () => { if (current && !viewerRef.current?.open) viewerRef.current?.showModal(); };
+  const step = (d: number) => {
+    const i = view.findIndex((p) => p.id === current?.id);
+    const p = view[i + d];
+    if (!p) return;
+    setSelected(p.id);
+    tiles.current.get(p.id)?.focus({ preventScroll: viewerRef.current?.open });
   };
-  const turn = (d: number) => { const i = readyView.findIndex((p) => p.id === detailId); if (i >= 0) openDetail(readyView[i + d]); };
 
   const act = async () => {
     if (!scan) return;
@@ -254,11 +253,9 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   const rejected = photos.filter((p) => p.result?.rejected).length;
   const copy = complete ? `已完成 · ${c.total} 张${c.failed ? `（${c.failed} 张失败）` : ""}`
     : `${phase === "paused" ? (scan.state === "failed" ? "出错已停" : "已停止") : scan.state === "stopping" ? "正在停止" : scan.state === "finalizing" ? "正在汇总" : "扫描中"} · 已完成 ${finished} / ${c.total}`;
-  const step = complete ? "" : scan.state === "failed" ? ` · ${scan.error ?? ""}` : phase === "paused" ? " · 等待继续"
+  const stepText = complete ? "" : scan.state === "failed" ? ` · ${scan.error ?? ""}` : phase === "paused" ? " · 等待继续"
     : scan.state === "stopping" ? " · 这一批做完就停" : scan.state === "queued" ? " · 等前一个扫描完成" : scan.state === "finalizing" ? " · 分连拍组" : " · 找鸟、认种、看眼睛和姿态";
   const date = photos.find((p) => p.result?.exif.taken_at)?.result?.exif.taken_at;
-  const dp = detailId !== null ? photos[index.current.get(detailId) ?? -1] : undefined;
-  const di = dp ? readyView.findIndex((p) => p.id === dp.id) : -1;
 
   return (
     <section id="s-res" data-phase={phase} aria-labelledby="h-res">
@@ -270,7 +267,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
       </div>
 
       <div className="scan-status">
-        <p><span id="scan-copy" role="status">{copy}</span><span>{step}</span></p>
+        <p><span id="scan-copy" role="status">{copy}</span><span>{stepText}</span></p>
         {!complete && scan.state !== "finalizing" && (
           <button type="button" className="btn" onClick={act} disabled={scan.state === "stopping"}>{phase === "paused" ? "继续" : "停止"}</button>
         )}
@@ -318,35 +315,31 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
             <option value="eye">头部清晰的在前</option>
           </select>
         </label>
-        <label className="inline"><input type="checkbox" checked={showMarks} onChange={(e) => setShowMarks(e.target.checked)} /> 显示标记</label>
         {!starsReady && <p className="hint">星级要等全部照片扫完后互相比较才能定。</p>}
       </div>
 
       <div className="inspection">
         <section className="list" aria-labelledby="list-title">
           <div className="list-head"><h3 id="list-title">照片列表</h3><span aria-live="polite">显示 {view.length} / {c.total} 张</span></div>
-          <p className="sr-only" id="photo-keys">上、下方向键选择照片，回车查看已扫描照片的详情。</p>
+          <p className="sr-only" id="photo-keys">上、下方向键选择照片，回车看大图。右侧显示这张照片的全部信息。</p>
           <div id="grid" onKeyDown={(e) => {
-            const i = view.findIndex((p) => p.id === current?.id);
-            if (e.key === "Enter") { e.preventDefault(); openDetail(view[i]); return; }
+            if (e.key === "Enter") { e.preventDefault(); openViewer(); return; }
             if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
             e.preventDefault();
-            const p = view[i + (e.key === "ArrowDown" ? 1 : -1)];
-            if (!p) return;
-            setSelected(p.id);
-            tiles.current.get(p.id)?.focus();
+            step(e.key === "ArrowDown" ? 1 : -1);
           }}>
             {view.length ? view.map((p) => {
               const st = rowState(p), r = p.result, active = p.id === current?.id;
-              const name = r ? nameOf(r) : ROW_LABEL[st];
+              const name = r ? (r.rejected ? nameOf(r) : named(r.species).title) : ROW_LABEL[st];
               const e = r?.exif ?? exifs[p.id];
               return (
                 <button key={p.id} type="button" className="tile" data-state={st} aria-pressed={active} tabIndex={active ? 0 : -1}
                   aria-describedby="photo-keys" aria-label={`${name}，${complete ? starLabel(p.stars) : "待定星级"}，${p.file}`}
                   ref={(el) => { if (el) tiles.current.set(p.id, el); else tiles.current.delete(p.id); }}
-                  onClick={() => { setSelected(p.id); if (r && matchMedia("(max-width: 720px)").matches) openDetail(p); }}>
-                  <Photo row={p} marks={showMarks} show={!!r || active} />
-                  <span className="row-result"><span className={r ? "name" : "scan-name"}>{name}</span><br />
+                  onClick={() => { setSelected(p.id); if (matchMedia("(max-width: 720px)").matches) panelRef.current?.scrollIntoView({ block: "start" }); }}
+                  onDoubleClick={() => { setSelected(p.id); viewerRef.current?.showModal(); }}>
+                  <Photo row={p} marks={marks} show={!!r || active} />
+                  <span className="row-result">{r && !r.rejected ? <SpName sp={r.species} /> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
                     {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
                     {r && !r.rejected && r.flying !== null && <span className="pill">{r.flying ? "在飞" : "不在飞"}</span>}
                     {r && <span className="small reason-line" style={{ display: "block" }}>
@@ -360,18 +353,15 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
             }) : <p className="empty">{c.total ? "没有符合条件的照片。" : "这个文件夹里没有 ARW、DNG 或 JPG 照片。"}</p>}
           </div>
         </section>
-        {current && <Inspector p={current} st={rowState(current)} marks={showMarks} exif={current.result?.exif ?? exifs[current.id]} onOpen={() => openDetail(current)} />}
+        {current && <Inspector ref={panelRef} p={current} st={rowState(current)} marks={marks} setMarks={setMarks} complete={complete}
+          exif={current.result?.exif ?? exifs[current.id]} onOpen={openViewer} />}
       </div>
 
-      <dialog ref={detailRef} aria-labelledby="d-title" onClose={() => { if (detailId !== null) { setSelected(detailId); tiles.current.get(detailId)?.focus({ preventScroll: true }); } }}
-        onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); turn(-1); } if (e.key === "ArrowRight") { e.preventDefault(); turn(1); } }}>
-        <div className="dlg-head">
-          <h3 id="d-title">{dp ? `${dp.file}（${di + 1} / ${readyView.length}）` : ""}</h3>
-          <button className="btn" onClick={() => turn(-1)} disabled={di <= 0}>上一张</button>
-          <button className="btn" onClick={() => turn(1)} disabled={di < 0 || di >= readyView.length - 1}>下一张</button>
-          <button className="btn" onClick={() => detailRef.current?.close()}>关闭</button>
-        </div>
-        {dp?.result && <Detail p={dp} r={dp.result} complete={complete} />}
+      <dialog ref={viewerRef} className="viewer" aria-label="大图" onClick={(e) => { if (e.target === e.currentTarget) viewerRef.current?.close(); }}
+        onKeyDown={(e) => { if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); step(-1); } if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); step(1); } }}>
+        <div className="dlg-head"><h3>{current?.file}</h3><span className="hint">← → 换一张 · Esc 关闭</span>
+          <button className="btn" onClick={() => viewerRef.current?.close()}>关闭</button></div>
+        {current && <Photo row={current} marks={current.result ? marks : null} big show alt={current.file} />}
       </dialog>
 
       <dialog ref={exportRef} aria-labelledby="e-title" style={{ maxWidth: 560 }}>
@@ -394,66 +384,64 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   );
 }
 
-function Inspector({ p, st, marks, exif, onOpen }: { p: PhotoRow; st: RowState; marks: boolean; exif?: Exif; onOpen: () => void }) {
+const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: MarkSet; setMarks: (m: MarkSet) => void; complete: boolean;
+  exif?: Exif; onOpen: () => void }>(function Inspector({ p, st, marks, setMarks, complete, exif, onOpen }, ref) {
   const r = p.result, ready = st === "ready" && !!r;
-  const name = r ? nameOf(r) : PREVIEW_LABEL[st];
-  const image = <Photo row={p} marks={ready && marks} big show alt={ready ? name : p.file} />;
+  const sp = r?.species, sure = confirmed(r), e = exif;
+  const missing: Partial<Record<keyof MarkSet, string>> = r ? {
+    eye: r.eye && r.eye_visible ? undefined : "这张没有", beak: r.beak && (r.beak_p ?? 0) >= 0.5 ? undefined : "这张没有",
+    focus: r.focus ? undefined : "不可用", box: r.boxes.length ? undefined : "这张没有" } : {};
   return (
-    <aside className="inspector" aria-label="所选照片预览">
-      {ready ? <button className="preview-photo" type="button" aria-label="放大照片，查看详情" onClick={onOpen}>{image}</button>
-        : <div className="preview-photo pending">{image}</div>}
+    <aside className="inspector" aria-label="所选照片的全部信息" ref={ref}>
+      {ready && <MarkControls m={marks} set={setMarks} missing={missing} />}
+      <button className="preview-photo" type="button" aria-label="看大图" onClick={onOpen}>
+        <Photo row={p} marks={ready ? marks : null} big show alt={p.file} />
+      </button>
       <div className="preview-info">
-        <div className="preview-top"><h3>{name}</h3>{ready && <button type="button" className="btn" onClick={onOpen}>查看详情</button>}</div>
-        <Settings e={exif} />
-        <p className="preview-time">{fmtTime(exif?.taken_at)} · {p.file}</p>
-        {ready ? (marks && <Legend r={r!} />)
-          : <p className="preview-note">{st === "failed" ? p.error : st === "unscanned" ? "继续扫描后会在这里显示识别结果。" : "识别完成后会在这里显示鸟种和标记。"}</p>}
+        {!ready ? (
+          <>
+            <h3>{PREVIEW_LABEL[st]}</h3>
+            <p className="preview-note">{st === "failed" ? p.error : st === "unscanned" ? "继续扫描后会在这里显示识别结果。" : "识别完成后会在这里显示鸟种和标记。"}</p>
+          </>
+        ) : (
+          <>
+            <div className="verdict stars">{complete && p.stars !== null ? starTxt(p.stars) : "待定星级"}</div>
+            {complete && p.star_reason && <p className="reason">{p.star_reason}</p>}
+            {r!.rejected ? (
+              <>
+                <div className="sp-cn">{r!.reject_reason ?? "没有找到鸟"}</div>
+                <p className="preview-note">{r!.boxes.length ? `检测到 ${r!.boxes.length} 个框，但都没有通过"清楚的鸟"判断，标为淘汰。` : "检测模型在这张照片里没有找到鸟，标为淘汰。"}</p>
+              </>
+            ) : sp ? (
+              <>
+                <SpName sp={sp} big />
+                <p className="conf-line">{sure ? "把握" : "最高候选"} {pct(sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p)} <span className="ref">· 仅凭图像，地区修正待定</span></p>
+                <h4 className="panel-h">前 5 个候选</h4>
+                <Candidates sp={sp} />
+              </>
+            ) : null}
+            <dl className="facts">
+              <dt>在飞</dt><dd>{r!.flying == null ? "—" : r!.flying ? "是" : "否"}{r!.p_fly != null && <span className="ref"> · P = {r!.p_fly.toFixed(2)}</span>}</dd>
+              <dt>眼睛</dt><dd>{r!.eye_visible == null ? "—" : r!.eye_visible ? "看得见" : "看不见"}</dd>
+              <dt>头部清晰度</dt><dd>{sharpTxt(r!.sharpness)}{r!.sharpness_region && <span className="ref"> · 量在{REGION[r!.sharpness_region]}，只在本批内比较（阈值未标定）</span>}</dd>
+              <dt>美学分</dt><dd>{r!.aesthetic != null ? r!.aesthetic.toFixed(2) : "—"} <span className="ref">仅供参考</span></dd>
+              <dt>稀有度</dt><dd><span className="tbd">待定</span></dd>
+              <dt>受威胁等级</dt><dd><span className="tbd">待定</span></dd>
+              <dt>连拍组</dt><dd>{p.burst_group ? `第 ${p.burst_group} 组，组内第 ${p.burst_rank} / ${p.burst_size} 张` : "扫完后分组"}</dd>
+              <dt>鸟框</dt><dd>{r!.boxes.length} 个{r!.boxes.length > 1 && r!.subject != null ? `，主体按${r!.focus ? "对焦点" : "把握"}选取` : ""}</dd>
+            </dl>
+          </>
+        )}
+        <h4 className="panel-h">拍摄信息</h4>
+        <Settings e={e} />
+        <dl className="facts">
+          <dt>相机</dt><dd>{e?.camera ?? "—"}</dd><dt>镜头</dt><dd>{e?.lens ?? "—"}</dd>
+          <dt>对焦模式</dt><dd>{e?.focus_mode ?? "—"}</dd><dt>拍摄时间</dt><dd>{fmtTime(e?.taken_at)}</dd>
+          {r && <><dt>地区</dt><dd>{r.region.source === "photo" ? `GPS ${r.region.gps!.map((v) => v.toFixed(4)).join(", ")}` : r.region.name ?? "—"}{" "}
+            <span className="ref">· {r.region.source === "photo" ? "照片自带" : "批次设定"}</span></dd></>}
+          <dt>文件</dt><dd>{p.file}<span className="ref path"> {p.path}</span></dd>
+        </dl>
       </div>
     </aside>
   );
-}
-
-function Detail({ p, r, complete }: { p: PhotoRow; r: PhotoResult; complete: boolean }) {
-  const s = r.species, e = r.exif, sure = confirmed(r);
-  return (
-    <div className="dlg-body detail">
-      <div>
-        <Photo row={p} marks big show alt={nameOf(r)} />
-        <Legend r={r} />
-        <section className="exif" aria-label="拍摄信息"><h3>拍摄信息</h3><Settings e={e} />
-          <dl className="facts">
-            <dt>相机</dt><dd>{e.camera ?? "—"}</dd><dt>镜头</dt><dd>{e.lens ?? "—"}</dd>
-            <dt>对焦模式</dt><dd>{e.focus_mode ?? "—"}</dd><dt>拍摄时间</dt><dd>{fmtTime(e.taken_at)}</dd>
-            <dt>地区</dt><dd>{r.region.source === "photo" ? `GPS ${r.region.gps!.map((v) => v.toFixed(4)).join(", ")}` : r.region.name ?? "—"}{" "}
-              <span className="ref">· {r.region.source === "photo" ? "照片自带" : "批次设定"}</span></dd>
-            <dt>文件</dt><dd className="ref">{p.path}</dd>
-          </dl>
-        </section>
-      </div>
-      <div>
-        <div className="verdict stars">{complete && p.stars !== null ? starTxt(p.stars) : "待定星级"}</div>
-        {complete && p.star_reason && <p className="reason">{p.star_reason}</p>}
-        {r.rejected ? <><div className="sp-cn">{r.reject_reason ?? "没有找到鸟"}</div>
-          <p className="hint">{r.boxes.length ? `检测到 ${r.boxes.length} 个框，但都没有通过"清楚的鸟"判断，标为淘汰。` : "检测模型在这张照片里没有找到鸟，标为淘汰。"}</p></>
-          : s ? <>
-            <div className="sp-cn">{nameOf(r)}</div>
-            {sure && <div className="sp-en">{s.label!.en} · <span className="sp-sci">{s.label!.sci}</span></div>}
-            {s.level === "genus" && <div className="sp-en">只认到属 · <span className="sp-sci">{s.label!.sci}</span></div>}
-            <div>{sure ? "把握" : "最高候选"} {pct(sure || s.level === "genus" ? s.label!.p : s.top5[0].p)} <span className="ref">· 仅凭图像，地区修正待定</span></div>
-            <details open={!sure}><summary>前 5 个候选</summary>
-              <ol>{s.top5.map((c) => <li key={c.sci}>{c.zh ?? c.en} {c.zh ? c.en : ""} <i>{c.sci}</i> — {pct(c.p)}</li>)}</ol></details>
-          </> : null}
-        <dl className="facts">
-          <dt>在飞</dt><dd>{r.flying == null ? "—" : r.flying ? "是" : "否"}{r.p_fly != null && <span className="ref"> · P = {r.p_fly.toFixed(2)}</span>}</dd>
-          <dt>眼睛</dt><dd>{r.eye_visible == null ? "—" : r.eye_visible ? "看得见" : "看不见"}</dd>
-          <dt>头部清晰度</dt><dd>{sharpTxt(r.sharpness)}{r.sharpness_region && <span className="ref"> · 量在{REGION[r.sharpness_region]}，只在本批内比较（阈值未标定）</span>}</dd>
-          <dt>美学分</dt><dd>{r.aesthetic != null ? r.aesthetic.toFixed(2) : "—"} <span className="ref">仅供参考，不单独用来选片</span></dd>
-          <dt>稀有度</dt><dd><span className="tbd">待定</span></dd>
-          <dt>受威胁等级</dt><dd><span className="tbd">待定</span></dd>
-          <dt>连拍组</dt><dd>{p.burst_group ? `第 ${p.burst_group} 组，组内第 ${p.burst_rank} / ${p.burst_size} 张` : "扫完后分组"}</dd>
-          <dt>鸟框</dt><dd>{r.boxes.length} 个{r.boxes.length > 1 && r.subject != null ? `，主体按${r.focus ? "对焦点" : "把握"}选取` : ""}</dd>
-        </dl>
-      </div>
-    </div>
-  );
-}
+});

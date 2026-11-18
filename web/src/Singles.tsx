@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { del, get, post, upload } from "./api";
+import { Candidates, named, SpName } from "./names";
 import { nameOf } from "./Results";
 import type { Box, Detection, PhotoResult, Species } from "./types";
 
@@ -18,9 +19,7 @@ const fmtTime = (t: string | null | undefined) => (t ? t.slice(0, 19).replace("T
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 
 function spName(sp: Species | null | undefined): string {
-  if (!sp || sp.level === "uncertain" || !sp.label) return "不确定";
-  if (sp.level === "genus") return `${sp.label.sci.replace(/ sp\.$/, "")} 属`;
-  return sp.label.zh || sp.label.en || sp.label.sci;
+  return named(sp).title;
 }
 
 export default function Singles({ regions }: { regions: Record<string, string[]> }) {
@@ -79,8 +78,10 @@ export default function Singles({ regions }: { regions: Record<string, string[]>
             return (
               <li key={h.id} className="history-entry">
                 <button type="button" className="history-open" onClick={() => open(h.id)}>
-                  <img className="history-thumb" src={`/api/singles/${h.id}/image?size=thumb`} alt="" loading="lazy" />
+                  <img className="history-thumb" src={`/api/singles/${h.id}/image?size=thumb&v=${h.created_at}`} alt="" loading="lazy" />
                   <span><span className={`history-name${name === "不确定" || h.result?.rejected ? " uncertain" : ""}`}>{name}</span>
+                    {h.result && !h.result.rejected && h.result.species && (() => { const n = named(h.result.species);
+                      return <span className="history-meta">{n.sub}{n.sub ? " · " : ""}<i>{n.sci}</i></span>; })()}
                     <span className="history-meta">{fmtTime(h.result?.taken_at)} · {h.name}</span>
                     <span className="history-meta">{h.result?.gps ? "照片自带位置" : h.region ?? "地区未记录"}</span></span>
                 </button>
@@ -153,7 +154,7 @@ function Result({ rec, busy, err, regions, onBack, onAct, onDelete, onPick }: {
           onPointerDown={framing ? (ev) => { (ev.target as Element).setPointerCapture?.(ev.pointerId); drag.current = at(ev); setBox(null); } : undefined}
           onPointerMove={framing ? move : undefined}
           onPointerUp={framing ? () => { drag.current = null; setBox((q) => (q && q[2] - q[0] > 0.01 && q[3] - q[1] > 0.01 ? q : null)); } : undefined}>
-          <img src={`/api/singles/${rec.id}/image`} alt={framing ? "在照片上拖出一个框，框住鸟" : r ? nameOf(r) : rec.name} draggable={false} />
+          <img src={`/api/singles/${rec.id}/image?v=${rec.created_at}`} alt={framing ? "在照片上拖出一个框，框住鸟" : r ? nameOf(r) : rec.name} draggable={false} />
           {!framing && r && shown.map(({ x, k }) => <span key={k} className={`mk box${k === i ? "" : " off"}`} style={posStyle(x.box)} />)}
           {!framing && b?.eye && (b.eye_p ?? 0) >= 0.5 && <span className="mk eye" style={{ left: `${b.eye[0] * 100}%`, top: `${b.eye[1] * 100}%` }} />}
           {!framing && multi && shown.map(({ x, k }) => (
@@ -181,11 +182,10 @@ function Result({ rec, busy, err, regions, onBack, onAct, onDelete, onPick }: {
       ) : r && b && (
         <div className="result-content">
           <div className="identity-result">
-            <h1 tabIndex={-1} id="h-result" className={`sp-cn${sure ? "" : " uncertain"}`}>{spName(sp)}</h1>
+            <h1 tabIndex={-1} id="h-result" style={{ margin: 0 }}><SpName sp={sp} big /></h1>
             <span className="conf">{sure ? "初步把握" : "最高候选"} {pct(sure || sp?.level === "genus" ? sp!.label!.p : sp!.top5[0].p)}</span>
           </div>
-          {sure ? <p className="sp-en">{sp!.label!.en} <span className="sp-sci">· {sp!.label!.sci}</span></p>
-            : <p className="hint">{sp?.level === "genus" ? `只认到属 · ${sp.label!.sci}` : "照片里的特征不够清楚。"}</p>}
+          {!sure && sp?.level !== "genus" && <p className="hint">照片里的特征不够清楚。</p>}
           <p className="facts-inline">
             <strong>{b.p_fly == null ? "姿态未知" : b.p_fly >= 0.5 ? "在飞" : "不在飞"}</strong>
             <span>稀有度 <span className="tbd">待定</span></span><span>IUCN <span className="tbd">待定</span></span>
@@ -203,9 +203,7 @@ function Result({ rec, busy, err, regions, onBack, onAct, onDelete, onPick }: {
             <button className="btn link" style={{ minHeight: 0, padding: 0 }} onClick={() => { setDrawing(true); setBox(null); }}>手动画框重试</button></div>
           <section className="result-section" aria-labelledby="cand-h">
             <h3 id="cand-h">{sure ? "其他候选" : "前 5 个候选"}</h3>
-            <ol className="candidates" start={sure ? 2 : 1}>
-              {sp!.top5.slice(sure ? 1 : 0).map((c) => <li key={c.sci}>{c.zh ?? c.en ?? c.sci} <span>{c.zh ? c.en : ""} · <i>{c.sci}</i> · {pct(c.p)}</span></li>)}
-            </ol>
+            <Candidates sp={sp!} skipFirst={sure} />
             <p className="hint">只凭图像判断，地区修正 <span className="tbd">待定</span></p>
           </section>
           <section className="result-section" aria-labelledby="exif-h">

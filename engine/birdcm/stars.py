@@ -229,7 +229,7 @@ def rate(rows: list[dict], ratio: dict | None) -> dict[int, dict]:
         got3 = got2 = 0
         for rank, i in enumerate(idx, 1):
             x, b = res[i], bursts[i][0]
-            place = f"{who}第 {rank} / {n} 名"
+            place = f"{who}{' ' if who[-1:].isascii() else ''}第 {rank} / {n} 名"
             cap = ("看不见眼睛，最多两星" if x.get("eye_p") is not None and x["eye_p"] < c.eye_vis_min
                    else "对焦点不在鸟身上，最多两星" if fc[i] == "outside"
                    else "头部清晰度不够三星" if c.min_sharp3 is not None and x.get("sharpness") is not None and x["sharpness"] < c.min_sharp3
