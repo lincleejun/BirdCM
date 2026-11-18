@@ -190,6 +190,17 @@ def places_search(q: str, fetch=None) -> list[dict]:
         return out
 
 
+def paired(paths):
+    """Shots and their Lightroom variants; capture time and camera checked with exiftool when it is installed."""
+    if not decode.ExifTool.available():
+        return decode.pair_variants(paths)
+    et = decode.ExifTool()
+    try:
+        return decode.pair_variants(paths, et.read)
+    finally:
+        et.close()
+
+
 def create_app(port: int = 8765, token: str | None = None, store: Store | None = None,
                engine_factory=None, start_scheduler: bool = True) -> FastAPI:
     token = token or secrets.token_urlsafe(24)
@@ -263,10 +274,11 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         try:
-            files = [(str(p), (st := p.stat()).st_size, st.st_mtime_ns) for p in decode.list_photos(folder, body.recursive)]
+            shots, variants = paired(decode.list_photos(folder, body.recursive))
+            files = [(str(p), (st := p.stat()).st_size, st.st_mtime_ns) for p in shots]
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
-        sid = store.create_scan(str(folder), body.recursive, body.region, body.ratio, fingerprint(body.region), files)
+        sid = store.create_scan(str(folder), body.recursive, body.region, body.ratio, fingerprint(body.region), files, variants)
         sched.wake.set()
         return {"id": sid, "photos": len(files)}
 

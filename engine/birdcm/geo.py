@@ -14,8 +14,11 @@
 - species the geo model does not list (744 of 11,172; data/avilist-birdnet-geo3.csv, from gardener's AviList map):
   p_geo = 0, so they keep only FLOOR x their visual score (gardener's "zero" policy for birds). A lumped row takes the
   largest of its labels.
-Not ported: gardener's split-range table and its range veto (rules.RANGE_EPS). ponytail: add them if a split pair
-shows up wrong in practice.
+- uncertainty (2026-11-17): the prior is the MAX over where and when the photo could be. A chosen country / division:
+  every point of its lattice (data/region-grid.csv, tools/build_region_grid.py, Natural Earth); a point (GPS, map,
+  device): the point and its neighbours NEAR degrees away; the week and WEEKS either side (no date: all 48). A region's
+  representative point alone made a coastal visitor look impossible from a mountain centroid.
+Not ported: gardener's split-range table. ponytail: add it if a split pair shows up wrong in practice.
 """
 from __future__ import annotations
 
@@ -31,6 +34,31 @@ REGIONS = DATA / "regions.csv"
 COUNTRIES = DATA / "countries.csv"
 GRID = 0.05
 INDEX = DATA / "avilist-birdnet-geo3.csv"
+GRID_FILE = DATA / "region-grid.csv"
+NEAR, WEEKS = 0.25, 3          # a point's neighbourhood (degrees) and the weeks either side the prior also looks at
+
+
+@lru_cache(maxsize=1)
+def region_grid() -> dict[str, tuple[tuple[float, float], ...]]:
+    """place label ("国家" or "国家 · 州/省", as the catalogue gives them) -> points covering it."""
+    out: dict[str, list] = {}
+    with open(GRID_FILE, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            out.setdefault(r["place"], []).append((float(r["lat"]), float(r["lon"])))
+    return {k: tuple(v) for k, v in out.items()}
+
+
+def cover(lat: float, lon: float, source: str, label: str | None = None) -> tuple[tuple[float, float], ...]:
+    """The snapped points the prior is read at for a place: a region's lattice, else the point and its neighbours."""
+    if source == "region" and label and label in region_grid():
+        return tuple(snap(*p) for p in region_grid()[label])
+    return tuple(snap(lat + a * NEAR, lon + b * NEAR) for a in (-1, 0, 1) for b in (-1, 0, 1))
+
+
+def weeks_around(week: int | None) -> tuple[int, ...]:
+    if not week:
+        return tuple(range(1, 49))
+    return tuple(sorted({(week - 1 + k) % 48 + 1 for k in range(-WEEKS, WEEKS + 1)}))
 
 
 def week_of(taken_at: str | None) -> int | None:
@@ -100,6 +128,13 @@ def region_point(label: str) -> tuple[float, float] | None:
     return next(((c["lat"], c["lon"]) for c in countries() if country in (c["zh"], c["en"])), None)
 
 
+def location_label(location) -> str | None:
+    """The label of a chosen country / division (what the lattice is keyed by)."""
+    if isinstance(location, dict):
+        return location.get("label") if location.get("source") == "region" or not valid(location.get("lat"), location.get("lon")) else None
+    return location if isinstance(location, str) else None
+
+
 def location_point(location) -> tuple[float, float, str] | None:
     """A scan's / single photo's location -> (lat, lon, source): a dict {lat, lon, label?, source: map|device|region}
     or a plain label string (older scans, the region list). None when it names nowhere we know."""
@@ -151,12 +186,20 @@ class Geo:
             self.index[i, :len(r)] = r
 
     @lru_cache(maxsize=256)  # noqa: B019 - one instance per engine; a batch is mostly one place and week
-    def _probs(self, lat: float, lon: float, week: int | None) -> np.ndarray:
-        weeks = [week] if week else range(1, 49)
-        x = np.array([[lat, lon, w] for w in weeks], np.float32)
-        p = self.session.run(None, {self.input: x})[0].max(axis=0)
-        return np.where(self.index >= 0, p[np.maximum(self.index, 0)], 0.0).max(axis=1)
+    def _probs(self, points: tuple, weeks: tuple) -> np.ndarray:
+        """(points, AviList rows): per point, the max over the weeks."""
+        x = np.array([[la, lo, w] for la, lo in points for w in weeks], np.float32)
+        q = np.concatenate([self.session.run(None, {self.input: x[i:i + 4096]})[0] for i in range(0, len(x), 4096)])
+        q = q.reshape(len(points), len(weeks), -1).max(axis=1)
+        return np.where(self.index[None] >= 0, q[:, np.maximum(self.index, 0)], 0.0).max(axis=2)
 
-    def p_geo(self, lat: float, lon: float, taken_at: str | None) -> np.ndarray:
-        """One value per AviList row (aligned with the names matrix), 0-1, at the snapped point."""
-        return self._probs(*snap(lat, lon), week_of(taken_at))
+    def p_geo(self, lat: float, lon: float, taken_at: str | None, source: str = "photo", label: str | None = None) -> np.ndarray:
+        """One value per AviList row (aligned with the names matrix), 0-1: the max over the place's cover and the weeks
+        around the capture date."""
+        return self.spread(lat, lon, taken_at, source, label)[0]
+
+    def spread(self, lat, lon, taken_at, source="photo", label=None) -> tuple[np.ndarray, np.ndarray]:
+        """(max, median) over the place's cover (each point: max over the weeks around the date). The max says whether
+        the species can be here at all; the median whether it is expected over most of the place."""
+        q = self._probs(cover(lat, lon, source, label), weeks_around(week_of(taken_at)))
+        return q.max(axis=0), np.median(q, axis=0)

@@ -105,6 +105,7 @@ function exportRow(p: PhotoRow) {
     鸟框: r && r.subject != null ? r.boxes[r.subject].box.join(" ") : "", 眼睛位置: r?.eye?.join(" ") ?? "", 对焦点: r?.focus?.join(" ") ?? "",
     眼睛: r?.eye_visible == null ? "" : r.eye_visible ? "看得见" : "看不见", 头部清晰度: r?.sharpness ?? "", 清晰度测量处: r?.sharpness_region ?? "",
     美学分: r?.aesthetic ?? "", 清楚的鸟: r?.clear == null ? "" : r.clear ? "是" : "否",
+    可能的稀有记录: s?.check === "rare" ? "是" : "", 衍生文件: (p.variants ?? []).map((v) => v.split("/").pop()).join(" / "),
     稀有度: r?.rarity?.label ?? "", 稀有度地区: r?.rarity?.region ?? "", IUCN: r?.rarity?.iucn ?? "", 连拍组: p.burst_group ?? "", 组内排名: p.burst_rank ?? "", 连拍组张数: p.burst_size ?? "",
     相机: e?.camera ?? "", 镜头: e?.lens ?? "", 焦距毫米: e?.focal_mm ?? "", 光圈: e?.aperture ?? "", 快门秒: e?.shutter ?? "", ISO: e?.iso ?? "",
     曝光补偿EV: e?.ev ?? "", 对焦模式: e?.focus_mode ?? "", 拍摄时间: e?.taken_at ?? "", 拍摄时间显示: e?.taken_at ? fmtTime(e.taken_at) : "",
@@ -235,6 +236,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
   const [fs, setFs] = useState("all");
   const [fsp, setFsp] = useState("");
   const [allChips, setAllChips] = useState(false);
+  const rareIds = useMemo(() => new Set(photos.filter((p) => p.result?.species?.check === "rare" && !p.result.rejected).map((p) => p.id)), [photos]);
   const [ffly, setFfly] = useState("all");
   const [frar, setFrar] = useState("0");
   const [sort, setSort] = useState("queue");
@@ -429,6 +431,10 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
           </div>
           <div className="cull-species">
             <b>{species.list.length} 种鸟</b>
+            {rareIds.size > 0 && (
+              <button type="button" className="cull-chip rare" title="确认到种，但这里这个季节大部分地方很少有它：可能是稀有记录，请核对"
+                onClick={() => setOnlyIds({ ids: rareIds, label: "可能的稀有记录" })}>可能的稀有记录 {rareIds.size}</button>
+            )}
             {(allChips ? notable : notable.slice(0, CHIPS)).map((n) => (
               <button key={n.sci} type="button" className={`cull-chip rare${fsp === n.sci ? " on" : ""}`} title={n.why} onClick={() => setFsp(fsp === n.sci ? "" : n.sci)}>{n.name}<small>{n.tag}</small></button>
             ))}
@@ -601,9 +607,14 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
             ) : sp ? (
               <>
                 <SpName sp={sp} big />
+                {sp.check === "rare" && <p className="rare-note"><span className="tbd">本地少见 · 请核对</span> 这里这个季节大部分地方很少有它（地区概率中位数 {pct(sp.prior?.median ?? 0)}），但不是不可能；可能是一条稀有记录。</p>}
+                {sp.override && (
+                  <p className="fixed-note">图像最像：{named({ ...sp, label: sp.override.visual, level: "species" }).title} <i>{sp.override.visual.sci}</i> {pct(sp.override.visual.p)}
+                    · 但此地此季几乎没有它，所以只报到{sp.level === "genus" ? "属" : "“不确定”"}{sp.override.local && <>；当地有的同属：{named({ ...sp, label: sp.override.local, level: "species" }).title} <i>{sp.override.local.sci}</i></>}</p>
+                )}
                 {r!.species_own && (
                   <p className="fixed-note"><span className="tbd">按连拍组修正</span> 这一组 {sp.consensus?.frames} 张里 {sp.consensus?.support} 张支持它；
-                    这张自己认的是 {named(r!.species_own).title} <i>{named(r!.species_own).sci}</i>（{pct(r!.species_own.top5[0]?.p ?? 0)}）</p>
+                    这张自己最像 {named({ ...r!.species_own, label: r!.species_own.top5[0], level: "species" }).title} <i>{r!.species_own.top5[0]?.sci}</i>（{pct(r!.species_own.top5[0]?.p ?? 0)}），按连拍组改成它</p>
                 )}
                 <p className="conf-line">{r!.species_own ? (sp.label?.p != null ? `这张自己给它 ${pct(sp.label.p)}` : "这张自己的前五里没有它")
                   : `${sure ? "把握" : "最高候选"} ${pct((sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p) ?? 0)}`} <span className="ref">· {sp.geo ? "已按拍摄地点和季节修正" : "没有位置，只凭图像"}</span></p>
@@ -622,6 +633,8 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
                 <span className="ref" style={{ display: "block" }}>全球受威胁等级（IUCN 红色名录），全球统一，不随地点变化</span></dd>
               {p.quality && <><dt>综合分</dt><dd><b>{p.quality.q.toFixed(2)}</b>
                 <span className="ref" style={{ display: "block" }}>{qParts(p.quality.parts)}</span></dd></>}
+              {(p.variants?.length ?? 0) > 0 && <><dt>同一张的其他文件</dt><dd>{p.variants!.map((v) => <div key={v}>{v.split("/").pop()}</div>)}
+                <span className="ref" style={{ display: "block" }}>另有降噪版 DNG（Lightroom 生成），和这张算同一张，不单独评星</span></dd></>}
               <dt>连拍组</dt><dd>{!p.burst_group ? "扫完后分组" : p.burst_size === 1 ? `第 ${p.burst_group} 组 · 只有这一张`
                 : `第 ${p.burst_group} 组 · 组内排名第 ${p.burst_rank}，共 ${p.burst_size} 张${burst ? ` · 按拍摄顺序第 ${burst.order.get(p.id)} 张` : ""}`}</dd>
               <dt>鸟框</dt><dd>{r!.boxes.length} 个{r!.boxes.length > 1 && r!.subject != null ? `，主体按${r!.focus ? "对焦点" : "把握"}选取` : ""}</dd>

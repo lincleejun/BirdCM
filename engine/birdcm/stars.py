@@ -237,14 +237,16 @@ def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
     best = min(cands, key=lambda s: (-score[s][0], -score[s][1], s))
     if score[best][0] * 2 <= len(named):
         return {}
-    label = next(sp["label"] for _, sp in named if sp["level"] == "species" and sp["label"]["sci"] == best)
+    src = next(sp for _, sp in named if sp["level"] == "species" and sp["label"]["sci"] == best)
+    label = src["label"]
     out = {}
     for i, sp in named:
         if sp["level"] == "species" and sp["label"]["sci"] == best:
             continue
         p = p_of(sp, best)
         out[i] = {"level": "species", "label": {**label, "p": round(p, 4) if p is not None else None}, "top5": sp.get("top5", []),
-                  "geo": sp.get("geo", False), "consensus": {"support": score[best][0], "frames": len(named)}}
+                  "geo": sp.get("geo", False), "consensus": {"support": score[best][0], "frames": len(named)},
+                  "visual": sp.get("visual"), **({"check": src["check"]} if src.get("check") else {})}
     return out
 
 

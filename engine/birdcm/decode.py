@@ -46,6 +46,38 @@ def safe_arg(path: str) -> bool:
     return path.startswith("/") and not any(c in path for c in "\r\n\0")
 
 
+# Lightroom writes these next to a RAW as a 1:1 derivative of the same shot (denoise, super resolution, raw details).
+# HDR / panorama merges are several shots and stay separate photos.
+VARIANT_SUFFIXES = ("-enhanced-nr", "-enhanced-sr", "-enhanced-rd", "-enhanced")
+
+
+def pair_variants(paths: list[Path], read_exif=None) -> tuple[list[Path], dict[str, list[str]]]:
+    """Split derived DNGs off their original: -> (shots, {original path: [variant paths]}). A DNG named
+    <stem><suffix>.dng beside a RAW named <stem>.* is a variant when, given read_exif(paths) -> {path: exif}, both have
+    the same capture time (to the second) and camera; without read_exif the names alone decide."""
+    raws = {(p.parent, p.stem.lower()): p for p in paths if p.suffix.lower() in RAW_EXT}
+    pairs = {}
+    for p in paths:
+        stem = p.stem.lower()
+        if p.suffix.lower() != ".dng":
+            continue
+        suf = next((x for x in VARIANT_SUFFIXES if stem.endswith(x)), None)
+        main = suf and raws.get((p.parent, stem[: -len(suf)]))
+        if main and main != p:
+            pairs[p] = main
+    if pairs and read_exif:
+        ex = read_exif([str(x) for x in {*pairs, *pairs.values()}])
+        def same(a, b):
+            ea, eb = ex.get(str(a)) or {}, ex.get(str(b)) or {}
+            ta, tb = (ea.get("taken_at") or "")[:19], (eb.get("taken_at") or "")[:19]
+            return ta == tb and ea.get("camera") == eb.get("camera") and bool(ta)
+        pairs = {v: m for v, m in pairs.items() if same(v, m)}
+    variants: dict[str, list[str]] = {}
+    for v, m in sorted(pairs.items()):
+        variants.setdefault(str(m), []).append(str(v))
+    return [p for p in paths if p not in pairs], variants
+
+
 def list_photos(folder: str | Path, recursive: bool = False) -> list[Path]:
     """Supported photos in a folder (top level unless recursive), sorted by path; hidden files and dirs skipped.
     Raises ValueError when a photo's path has a line break (it could inject exiftool options)."""

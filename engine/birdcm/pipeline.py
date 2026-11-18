@@ -22,12 +22,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from birdcm import config, decode, geo, geometry, models
+from birdcm import config, confirm, decode, geo, geometry, models
 from birdcm.rarity import Rarity
 from birdcm.result import PhotoResult
 from birdcm.sharpness import head_sharpness
 
-PIPELINE_VERSION = 3            # bump when any step's output changes: old results stop being reused
+PIPELINE_VERSION = 4            # bump when any step's output changes: old results stop being reused
 SETTINGS = {"frame": decode.FRAME, "embedded_min": decode.EMBEDDED_MIN, "min_crop": geometry.MIN_CROP,
             "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR, "max_boxes": 5}
 DECODE_TIMEOUT = 120.0          # seconds one decode may run before its pool is killed and the file isolated
@@ -49,12 +49,14 @@ def fingerprint(region, model_digest: str | None = None, data: str | None = None
     manifest it actually loaded (Engine.fingerprint)."""
     from birdcm import detect, tower
     cfg = {**SETTINGS, "det": [detect.FLOOR, detect.SECOND, detect.SECOND_TOP],
-           "level": [tower.SPECIES_P, tower.SPECIES_MARGIN, tower.GENUS_P, tower.RANGE_EPS, tower.RANGE_TAU]}
-    data = data or hashlib.sha256(b"".join(f.read_bytes() for f in (geo.REGIONS, geo.COUNTRIES, geo.INDEX))).hexdigest()[:16]
+           "level": [tower.SPECIES_P, tower.SPECIES_MARGIN, tower.GENUS_P]}
+    data = data or hashlib.sha256(b"".join(f.read_bytes() for f in (geo.REGIONS, geo.COUNTRIES, geo.INDEX, geo.GRID_FILE))).hexdigest()[:16]
     from birdcm import rarity
     cfg["iucn"] = rarity.SHOW_IUCN
     cfg["geo_grid"] = geo.GRID
     cfg["geo_floor"] = geo.FLOOR
+    from birdcm import confirm
+    cfg["confirm"] = [confirm.EPS, confirm.TAU, geo.NEAR, geo.WEEKS]
     s = json.dumps([model_digest or models.digest(), data, PIPELINE_VERSION, cfg, geo.fingerprint_key(region)], sort_keys=True)
     return hashlib.sha256(s.encode()).hexdigest()[:16]
 
@@ -282,6 +284,13 @@ class Engine:
             crops += [(im.crop(r), where["p_geo"] if where else None) for r in rects]
             rows.append((it, d, (exif, boxes, rects, first, where)))
         looks = [r for i in range(0, len(crops), self.tower_batch) for r in per_item(self.tower, crops[i:i + self.tower_batch])]
+        for it, d, x in rows:                                  # the range rule, with the place's spread (confirm.py)
+            if isinstance(x, Exception):
+                continue
+            _, boxes, _, first, where = x
+            for k in range(first, first + len(boxes)):
+                if not isinstance(looks[k], Exception):
+                    confirm.decide(looks[k], where and where["p_geo"], where and where["typical"])
         self._sync()
         self._add("tower", time.perf_counter() - t)
         t = time.perf_counter()
@@ -328,8 +337,10 @@ class Engine:
         if pl is None:
             return None
         lat, lon, src = pl
+        label = geo.location_label(region) if src == "region" else None
+        wide, typical = self.geo.spread(lat, lon, exif.get("taken_at"), src, label)
         return {"lat": round(lat, 5), "lon": round(lon, 5), "source": src, "week": geo.week_of(exif.get("taken_at")),
-                "p_geo": self.geo.p_geo(lat, lon, exif.get("taken_at"))}
+                "p_geo": wide, "typical": typical}
 
     def _sync(self) -> None:
         import torch
@@ -370,7 +381,8 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         clear = lk["clear"] is not False
         dets.append({"box": [round(v, 5) for v in b], "score": round(score, 4), "clear": lk["clear"],
                      "species": {"level": lk["level"], "label": lk["label"], "top5": lk["top5"], "geo": where is not None,
-                                 "genus": lk.get("genus"), "max_cos": lk.get("max_cos")},
+                                 "genus": lk.get("genus"), "max_cos": lk.get("max_cos"), "visual": lk.get("visual"),
+                                 **{k: lk[k] for k in ("check", "override", "prior") if k in lk}},
                      # eyes, beak and flight only for a clear bird (the gate exists because they are noise otherwise)
                      "eye": to(lk["eyes"][k], rect) if clear else None, "eye_p": round(lk["p_eyes"][k], 4) if clear else None,
                      "beak": to(lk["beak"], rect) if clear else None, "beak_p": round(lk["p_beak"], 4) if clear else None,

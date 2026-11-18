@@ -7,7 +7,7 @@ burst group/rank are per scan and live in their own columns (store.py), never in
 """
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import NotRequired, Literal, TypedDict
 
 Point = list[float]                 # [x, y], normalised 0-1 in the upright original
 Box = list[float]                   # [x0, y0, x1, y1], same frame
@@ -40,6 +40,11 @@ class Species(TypedDict):
     geo: bool                       # location prior applied
     genus: Name | None              # the genus with the largest summed probability ("Xxx sp.")
     max_cos: float | None           # best cosine of the image vector to any name
+    visual: NotRequired[dict]       # the picture alone (before the prior): Name + margin to the second
+    check: NotRequired[str]         # "rare": confirmed, but not expected over most of the place this season (请核对)
+    override: NotRequired[dict]     # {why: "range", visual: Name, local: Name | None}: not confirmed because the first
+                                    # name is not expected here this season; local = a congener of the top five that is
+    prior: NotRequired[dict]        # the first name's prior over the place: {max, median}
 
 
 class Detection(TypedDict):        # every box the tower looked at (at most 5, strongest first)

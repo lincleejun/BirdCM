@@ -41,6 +41,11 @@ def score(rows: list[dict]) -> dict:
         t1 = bool(sp) and sp["top5"][0]["sci"] == truth
         c["top1"] += t1
         c["top5"] += bool(sp) and any(x["sci"] == truth for x in sp["top5"])
+        local = ((sp or {}).get("override") or {}).get("local")          # the congener that lives here, when a rule said so
+        c["best_guess"] = c.get("best_guess", 0) + (bool(sp) and (local or sp["top5"][0])["sci"] == truth)
+        if sp and sp.get("check") == "rare":
+            c["flag_rare"] = c.get("flag_rare", 0) + 1
+            c["flag_rare_right"] = c.get("flag_rare_right", 0) + (sp["label"]["sci"] == truth)
         lvl = sp.get("level") if sp else None
         c[f"level_{lvl or 'none'}"] = c.get(f"level_{lvl or 'none'}", 0) + 1
         if lvl == "species":
@@ -51,7 +56,7 @@ def score(rows: list[dict]) -> dict:
         c["oracle_top1"] += some
         c["subject_right_when_some_box_right"] += some and t1
     pct = lambda k, d=n: round(100 * c.get(k, 0) / d, 2) if d else None      # noqa: E731
-    out = {**c, **{f"{k}_pct": pct(k) for k in ("bird_found", "kept", "rejected_by_gate", "top1", "top5", "oracle_top1", "failed")}}
+    out = {**c, **{f"{k}_pct": pct(k) for k in ("bird_found", "kept", "rejected_by_gate", "top1", "top5", "oracle_top1", "failed", "best_guess")}}
     out["subject_choice_pct"] = pct("subject_right_when_some_box_right", c["oracle_top1"])
     for k in ("level_species", "level_genus", "level_uncertain", "level_none"):
         out[f"{k}_pct"] = pct(k) if k in c else 0.0
@@ -107,6 +112,11 @@ def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit
                                                     "genus": (((r["result"] or {}).get("species") or {}).get("genus") or {}).get("sci"),
                                                     "genus_p": (((r["result"] or {}).get("species") or {}).get("genus") or {}).get("p"),
                                                     "max_cos": ((r["result"] or {}).get("species") or {}).get("max_cos"),
+                                                    "visual": (((r["result"] or {}).get("species") or {}).get("visual") or {}),
+                                                    "prior": ((r["result"] or {}).get("species") or {}).get("prior"),
+                                                    "check": ((r["result"] or {}).get("species") or {}).get("check"),
+                                                    "override": ((r["result"] or {}).get("species") or {}).get("override"),
+                                                    "label": ((((r["result"] or {}).get("species") or {}).get("label")) or {}).get("sci"),
                                                     "rejected": (r["result"] or {}).get("rejected"),
                                                     "reject_reason": (r["result"] or {}).get("reject_reason"),
                                                     "boxes": len((r["result"] or {}).get("boxes") or [])} for r in rows]},

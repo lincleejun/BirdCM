@@ -13,6 +13,10 @@ export interface Species {
   genus?: Name | null; max_cos?: number | null;
   consensus?: { support: number; frames: number };    // set on a burst correction (PhotoRow.species_fix)
   rarity?: Rarity | null;                             // the corrected species' rarity
+  visual?: Name & { margin: number };                  // the picture alone, before the location prior
+  check?: "rare";                                      // confirmed, but not expected over most of the place (请核对)
+  override?: { why: "range"; visual: Name; local: Name | null };   // not confirmed: first name not expected here
+  prior?: { max?: number; median?: number };
 }
 export interface Detection {
   box: Box; score: number; clear: boolean | null; species: Species;
@@ -47,6 +51,7 @@ export interface PhotoRow {
   stars: number | null; star_reason: string | null; burst_group: number | null; burst_rank: number | null; burst_size: number | null;
   species_fix: Species | null;    // the burst's majority species, when it differs from this frame's own
   quality?: { q: number; parts: Record<string, number | null> | null } | null;   // stars.py "select": Q and its parts
+  variants?: string[];            // Lightroom derivatives of this shot (e.g. -Enhanced-NR.dng): listed, never rated
 }
 
 export type ScanState = "queued" | "running" | "stopping" | "paused" | "finalizing" | "completed" | "failed";

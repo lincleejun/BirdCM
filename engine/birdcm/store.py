@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS photo (
   id INTEGER PRIMARY KEY, scan_id INTEGER NOT NULL REFERENCES scan(id), seq INTEGER NOT NULL, path TEXT NOT NULL,
   size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, state TEXT NOT NULL, fp TEXT, result TEXT, error TEXT, reused INTEGER DEFAULT 0,
   stars INTEGER, star_reason TEXT, burst_group INTEGER, burst_rank INTEGER, burst_size INTEGER, species_fix TEXT, quality TEXT,
-  UNIQUE (scan_id, path));
+  variants TEXT, UNIQUE (scan_id, path));
 CREATE INDEX IF NOT EXISTS photo_reuse ON photo(path, size, mtime_ns, fp) WHERE state = 'done';
 CREATE INDEX IF NOT EXISTS photo_scan_state ON photo(scan_id, state);
 CREATE TABLE IF NOT EXISTS event (
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS single (
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
 TERMINAL = ("done", "failed")
-PHOTO_COLS = "id, seq, path, size, mtime_ns, state, result, error, reused, stars, star_reason, burst_group, burst_rank, burst_size, species_fix, quality"
+PHOTO_COLS = "id, seq, path, size, mtime_ns, state, result, error, reused, stars, star_reason, burst_group, burst_rank, burst_size, species_fix, quality, variants"
 
 
 def location(v):
@@ -53,6 +53,7 @@ def photo_row(r: sqlite3.Row) -> dict:
     d["result"] = relabel(json.loads(d["result"])) if d["result"] else None
     d["species_fix"] = relabel(json.loads(d["species_fix"])) if d.get("species_fix") else None
     d["quality"] = json.loads(d["quality"]) if d.get("quality") else None
+    d["variants"] = json.loads(d["variants"]) if d.get("variants") else []
     d["file"] = Path(d["path"]).name
     return d
 
@@ -67,7 +68,7 @@ class Store:
             db = self._db()
             db.executescript(SCHEMA)
             have = {r[1] for r in db.execute("PRAGMA table_info(photo)")}
-            for col in ("species_fix", "quality"):                 # databases from before these columns
+            for col in ("species_fix", "quality", "variants"):                 # databases from before these columns
                 if col not in have:
                     db.execute(f"ALTER TABLE photo ADD COLUMN {col} TEXT")
 
@@ -118,8 +119,9 @@ class Store:
     # ---- scans --------------------------------------------------------------------------------------------------
 
     def create_scan(self, folder: str, recursive: bool, region, ratio: dict, fp: str,
-                    files: list[tuple[str, int, int]]) -> int:
-        """files: (path, size, mtime_ns). Photos whose (path, size, mtime, fingerprint) match a finished result of an
+                    files: list[tuple[str, int, int]], variants: dict[str, list[str]] | None = None) -> int:
+        """files: (path, size, mtime_ns), one per shot; variants: original path -> derived files of the same shot (listed,
+        never analysed or rated). Photos whose (path, size, mtime, fingerprint) match a finished result of an
         earlier scan are done at once with that result copied; the rest are queued."""
         def go(db):
             sid = db.execute("INSERT INTO scan (folder, recursive, region, ratio, fp, state, created_at) VALUES (?,?,?,?,?,?,?)",
@@ -128,8 +130,10 @@ class Store:
             for seq, (path, size, mtime) in enumerate(files):
                 old = db.execute("SELECT result FROM photo WHERE path=? AND size=? AND mtime_ns=? AND fp=? AND state='done' "
                                  "ORDER BY id DESC LIMIT 1", (path, size, mtime, fp)).fetchone()
-                db.execute("INSERT INTO photo (scan_id, seq, path, size, mtime_ns, state, fp, result, reused) VALUES (?,?,?,?,?,?,?,?,?)",
-                           (sid, seq, path, size, mtime, "done" if old else "queued", fp, old["result"] if old else None, int(bool(old))))
+                v = (variants or {}).get(path)
+                db.execute("INSERT INTO photo (scan_id, seq, path, size, mtime_ns, state, fp, result, reused, variants) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                           (sid, seq, path, size, mtime, "done" if old else "queued", fp, old["result"] if old else None, int(bool(old)),
+                            json.dumps(v) if v else None))
             self._scan_event(db, sid)
             return sid
         return self._write(go)

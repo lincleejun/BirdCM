@@ -8,7 +8,7 @@ import torch
 from PIL import Image
 from safetensors.torch import load_file
 
-from birdcm import names
+from birdcm import names as zh_names
 from birdcm.detect import unpack
 from birdcm.geometry import SIZE
 
@@ -20,7 +20,7 @@ PATCH, GRID, LAYER = 14, 16, 15
 # Chosen on the evaluation set only (bench/calibrate.py, 5-fold CV by species, docs/eval.md): precision among confirmed
 # species >= 97 % at the highest coverage. The margin added nothing once P is this high, so it is 0.
 SPECIES_P, SPECIES_MARGIN, GENUS_P = 0.94, 0.0, 0.94
-RANGE_EPS, RANGE_TAU = 0.01, 0.05       # gardener's rules.py: p_geo below EPS = not here; a congener at TAU or more is
+# The range rule (prior too low here) is applied after the tower, with the place's spread and the burst: confirm.py.
 
 
 def level_of(p1: float, p2: float, genus_p: float) -> str:
@@ -54,7 +54,7 @@ class Tower:
         self.sci, self.en = [str(s) for s in z["scientific"]], [str(s) for s in z["common"]]
         genera, inverse = np.unique(np.array([str(t[5]) for t in z["taxonomy"]]), return_inverse=True)
         self.genera, self.genus_of = [str(g) for g in genera], torch.from_numpy(inverse).to(device)
-        self.zh = names.zh()
+        self.zh = zh_names.zh()
         self.parts = {k: v.float().to(device) for k, v in load_file(parts).items()}
         self.flight = {k: v.float().to(device) for k, v in load_file(flight).items()}
         self.clear = {k: v.float().to(device) for k, v in load_file(clear).items()} if clear else None
@@ -78,6 +78,7 @@ class Tower:
         f = f / f.norm(dim=-1, keepdim=True)
         cos = f @ self.matrix.T                                                   # (b, 11172) float32
         p = (self.scale * cos).softmax(-1)
+        pv = p
         if any(g is not None for g in priors):
             from birdcm.geo import FLOOR
             w = torch.stack([torch.from_numpy(np.asarray(g, np.float32)) + FLOOR if g is not None else torch.ones(p.shape[1])
@@ -91,22 +92,17 @@ class Tower:
         pts, vis = self._parts(tokens)
         fly = self._flight(tokens)
         top = p.topk(5)
+        vtop = pv.topk(2)
         out = []
         for b in range(len(crops)):
             ids, ps = top.indices[b].tolist(), top.values[b].tolist()
             g = int(gmass[b].argmax())
             genus = {"sci": self.genera[g] + " sp.", "en": None, "zh": None, "p": round(float(gmass[b, g]), 4)}
             level = level_of(ps[0], ps[1], genus["p"])
-            pg = priors[b]
-            if pg is not None and pg[ids[0]] < RANGE_EPS:          # gardener's range veto: "not found here" cannot be confirmed
-                level = level_of(0.0, 0.0, genus["p"])
-                gen = self.sci[ids[0]].split(" ")[0]
-                k = next((k for k, i in enumerate(ids) if self.sci[i].split(" ")[0] == gen and pg[i] >= RANGE_TAU), None)
-                if k:                                              # a congener that does live here goes first
-                    ids.insert(0, ids.pop(k))
-                    ps.insert(0, ps.pop(k))
+            vi, (v1, v2) = int(vtop.indices[b, 0]), vtop.values[b].tolist()       # the picture alone, before the prior
             label = self.name(ids[0], ps[0]) if level == "species" else genus if level == "genus" else None
             out.append({"top5": [self.name(i, s) for i, s in zip(ids, ps)], "level": level, "label": label, "genus": genus,
+                        "visual": {**self.name(vi, v1), "margin": round(v1 - v2, 4)}, "_ids": ids,
                         "max_cos": round(float(max_cos[b]), 4),
                         "beak": pts[b, 0].tolist(), "eyes": [pts[b, 1].tolist(), pts[b, 2].tolist()],
                         "p_beak": float(vis[b, 0]), "p_eyes": [float(vis[b, 1]), float(vis[b, 2])],

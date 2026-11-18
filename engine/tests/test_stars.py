@@ -162,3 +162,11 @@ def test_consensus_skips_rejected_and_single_frames_and_feeds_quotas():
     o = run(rs)
     assert o[2]["species_fix"]["label"]["sci"] == "A b" and o[3]["species_fix"] is None and o[4]["species_fix"] is None
     assert o[3]["stars"] == -1 and o[4]["stars"] >= 2                          # C d keeps its floor from its own burst
+
+
+def test_consensus_carries_the_rare_flag_to_corrected_frames():
+    tk = lambda: {**sp("Tyrannus melancholicus", 1.0), "check": "rare"}               # noqa: E731
+    odd = sp("Tyrannus sp.", 0.99, level="genus", top=[("Tyrannus melancholicus", 0.13)])
+    odd["top5"][0] = {"sci": "Tyrannus couchii", "en": "x", "zh": None, "p": 0.87}
+    o = run(burst(tk(), tk(), tk(), odd))
+    assert o[3]["species_fix"]["label"]["sci"] == "Tyrannus melancholicus" and o[3]["species_fix"]["check"] == "rare"
