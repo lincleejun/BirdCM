@@ -125,7 +125,7 @@ function Result({ rec, busy, err, regions, onBack, onAct, onDelete, onPick }: {
   const sure = sp?.level === "species" && !!sp.label;
   const multi = !!r && !r.rejected && r.boxes.filter((x) => x.clear !== false || rec.boxes).length > 1;
   const shown = r ? r.boxes.map((x, k) => ({ x, k })).filter(({ x }) => x.clear !== false || rec.boxes) : [];
-  useEffect(() => { setDrawing(false); setBox(null); setAskRegion(false); }, [rec.id]);
+  useEffect(() => { setDrawing(false); setBox(null); setAskRegion(false); }, [rec]);       // every new answer leaves the drawing mode
 
   const at = (e: React.PointerEvent) => {
     const q = shot.current!.getBoundingClientRect();

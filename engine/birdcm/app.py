@@ -421,6 +421,9 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         return {"deleted": len(names)}
 
     if WEB.is_dir():
+        @api.get("/", include_in_schema=False)
+        def index():                           # never cached: it names the hashed assets of the current build
+            return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
         api.mount("/", StaticFiles(directory=WEB, html=True), name="web")
     return Guard(api, port, token), api
 
