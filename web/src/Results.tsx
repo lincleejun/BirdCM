@@ -190,9 +190,12 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
     return { list: [...m].sort((a, b) => a[1].localeCompare(b[1], "zh-CN")), unsure };
   }, [photos]);
 
+  // "只看这一组": the list shows one burst, whatever the other filters say (they are kept, and come back on clearing)
+  const [groupOnly, setGroupOnly] = useState<number | null>(null);
   const view = useMemo(() => {
     const usesResults = fsp || ffly !== "all";
     const v = photos.filter((p) => {
+      if (groupOnly !== null) return p.burst_group === groupOnly;
       if (starsReady && fs !== "all" && p.stars !== +fs) return false;
       if (!usesResults) return true;
       const r = p.result;
@@ -211,10 +214,21 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
     // finished photos first in the chosen order; the ones still waiting stay behind them in queue order
     v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp[sort](a, b) : a.seq - b.seq));
     return v;
-  }, [photos, fs, fsp, ffly, sort, starsReady]);
+  }, [photos, fs, fsp, ffly, sort, starsReady, groupOnly]);
 
-  const current = view.find((p) => p.id === selected) ?? view[0] ?? null;
+  // a photo picked from the burst strip may be outside the filtered list: it is still the one shown
+  const current = view.find((p) => p.id === selected) ?? (selected !== null ? photos.find((p) => p.id === selected) : undefined) ?? view[0] ?? null;
   const tiles = useRef(new Map<number, HTMLButtonElement>());
+  const burst = useMemo(() => {
+    if (!current?.burst_group || (current.burst_size ?? 1) < 2) return null;
+    const members = photos.filter((p) => p.burst_group === current.burst_group);
+    const byTime = [...members].sort((a, b) => (a.result?.exif.taken_at ?? "").localeCompare(b.result?.exif.taken_at ?? "") || a.seq - b.seq);
+    return { members: [...members].sort((a, b) => (a.burst_rank ?? 99) - (b.burst_rank ?? 99)), order: new Map(byTime.map((p, i) => [p.id, i + 1])) };
+  }, [photos, current?.burst_group, current?.burst_size]);
+  const pick = (id: number) => {
+    setSelected(id);
+    requestAnimationFrame(() => tiles.current.get(id)?.scrollIntoView({ block: "nearest" }));
+  };
 
   // on-demand shooting info for a selected photo that has not been processed yet
   const [exifs, setExifs] = useState<Record<number, Exif>>({});
@@ -315,6 +329,12 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
             <option value="eye">头部清晰的在前</option>
           </select>
         </label>
+        {groupOnly !== null && (
+          <span className="chip">只看第 {groupOnly} 组连拍<button type="button" aria-label="清除：不再只看这一组" onClick={() => {
+            setGroupOnly(null);
+            if (current) requestAnimationFrame(() => tiles.current.get(current.id)?.scrollIntoView({ block: "center" }));
+          }}>×</button></span>
+        )}
         {!starsReady && <p className="hint">星级要等全部照片扫完后互相比较才能定。</p>}
       </div>
 
@@ -354,7 +374,8 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
           </div>
         </section>
         {current && <Inspector ref={panelRef} p={current} st={rowState(current)} marks={marks} setMarks={setMarks} complete={complete}
-          exif={current.result?.exif ?? exifs[current.id]} onOpen={openViewer} />}
+          exif={current.result?.exif ?? exifs[current.id]} onOpen={openViewer} burst={burst} onPick={pick}
+          groupOnly={groupOnly !== null} onGroupOnly={(on) => setGroupOnly(on ? current.burst_group : null)} />}
       </div>
 
       <dialog ref={viewerRef} className="viewer" aria-label="大图" onClick={(e) => { if (e.target === e.currentTarget) viewerRef.current?.close(); }}
@@ -384,8 +405,11 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   );
 }
 
+interface Burst { members: PhotoRow[]; order: Map<number, number> }
+
 const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: MarkSet; setMarks: (m: MarkSet) => void; complete: boolean;
-  exif?: Exif; onOpen: () => void }>(function Inspector({ p, st, marks, setMarks, complete, exif, onOpen }, ref) {
+  exif?: Exif; onOpen: () => void; burst: Burst | null; onPick: (id: number) => void; groupOnly: boolean; onGroupOnly: (on: boolean) => void }>(
+  function Inspector({ p, st, marks, setMarks, complete, exif, onOpen, burst, onPick, groupOnly, onGroupOnly }, ref) {
   const r = p.result, ready = st === "ready" && !!r;
   const sp = r?.species, sure = confirmed(r), e = exif;
   const missing: Partial<Record<keyof MarkSet, string>> = r ? {
@@ -427,9 +451,28 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
               <dt>美学分</dt><dd>{r!.aesthetic != null ? r!.aesthetic.toFixed(2) : "—"} <span className="ref">仅供参考</span></dd>
               <dt>稀有度</dt><dd><span className="tbd">待定</span></dd>
               <dt>受威胁等级</dt><dd><span className="tbd">待定</span></dd>
-              <dt>连拍组</dt><dd>{p.burst_group ? `第 ${p.burst_group} 组，组内第 ${p.burst_rank} / ${p.burst_size} 张` : "扫完后分组"}</dd>
+              <dt>连拍组</dt><dd>{!p.burst_group ? "扫完后分组" : p.burst_size === 1 ? `第 ${p.burst_group} 组 · 只有这一张`
+                : `第 ${p.burst_group} 组 · 组内排名第 ${p.burst_rank}，共 ${p.burst_size} 张${burst ? ` · 按拍摄顺序第 ${burst.order.get(p.id)} 张` : ""}`}</dd>
               <dt>鸟框</dt><dd>{r!.boxes.length} 个{r!.boxes.length > 1 && r!.subject != null ? `，主体按${r!.focus ? "对焦点" : "把握"}选取` : ""}</dd>
             </dl>
+            {burst && (
+              <section className="burst" aria-label={`第 ${p.burst_group} 组连拍`}>
+                <div className="burst-head"><h4 className="panel-h" style={{ border: 0, margin: 0, padding: 0 }}>这一组连拍（按组内排名）</h4>
+                  <label className="inline"><input type="checkbox" checked={groupOnly} onChange={(e) => onGroupOnly(e.target.checked)} /> 只看这一组</label></div>
+                <ol className="burst-strip">
+                  {burst.members.map((m) => (
+                    <li key={m.id}>
+                      <button type="button" aria-pressed={m.id === p.id} onClick={() => onPick(m.id)}
+                        aria-label={`组内排名第 ${m.burst_rank}，${m.stars !== null ? starLabel(m.stars) : "待定星级"}，${m.file}`}>
+                        <img src={`/api/photos/${m.id}/thumb?v=${m.size}-${m.mtime_ns}`} alt="" loading="lazy" decoding="async" />
+                        <span className="burst-meta"><b>#{m.burst_rank}</b> <span className="stars">{m.stars !== null ? starTxt(m.stars) : "待定"}</span></span>
+                        <span className="burst-meta">拍摄第 {burst.order.get(m.id)} 张</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
           </>
         )}
         <h4 className="panel-h">拍摄信息</h4>
