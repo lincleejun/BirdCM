@@ -43,9 +43,10 @@ def put(p: Path, n: int) -> Path:
 
 
 def test_config_roundtrip_and_env_wins(home, monkeypatch):
-    admin.write_config(port=8790, model_dirs=["/a b/c", "/d"], data_dir='/x/"quoted" 观羽')
+    odd = '/x/"quoted" 观羽 𠮷 🐦 tab\there \\back'
+    admin.write_config(port=8790, model_dirs=["/a b/c", "/d"], data_dir=odd)
     cfg = admin.read_config()
-    assert cfg["port"] == 8790 and cfg["model_dirs"] == ["/a b/c", "/d"] and cfg["data_dir"] == '/x/"quoted" 观羽'
+    assert cfg["port"] == 8790 and cfg["model_dirs"] == ["/a b/c", "/d"] and cfg["data_dir"] == odd
     assert admin.port() == 8790
     monkeypatch.setenv("BIRDCM_CACHE_DIR", str(home / "envcache"))
     restart_keep = {"BIRDCM_CACHE_DIR"}
@@ -196,6 +197,66 @@ time.sleep(60)
     assert holder.wait(5) == -15
     assert admin.health()["running"] is False
     assert admin.stop() == {"stopped": False, "was_running": False}
+
+
+def test_stop_kills_the_group_when_sigterm_is_ignored(home):
+    """The fallback: a holder that ignores SIGTERM, with a child in its process group; both end by SIGKILL."""
+    holder = subprocess.Popen([sys.executable, "-c", f"""
+import fcntl, json, os, signal, subprocess, time
+os.setpgid(0, 0)
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+fd = os.open({str(admin.lock_path())!r}, os.O_RDWR | os.O_CREAT)
+fcntl.flock(fd, fcntl.LOCK_EX)
+child = subprocess.Popen(["sleep", "60"])
+os.write(fd, json.dumps({{"pid": os.getpid(), "port": 1}}).encode())
+print(child.pid, flush=True)
+time.sleep(60)
+"""], stdout=subprocess.PIPE, text=True)
+    child = int(holder.stdout.readline())
+    out = admin.stop(timeout=1)
+    assert out["killed"] and holder.wait(5) == -9
+    time.sleep(0.3)
+    with pytest.raises(ProcessLookupError):
+        os.kill(child, 0)                     # reaped by init after the group SIGKILL (a zombie would not raise)
+    assert admin.running() is None
+
+
+def test_fetch_cancel_leaves_no_part_file(home, tmp_path):
+    """SIGTERM during a download (the menu's 取消下载): exit 130, the .part file removed."""
+    import http.server
+    import threading
+
+    class Slow(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", str(64 << 20))
+            self.end_headers()
+            for _ in range(64):
+                self.wfile.write(b"x" * (1 << 20))
+                time.sleep(0.2)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Slow)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    m = tmp_path / "m.toml"
+    m.write_text(f'[[file]]\nname = "big.bin"\nrole = "big"\nurl = "http://127.0.0.1:{srv.server_port}/big.bin"\n'
+                 f'sha256 = "{"0" * 64}"\nbytes = {64 << 20}\n')
+    p = subprocess.Popen([sys.executable, "-m", "birdcm.cli", "admin", "models-fetch"], stdout=subprocess.PIPE, text=True,
+                         env={**os.environ, "BIRDCM_MANIFEST": str(m)})
+    try:
+        for line in p.stdout:
+            if json.loads(line).get("done", 0) > 0:
+                break
+        part = home / "cache" / "models" / "big.bin.part"
+        assert part.exists()
+        p.terminate()
+        assert p.wait(10) == 130
+        assert not part.exists()
+    finally:
+        p.kill()
+        srv.shutdown()
 
 
 def test_port_busy_is_reported(home):

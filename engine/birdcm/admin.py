@@ -52,7 +52,7 @@ def home() -> Path:
 
 def read_config() -> dict:
     try:
-        return tomllib.loads(config_path().read_text())
+        return tomllib.loads(config_path().read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
 
@@ -62,9 +62,9 @@ def write_config(**changes) -> dict:
     p = config_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
-    # JSON strings, numbers and string lists are valid TOML values
+    # JSON strings, numbers and string lists are valid TOML values (ensure_ascii=False: TOML has no \ud83d surrogates)
     tmp.write_text("# 观羽 BirdCM settings (written by the app; environment variables override)\n" +
-                   "".join(f"{k} = {json.dumps(v)}\n" for k, v in cfg.items()))
+                   "".join(f"{k} = {json.dumps(v, ensure_ascii=False)}\n" for k, v in cfg.items()), encoding="utf-8")
     os.replace(tmp, p)
     return cfg
 

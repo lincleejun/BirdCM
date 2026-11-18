@@ -1,7 +1,8 @@
 # 观羽.app — the macOS installer
 
 A menu-bar app (no Dock icon) that runs the BirdCM engine in the background and opens the web UI in the default
-browser. Apple Silicon only (arm64), macOS 13 or later. Nothing needs to be installed on the user's Mac: Python, the
+browser. Apple Silicon only (arm64), macOS 15 or later (some bundled libraries — OpenCV's ffmpeg / libvpx — are
+built for 15.0; the shell itself would run on 13). Nothing needs to be installed on the user's Mac: Python, the
 engine's dependencies, the built web UI and ExifTool are inside the app; the model files are downloaded on first use.
 
 ## Build
@@ -65,20 +66,30 @@ Opening the app again (Finder, Spotlight, `open`) opens the web page, starting t
 welcome window with the download size and the folders; 开始使用 starts the download, the engine and the browser.
 
 Test switches (environment, e.g. `open -n --env BIRDCM_CONFIG=… 观羽.app`): `BIRDCM_CONFIG`, `BIRDCM_NO_BROWSER=1`,
-`BIRDCM_SKIP_WELCOME=1`, `BIRDCM_SNAPSHOT=dir` (writes the menu's status lines and window renderings there).
+`BIRDCM_SKIP_WELCOME=1`, `BIRDCM_SNAPSHOT=dir` (writes the menu's status lines and window renderings there),
+`BIRDCM_OPEN_SETTINGS=1`, `BIRDCM_TEST_FETCH=1` (starts a model download and cancels it after 5 s).
+
+Measured on this Mac (M-series, macOS 26.6): engine answering 4.7 s after the first launch of a fresh copy (1.0 s on
+later launches; not measured after a reboot); engine memory 246 MB before the first scan, about 1.7 GB once the models
+are loaded, plus four decode workers of ~140 MB while scanning; 12 Sony ARW photos scanned in under 30 s.
 
 ## Permissions the user sees
 
-- Scanning a folder on an external disk: macOS asks once "“观羽”想要访问可移除宗卷上的文件" (text from
-  `NSRemovableVolumesUsageDescription`). Desktop / Documents / Downloads and network volumes have their own one-time
-  prompts. The engine is a child of the app, so the prompts and the grants are the app's, not Terminal's.
+- Scanning a folder on an external disk: macOS should ask once whether 观羽 may access files on a removable volume
+  (explanation text from `NSRemovableVolumesUsageDescription`). Observed in testing: the engine's request for
+  `/Volumes/…` waited for an answer and no grant existed yet — consistent with that prompt; the prompt itself could
+  not be captured on screen. Desktop / Documents / Downloads and network volumes have their own one-time prompts.
+  The engine is a child of the app, so prompts and grants belong to the app, not to Terminal. An ad-hoc build gets a
+  new code identity on every rebuild, so macOS asks again after each rebuild; a Developer ID build keeps its grants.
+  What the web page shows when access is denied has not been tested.
 - The web page's 选择文件夹 button runs `osascript` (`choose folder`) from the engine: a normal folder dialog, no
   Automation prompt (it sends no Apple Events to another app).
 - 登录时启动 adds 观羽 under System Settings → General → Login Items.
 
 ## Signing and distribution
 
-This Mac has no "Developer ID Application" identity (only "Apple Development" and a self-signed one), so `build.sh`
+This Mac has no "Developer ID Application" identity (only "Apple Development: … (RVA9G8A556)", issued by Apple WWDR
+for development, and the self-signed "Caffinate Local Signing"), so `build.sh`
 signs ad-hoc with the hardened runtime. Ad-hoc signatures carry no Team ID, so library validation is turned off
 (`com.apple.security.cs.disable-library-validation`, added only for ad-hoc builds); Python and torch need no other
 exception (no JIT, no unsigned executable memory). With a Developer ID every library gets the same Team ID and
@@ -105,7 +116,7 @@ xcrun stapler staple "macos/dist/观羽-0.1.0-arm64.dmg"
 spctl -a -t open --context context:primary-signature -vv "macos/dist/观羽-0.1.0-arm64.dmg"
 ```
 
-(`notarytool` and `stapler` come with Xcode; if notarization reports problems, `xcrun notarytool log <id>
+(`notarytool` and `stapler` are in the Command Line Tools too; if notarization reports problems, `xcrun notarytool log <id>
 --keychain-profile birdcm-notary` lists them file by file.)
 
 ## Uninstall

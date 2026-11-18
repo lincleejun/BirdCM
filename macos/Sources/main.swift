@@ -47,13 +47,13 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
     /// Testing: the menu's status lines as text (BIRDCM_SNAPSHOT=dir), since a menu cannot be captured.
     private func snapshot() {
         guard let dir = ProcessInfo.processInfo.environment["BIRDCM_SNAPSHOT"] else { return }
-        let text = [statusLine, modelsLine] + (suggestPort.map { ["改用端口 \($0) 启动"] } ?? [])
+        let text = [statusLine, modelsLine] + (suggestPort.map { ["改用端口 \($0) 启动"] } ?? []) + (fetchNote.map { [$0] } ?? [])
         try? text.joined(separator: "\n").write(toFile: "\(dir)/menu.txt", atomically: true, encoding: .utf8)
     }
     @Published var usage: Usage?
     @Published var paths: Paths?
-    @Published var fetching: (file: String, done: Int64, total: Int64)?
-    @Published var fetchNote: String?
+    @Published var fetching: (file: String, done: Int64, total: Int64)? { didSet { snapshot() } }
+    @Published var fetchNote: String? { didSet { snapshot() } }
     @Published var busy: String?                    // a long admin command is running (move, clear ...)
 
     let launcher = Bundle.main.resourceURL!.appendingPathComponent("engine/birdcm")
@@ -464,6 +464,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ev?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
         Task { @MainActor in
             let e = Engine.shared
+            let env = ProcessInfo.processInfo.environment
+            if env["BIRDCM_OPEN_SETTINGS"] != nil { Windows.show("settings", "观羽 设置", SettingsView()) }   // testing
+            if env["BIRDCM_TEST_FETCH"] != nil {                    // testing: start a download, cancel it after 5 s
+                e.fetch()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { e.cancelFetch() }
+            }
             if UserDefaults.standard.bool(forKey: "welcomed") || ProcessInfo.processInfo.environment["BIRDCM_SKIP_WELCOME"] != nil {
                 await e.adoptOrStart(open: !atLogin)
                 await e.refresh()
