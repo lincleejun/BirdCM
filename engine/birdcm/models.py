@@ -56,6 +56,9 @@ def locate(entry: dict) -> Path | None:
     return None
 
 
+# How to get the model files, for both ways of running (Codex note: "uv run" means nothing to the packaged app's users)
+FETCH_HINT = "Mac 应用：在菜单栏的观羽图标里下载模型；从源码运行：在 engine/ 里执行 `uv run birdcm models fetch`。"
+
 # What the app does without an optional file (models.toml optional = true).
 OPTIONAL_EFFECT = {"clear": "没有“清楚的鸟”判断：每个检测框都当作鸟来认",
                    "aesthetic": "没有美学分：星级只用其余的信号",
@@ -70,7 +73,8 @@ def status() -> dict:
     missing = [f["name"] for f in files if not f["path"] and not f["optional"]]
     opt = [{"name": f["name"], "role": f["role"], "released": f["released"], "effect": OPTIONAL_EFFECT.get(f["role"], "")}
            for f in files if not f["path"] and f["optional"]]
-    return {"ready": not missing, "files": files, "missing": missing, "optional_missing": opt, "fetch": "uv run birdcm models fetch"}
+    return {"ready": not missing, "files": files, "missing": missing, "optional_missing": opt, "fetch": "birdcm models fetch",
+            "fetch_hint": FETCH_HINT}
 
 
 def paths() -> dict[str, Path]:
@@ -85,7 +89,7 @@ def paths() -> dict[str, Path]:
         else:
             out[e["role"]] = p
     if missing:
-        raise FileNotFoundError(f"缺模型文件：{', '.join(missing)}。运行 `uv run birdcm models fetch` 下载。")
+        raise FileNotFoundError(f"缺模型文件：{', '.join(missing)}。{FETCH_HINT}")
     return out
 
 

@@ -233,6 +233,9 @@ def test_images_by_id_are_revalidated_not_cached(env, monkeypatch):
     r = c.get(f"/api/photos/{pid}/thumb", headers=OK)
     assert r.status_code == 200 and "max-age" not in r.headers["cache-control"] and "no-cache" in r.headers["cache-control"]
     assert r.headers.get("etag")
+    again = c.get(f"/api/photos/{pid}/thumb", headers={**OK, "if-none-match": r.headers["etag"]})
+    assert again.status_code == 304 and not again.content                          # Codex P5: no second transfer
+    assert c.get(f"/api/photos/{pid}/thumb", headers={**OK, "if-none-match": '"other"'}).status_code == 200
 
 
 def test_places_proxy_rate_limit_cache_and_ua():

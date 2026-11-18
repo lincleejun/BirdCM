@@ -50,7 +50,7 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
         <h2 id="h-start">选一批鸟片</h2>
         <p className="intro">从一批原片里找鸟、认种，挑出值得细看的照片。</p>
         {models && !models.ready && (
-          <div className="missing" role="alert">缺模型文件：{models.missing.join("、")}。<br />在终端运行 <code>{models.fetch}</code> 下载后刷新。</div>
+          <div className="missing" role="alert">缺模型文件：{models.missing.join("、")}。<br />{models.fetch_hint ?? `在终端运行 ${models.fetch}`}，下载后刷新。</div>
         )}
         {models && models.ready && (models.optional_missing?.length ?? 0) > 0 && (
           <div className="missing soft" role="status">

@@ -67,6 +67,17 @@ def present(v):
     return v
 
 
+def slim_row(row: dict) -> dict:
+    """A photo row as the list needs it (snapshot, photo events): each box without its own species block (the subject's
+    is the photo's species) and without the likeness thumbnail. The full row: GET /api/photos/{id}. Codex P2."""
+    r = row.get("result")
+    if not r:
+        return row
+    r = {k: v for k, v in r.items() if k != "look"}
+    r["boxes"] = [{k: v for k, v in b.items() if k != "species"} for b in r.get("boxes") or []]
+    return {**row, "result": r}
+
+
 def photo_row(r: sqlite3.Row) -> dict:
     d = dict(r)
     d["result"] = present(json.loads(d["result"])) if d["result"] else None
@@ -134,7 +145,7 @@ class Store:
 
     def _photo_event(self, db, photo_id: int) -> None:
         r = db.execute(f"SELECT scan_id, {PHOTO_COLS} FROM photo WHERE id = ?", (photo_id,)).fetchone()
-        row = photo_row(r)
+        row = slim_row(photo_row(r))
         self._event(db, row.pop("scan_id"), "photo", row)
 
     # ---- scans --------------------------------------------------------------------------------------------------
@@ -286,6 +297,27 @@ class Store:
             db.execute("UPDATE photo SET state = ?, result = ?, error = ?, fp = coalesce(?, fp) WHERE id = ?",
                        ("failed" if error else "done", json.dumps(result, ensure_ascii=False) if result else None, error, fp, photo_id))
             self._photo_event(db, photo_id)
+        self._write(go)
+
+    def unpair(self, scan_id: int, wrong: list[tuple[str, str]]) -> None:
+        """Variants that turned out to be other shots: off their original's list, in as photos of their own (queued;
+        a finished scan goes back to the queue for them)."""
+        def go(db):
+            seq = db.execute("SELECT coalesce(max(seq), -1) FROM photo WHERE scan_id = ?", (scan_id,)).fetchone()[0]
+            for main, v in wrong:
+                r = db.execute("SELECT id, variants FROM photo WHERE scan_id = ? AND path = ?", (scan_id, main)).fetchone()
+                if r:
+                    left = [x for x in json.loads(r[1] or "[]") if x != v]
+                    db.execute("UPDATE photo SET variants = ? WHERE id = ?", (json.dumps(left) if left else None, r[0]))
+                try:
+                    st = Path(v).stat()
+                except OSError:
+                    continue
+                seq += 1
+                db.execute("INSERT OR IGNORE INTO photo (scan_id, seq, path, size, mtime_ns, state) VALUES (?,?,?,?,?,?)",
+                           (scan_id, seq, v, st.st_size, st.st_mtime_ns, "queued"))
+            db.execute("UPDATE scan SET state = 'queued' WHERE id = ? AND state = 'completed'", (scan_id,))
+            self._scan_event(db, scan_id)
         self._write(go)
 
     def move_fp(self, scan_id: int, old: str, new: str) -> None:

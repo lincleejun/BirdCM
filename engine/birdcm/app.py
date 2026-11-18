@@ -25,7 +25,7 @@ from starlette.concurrency import run_in_threadpool
 from birdcm import config, decode, geo, models, stars
 from birdcm.pipeline import EQUIVALENT_DATA, EQUIVALENT_OLD_KEY, fingerprint, image_paths
 from birdcm.queue import Scheduler
-from birdcm.store import Store
+from birdcm.store import Store, slim_row
 
 WEB = Path(os.environ.get("BIRDCM_WEB_DIR") or Path(__file__).resolve().parents[2] / "web" / "dist")
 WRITE = {"POST", "PUT", "PATCH", "DELETE"}
@@ -190,15 +190,23 @@ def places_search(q: str, fetch=None) -> list[dict]:
         return out
 
 
-def paired(paths):
-    """Shots and their Lightroom variants; capture time and camera checked with exiftool when it is installed."""
-    if not decode.ExifTool.available():
-        return decode.pair_variants(paths)
+def verify_variants(store: Store, sid: int, variants: dict[str, list[str]]) -> None:
+    """After the scan is created (Codex P4: this used to hold the request for 3-12 s): check each name-paired variant's
+    capture time and camera with exiftool; one that does not match its original is another shot and becomes a photo
+    of its own. Without exiftool the names alone stand."""
+    if not variants or not decode.ExifTool.available():
+        return
     et = decode.ExifTool()
     try:
-        return decode.pair_variants(paths, et.read)
+        flat = [Path(v) for vs in variants.values() for v in vs] + [Path(m) for m in variants]
+        _, ok = decode.pair_variants(flat, et.read)
+    except Exception:  # noqa: BLE001 - unreadable: keep the name pairing
+        return
     finally:
         et.close()
+    wrong = [(m, v) for m, vs in variants.items() for v in vs if v not in ok.get(m, [])]
+    if wrong:
+        store.unpair(sid, wrong)
 
 
 def create_app(port: int = 8765, token: str | None = None, store: Store | None = None,
@@ -274,11 +282,12 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         try:
-            shots, variants = paired(decode.list_photos(folder, body.recursive))
+            shots, variants = decode.pair_variants(decode.list_photos(folder, body.recursive))    # names only: instant
             files = [(str(p), (st := p.stat()).st_size, st.st_mtime_ns) for p in shots]
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         sid = store.create_scan(str(folder), body.recursive, body.region, body.ratio, fingerprint(body.region), files, variants)
+        threading.Thread(target=verify_variants, args=(store, sid, variants), daemon=True).start()
         sched.wake.set()
         return {"id": sid, "photos": len(files)}
 
@@ -291,6 +300,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         snap = store.snapshot(sid)
         if not snap:
             raise HTTPException(404, "没有这个扫描")
+        snap["photos"] = [slim_row(p) for p in snap["photos"]]
         return {**snap, **store.related(sid), "stale": is_stale(snap["scan"])}
 
     @api.get("/api/scans/{sid}/related")
@@ -370,7 +380,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             raise HTTPException(400, f"这个设置算不出星级：{type(e).__name__}: {e}") from None
         return {"ok": True}
 
-    def photo_file(pid: int, which: int) -> FileResponse:
+    def photo_file(pid: int, which: int, request: Request | None = None):
         p = store.photo(pid)
         if not p:
             raise HTTPException(404, "没有这张照片")
@@ -382,15 +392,32 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                                "thumb": str(thumb), "preview": str(preview)})
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(404, f"无法生成预览：{e}") from None
-        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, no-cache"})
+        # the ETag names this database, this photo row and this cached image: another database or a re-made preview
+        # never matches (Codex P5); a matching If-None-Match gets 304 instead of the image again
+        st = path.stat()
+        import hashlib
+        tag = '"' + hashlib.sha1(f"{store.path}|{pid}|{path}|{st.st_size}|{st.st_mtime_ns}".encode()).hexdigest()[:20] + '"'
+        headers = {"Cache-Control": "private, no-cache", "ETag": tag}
+        if request is not None and tag in [t.strip() for t in request.headers.get("if-none-match", "").split(",")]:
+            from fastapi.responses import Response
+            return Response(status_code=304, headers=headers)
+        return FileResponse(path, media_type="image/jpeg", headers=headers)
 
     @api.get("/api/photos/{pid}/thumb")
-    def thumb(pid: int):
-        return photo_file(pid, 0)
+    def thumb(pid: int, request: Request):
+        return photo_file(pid, 0, request)
 
     @api.get("/api/photos/{pid}/preview")
-    def preview(pid: int):
-        return photo_file(pid, 1)
+    def preview(pid: int, request: Request):
+        return photo_file(pid, 1, request)
+
+    @api.get("/api/photos/{pid}")
+    def photo_full(pid: int):
+        """One photo's full row (every box's own species, the likeness thumbnail): what the list snapshot leaves out."""
+        p = store.photo(pid)
+        if not p:
+            raise HTTPException(404, "没有这张照片")
+        return p
 
     @api.get("/api/photos/{pid}/exif")
     def photo_exif(pid: int):
@@ -568,24 +595,37 @@ def preflight() -> None:
             config.check_own_dirs(f)
 
 
-def serve(port: int = 8765, open_browser: bool = True) -> int:
-    import uvicorn
+def prepare(port: int):
+    """Every start-up step both `birdcm serve` and the Mac app's `birdcm admin serve` take (one place, Codex note):
+    preflight, own dirs, the app, and the warnings about what is missing. Returns the guarded app."""
     preflight()
     for d in (config.data_dir(), config.cache_dir()):
         d.mkdir(parents=True, exist_ok=True)
-    guarded, api = create_app(port)
+    guarded, _api = create_app(port)
     if not decode.ExifTool.available():
         print("警告：找不到 exiftool，拍摄信息和对焦点会是空的。`brew install exiftool` 安装。", file=sys.stderr)
     st = models.status()
     if not st["ready"]:
-        print(f"缺模型文件：{', '.join(st['missing'])}。运行 `{st['fetch']}`。", file=sys.stderr)
+        print(f"缺模型文件：{', '.join(st['missing'])}。{st['fetch_hint']}", file=sys.stderr)
     for o in st["optional_missing"]:
         print(f"{'还没有发布' if not o['released'] else '没有'} {o['name']}：{o['effect']}", file=sys.stderr)
-    url = f"http://127.0.0.1:{port}/"
     if not WEB.is_dir():
         print(f"没有找到界面文件 {WEB}；先在 web/ 里运行 `npm install && npm run build`。", file=sys.stderr)
+    return guarded
+
+
+def run(guarded, port: int) -> None:
+    """uvicorn with a short graceful window: an open event stream (a browser tab) must not hold a stop hostage; the
+    lifespan then closes the decode pools and exiftool."""
+    import uvicorn
+    uvicorn.run(guarded, host="127.0.0.1", port=port, log_level="warning", timeout_graceful_shutdown=3)
+
+
+def serve(port: int = 8765, open_browser: bool = True) -> int:
+    guarded = prepare(port)
+    url = f"http://127.0.0.1:{port}/"
     if open_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
     print(f"观羽 BirdCM: {url}", flush=True)
-    uvicorn.run(guarded, host="127.0.0.1", port=port, log_level="warning")
+    run(guarded, port)
     return 0

@@ -247,7 +247,6 @@ class Geo:
             self.index[i, :len(r)] = r
         self.unmapped = (self.index < 0).all(axis=1)       # no BirdNET label: the prior is unknown, not "absent"
 
-    @lru_cache(maxsize=256)  # noqa: B019 - one instance per engine; a batch is mostly one place and week
     def _probs(self, points: tuple, weeks: tuple) -> np.ndarray:
         """(points, AviList rows): per point, the max over the weeks."""
         x = np.array([[la, lo, w] for la, lo in points for w in weeks], np.float32)
@@ -263,5 +262,12 @@ class Geo:
     def spread(self, lat, lon, taken_at, source="photo", label=None) -> tuple[np.ndarray, np.ndarray]:
         """(max, median) over the place's cover (each point: max over the weeks around the date). The max says whether
         the species can be here at all; the median whether it is expected over most of the place."""
-        q = self._probs(cover(lat, lon, source, label), weeks_around(week_of(taken_at)))
-        return q.max(axis=0), np.median(q, axis=0)
+        return self._spread(cover(lat, lon, source, label), weeks_around(week_of(taken_at)))
+
+    @lru_cache(maxsize=256)  # noqa: B019 - one instance per engine; a batch is mostly one place and week
+    def _spread(self, points: tuple, weeks: tuple) -> tuple[np.ndarray, np.ndarray]:
+        """Cached as the two vectors only (Codex P6: the per-point matrix was cached and the median redone per photo)."""
+        q = self._probs(points, weeks)
+        mx, med = q.max(axis=0), np.median(q, axis=0)
+        mx.flags.writeable = med.flags.writeable = False
+        return mx, med

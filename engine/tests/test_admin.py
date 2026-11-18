@@ -16,6 +16,15 @@ from birdcm import admin, config, models
 from birdcm.store import Store
 
 
+@pytest.fixture(autouse=True)
+def _environ_back():
+    """apply_config() writes os.environ directly: put it back, or later tests look for models in a temp cache dir."""
+    saved = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(saved)
+
+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     """Only BIRDCM_CONFIG set (as the app runs); data and cache come from the config file."""

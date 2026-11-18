@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"这 {len(unrel)} 个文件还没有发布：{'、'.join(o['name'] for o in unrel)}。没有它们也能用：")
             for o in unrel:
                 print(f"  - {o['effect']}")
-        print("ready" if st["ready"] else f"missing {len(st['missing'])}: run `{st['fetch']}`")
+        print("ready" if st["ready"] else f"missing {len(st['missing'])}: {st['fetch_hint']}")
         return 0 if st["ready"] else 1
 
     if a.cmd == "scan":

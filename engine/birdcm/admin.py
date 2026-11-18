@@ -254,8 +254,6 @@ def serve(port_: int | None, log: bool = True) -> int:
         app.preflight()
     except ValueError as e:
         return fail(5, error="refused", message=str(e))
-    for d in (config.data_dir(), config.cache_dir()):
-        d.mkdir(parents=True, exist_ok=True)
     if port_ != port():
         write_config(port=port_)
     info = {"pid": os.getpid(), "port": port_, "exe": sys.executable, "exiftool": shutil.which("exiftool"),
@@ -266,10 +264,7 @@ def serve(port_: int | None, log: bool = True) -> int:
     if log:
         _log_to(home() / "engine.log")
     print(f"{time.strftime('%F %T')} 观羽引擎启动 {json.dumps(info, ensure_ascii=False)}", flush=True)
-    import uvicorn
-    guarded, _api = app.create_app(port_)
-    # a short graceful window: an open event stream (a browser tab) must not hold a stop hostage
-    uvicorn.run(guarded, host="127.0.0.1", port=port_, log_level="warning", timeout_graceful_shutdown=3)
+    app.run(app.prepare(port_), port_)            # the same start-up and shutdown as `birdcm serve`
     return 0                                     # (after a SIGTERM uvicorn re-raises it once shut down: no return)
 
 

@@ -36,9 +36,23 @@ class FileChanged(Exception):
 
 
 def worker_init() -> None:
-    """Decode workers: one native thread each (the pool is the parallelism)."""
+    """Decode workers: one native thread each (the pool is the parallelism). A worker leaves when its server is gone:
+    the pool's pipes are shared between siblings, so a worker of a killed server would otherwise wait forever."""
     for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
         os.environ[k] = "1"
+    orphan_watch()
+
+
+def orphan_watch(every: float = 2.0) -> None:
+    """Exit this process once its parent has died (re-parented to launchd / init)."""
+    parent = os.getppid()
+
+    def watch():
+        while True:
+            time.sleep(every)
+            if os.getppid() != parent:
+                os._exit(0)
+    threading.Thread(target=watch, daemon=True, name="orphan-watch").start()
 
 
 def safe_arg(path: str) -> bool:
@@ -193,6 +207,11 @@ class ExifTool:
             raise RuntimeError("找不到 exiftool。macOS 上运行 `brew install exiftool` 安装后再试。")
         self.proc = subprocess.Popen(["exiftool", "-stay_open", "True", "-@", "-"], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        # exiftool -stay_open does not exit when its stdin closes: a tiny watcher ends it if this process dies without
+        # closing it (crash, SIGKILL). It exits by itself once either is gone.
+        subprocess.Popen(["/bin/sh", "-c", f"while kill -0 {os.getpid()} 2>/dev/null && kill -0 {self.proc.pid} 2>/dev/null; "
+                          f"do sleep 2; done; kill {self.proc.pid} 2>/dev/null"],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
     def close(self) -> None:
         with self.lock:

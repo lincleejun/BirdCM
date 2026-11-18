@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post, put } from "./api";
 const CHIPS = 3;                                   // species chips shown before "+n", so the bar stays one row at 1440 px
 import KeepControl, { KeepButton, keepOf, type KeepSetting } from "./Keep";
@@ -72,6 +72,38 @@ function Marks({ r, m }: { r: PhotoResult; m: MarkSet }) {
   );
 }
 
+interface TileAct { pick: (id: number) => void; open: (id: number) => void; group: (p: PhotoRow) => void; ref: (id: number, el: HTMLButtonElement | null) => void }
+
+const Tile = memo(function Tile({ p, st, active, complete, more, marks, exif: e, act }: {
+  p: PhotoRow; st: RowState; active: boolean; complete: boolean; more: boolean; marks: MarkSet | null;
+  exif: Partial<Exif> | null | undefined; act: { current: TileAct };
+}) {
+  const r = p.result;
+  const name = r ? (r.rejected ? nameOf(r) : named(r.species).title) : ROW_LABEL[st];
+  return (
+    <button type="button" className="tile" data-state={st} aria-pressed={active} tabIndex={active ? 0 : -1}
+      aria-describedby="photo-keys" aria-label={`${name}，${complete ? starLabel(p.stars) : "待定星级"}，${p.file}`}
+      ref={(el) => act.current.ref(p.id, el)}
+      onClick={() => act.current.pick(p.id)} onDoubleClick={() => act.current.open(p.id)}>
+      <Photo row={p} marks={marks} show={!!r || active} />
+      <span className="row-result">{r && r.rejected && r.species?.label ? <span className="name dim" style={{ display: "block" }}>{name} · {named(r.species).title}</span>
+        : r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">按连拍组修正</span>}
+        {r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}</> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
+        {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
+        {more && (p.burst_size ?? 1) > 1 && (
+          <span className="pill more" role="link" title="只看这一组" onClick={(ev) => { ev.stopPropagation(); act.current.group(p); }}>+{(p.burst_size ?? 1) - 1}</span>
+        )}
+        {r && !r.rejected && r.flying !== null && <span className="pill">{r.flying ? "在飞" : "不在飞"}</span>}
+        {r && <span className="small reason-line" style={{ display: "block" }}>
+          {complete && p.star_reason ? p.star_reason : r.rejected ? "不参与标星" : r.eye_visible ? `眼睛可见 · 头部清晰度 ${sharpTxt(r.sharpness)}` : "眼睛未找到"}</span>}
+        {st === "failed" && <span className="small reason-line" style={{ display: "block" }}>{p.error}</span>}
+      </span>
+      <span className="row-settings"><span className="file">{p.file}</span><br />
+        {e && <span className="small">{e.focal_mm != null ? `${+e.focal_mm.toFixed(0)} mm` : "—"} · f/{e.aperture ?? "—"} · {e.shutter ?? "—"} s<br />ISO {e.iso ?? "—"} · {evText(e.ev ?? null)}</span>}</span>
+    </button>
+  );
+});
+
 function Photo({ row, marks, big, show, alt = "" }: { row: PhotoRow; marks: MarkSet | null; big?: boolean; show: boolean; alt?: string }) {
   // the URL names the file version too: ids restart with a new database, and a browser may still hold an image cached
   // for a day under the same id by an older build
@@ -89,9 +121,15 @@ function Photo({ row, marks, big, show, alt = "" }: { row: PhotoRow; marks: Mark
   );
 }
 
+const fixedRows = new WeakMap<PhotoRow, PhotoRow>();          // same input row -> same object, so memoised rows hold
 function withFix(p: PhotoRow): PhotoRow {
   if (!p.species_fix || !p.result) return p;
-  return { ...p, result: { ...p.result, species: p.species_fix, species_own: p.result.species, rarity: p.species_fix.rarity ?? null } };
+  let f = fixedRows.get(p);
+  if (!f) {
+    f = { ...p, result: { ...p.result, species: p.species_fix, species_own: p.result.species, rarity: p.species_fix.rarity ?? null } };
+    fixedRows.set(p, f);
+  }
+  return f;
 }
 
 // ---------- export ----------
@@ -189,6 +227,9 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
       if (sc && sc.n > snapN.current) setScan((old) => (old ? { ...old, ...sc.data } : old));
     };
     const later = () => { flushTimer.current ??= window.setTimeout(flush, 150); };
+    // "stars" and "completed" arrive together at the end of a scan: one snapshot for both (Codex P2)
+    let reloadTimer: number | null = null;
+    const reload = () => { reloadTimer ??= window.setTimeout(() => { reloadTimer = null; load(); }, 120); };
     const fresh = (ev: MessageEvent) => { const n = Number(ev.lastEventId); if (n <= lastN.current) return false; lastN.current = n; return true; };
     load().then((s) => {
       if (dead || s.scan.state === "completed") return;
@@ -199,9 +240,9 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
         const d = JSON.parse(ev.data);
         pending.current.scan = { n: Number(ev.lastEventId), data: { state: d.state, error: d.error, counts: d.counts } };
         later();
-        if (d.state === "completed") { es?.close(); load(); }
+        if (d.state === "completed") { es?.close(); reload(); }
       });
-      es.addEventListener("stars", (ev) => { if (fresh(ev)) load(); });
+      es.addEventListener("stars", (ev) => { if (fresh(ev)) reload(); });
     }).catch((e) => setError(String(e.message)));
     return () => { dead = true; es?.close(); if (flushTimer.current) clearTimeout(flushTimer.current); };
   }, [scanId, load]);
@@ -240,6 +281,14 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const complete = phase === "complete";
   completeRef.current = complete;
   const starsReady = complete && photos.some((p) => p.stars !== null);   // also true for a batch that is all 淘汰
+  // one stable handler for every row (Codex P3: rows are memoised and only re-render when their own data changes)
+  const tileAct = useRef<TileAct>(null as unknown as TileAct);
+  tileAct.current = {
+    pick: (id) => { setSelected(id); if (matchMedia("(max-width: 720px)").matches) panelRef.current?.scrollIntoView({ block: "start" }); },
+    open: (id) => { setSelected(id); viewerRef.current?.showModal(); },
+    group: (p) => { setSelected(p.id); setGroupOnly(p.burst_group); },
+    ref: (id, el) => { if (el) tiles.current.set(id, el); else tiles.current.delete(id); },
+  };
   const rowState = (p: PhotoRow): RowState => (p.state === "done" ? "ready" : p.state === "failed" ? "failed"
     : p.state === "queued" && phase === "paused" ? "unscanned" : p.state);
 
@@ -565,34 +614,10 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
             e.preventDefault();
             step(e.key === "ArrowDown" ? 1 : -1);
           }}>
-            {view.length ? view.map((p) => {
-              const st = rowState(p), r = p.result, active = p.id === current?.id;
-              const name = r ? (r.rejected ? nameOf(r) : named(r.species).title) : ROW_LABEL[st];
-              const e = r?.exif ?? exifs[p.id];
-              return (
-                <button key={p.id} type="button" className="tile" data-state={st} aria-pressed={active} tabIndex={active ? 0 : -1}
-                  aria-describedby="photo-keys" aria-label={`${name}，${complete ? starLabel(p.stars) : "待定星级"}，${p.file}`}
-                  ref={(el) => { if (el) tiles.current.set(p.id, el); else tiles.current.delete(p.id); }}
-                  onClick={() => { setSelected(p.id); if (matchMedia("(max-width: 720px)").matches) panelRef.current?.scrollIntoView({ block: "start" }); }}
-                  onDoubleClick={() => { setSelected(p.id); viewerRef.current?.showModal(); }}>
-                  <Photo row={p} marks={marks} show={!!r || active} />
-                  <span className="row-result">{r && r.rejected && r.species?.label ? <span className="name dim" style={{ display: "block" }}>{name} · {named(r.species).title}</span>
-                    : r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">按连拍组修正</span>}
-                    {r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}</> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
-                    {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
-                    {fold && groupOnly === null && (p.burst_size ?? 1) > 1 && (
-                      <span className="pill more" role="link" title="只看这一组" onClick={(e) => { e.stopPropagation(); setSelected(p.id); setGroupOnly(p.burst_group); }}>+{(p.burst_size ?? 1) - 1}</span>
-                    )}
-                    {r && !r.rejected && r.flying !== null && <span className="pill">{r.flying ? "在飞" : "不在飞"}</span>}
-                    {r && <span className="small reason-line" style={{ display: "block" }}>
-                      {complete && p.star_reason ? p.star_reason : r.rejected ? "不参与标星" : r.eye_visible ? `眼睛可见 · 头部清晰度 ${sharpTxt(r.sharpness)}` : "眼睛未找到"}</span>}
-                    {st === "failed" && <span className="small reason-line" style={{ display: "block" }}>{p.error}</span>}
-                  </span>
-                  <span className="row-settings"><span className="file">{p.file}</span><br />
-                    {e && <span className="small">{e.focal_mm != null ? `${+e.focal_mm.toFixed(0)} mm` : "—"} · f/{e.aperture ?? "—"} · {e.shutter ?? "—"} s<br />ISO {e.iso ?? "—"} · {evText(e.ev)}</span>}</span>
-                </button>
-              );
-            }) : <p className="empty">{c.total ? "没有符合条件的照片。" : "这个文件夹里没有 ARW、DNG 或 JPG 照片。"}</p>}
+            {view.length ? view.map((p) => (
+              <Tile key={p.id} p={p} st={rowState(p)} active={p.id === current?.id} complete={complete} more={fold && groupOnly === null}
+                marks={marks} exif={p.result?.exif ?? exifs[p.id]} act={tileAct} />
+            )) : <p className="empty">{c.total ? "没有符合条件的照片。" : "这个文件夹里没有 ARW、DNG 或 JPG 照片。"}</p>}
           </div>
         </section>
         {current && <Inspector ref={panelRef} p={current} st={rowState(current)} marks={marks} setMarks={setMarks} complete={complete}

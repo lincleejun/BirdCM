@@ -456,6 +456,81 @@ def _pctl(ids: list[int], value, alone: float = 1.0) -> dict[int, float]:
     return dict(zip(have, percentiles([value(i) for i in have]))) if len(have) > 1 else {i: alone for i in have}
 
 
+def _spend(budget: int, cand: list[int], q: dict, seq: dict, pools: dict, burst_of: dict, blen: dict, c: "Config") -> list[int]:
+    """The greedy budget: repeatedly take the photo with the highest Q x d_species^(taken in its species) x
+    d_burst^(taken in its burst / allow). Photos of one species in one burst share both factors, so only that group's
+    best remaining photo (by Q, then capture order) can win; within a species, the species factor is common, so its
+    groups are kept in a heap without it. Only the groups touched by a pick are re-keyed: O(n log n) (Codex P1; the
+    old single heap re-scored every equal candidate of a species after each pick). Same order and ties as before."""
+    import heapq
+    taken_sp, taken_b = defaultdict(int), defaultdict(int)
+    members: dict = defaultdict(list)                               # (species, burst) -> photos, best first
+    for i in cand:
+        members[(pools[i], burst_of[i])].append(i)
+    for g in members:
+        members[g].sort(key=lambda i: (-q[i], seq[i]))
+    head = {g: 0 for g in members}
+    in_burst: dict = defaultdict(list)
+    for g in members:
+        in_burst[g[1]].append(g)
+
+    def burst_f(i: int) -> float:
+        allow = max(1.0, c.burst_share * blen[burst_of[i]])
+        kb = taken_b[burst_of[i]]
+        return c.d_burst ** (kb / allow if c.burst_share else kb)
+
+    def eff(i: int) -> float:                                       # the old expression, evaluated the same way
+        return q[i] * c.d_species ** taken_sp[pools[i]] * burst_f(i)
+
+    sp_heap: dict = defaultdict(list)                               # species -> heap of (-q*burst_f, seq, group, version)
+    gver = defaultdict(int)
+    for g, ids in members.items():
+        sp_heap[g[0]].append((-q[ids[0]] * burst_f(ids[0]), seq[ids[0]], g, 0))
+    for h in sp_heap.values():
+        heapq.heapify(h)
+    sver = defaultdict(int)
+
+    def clean(sp):
+        h = sp_heap[sp]
+        while h and h[0][3] != gver[h[0][2]]:
+            heapq.heappop(h)
+        return h[0] if h else None
+
+    def push_top(sp):
+        sver[sp] += 1
+        e = clean(sp)
+        if e is not None:
+            k = members[e[2]][head[e[2]]]
+            heapq.heappush(top, (-eff(k), seq[k], sp, sver[sp]))
+    top: list = []
+    for sp in sp_heap:
+        push_top(sp)
+    chosen: list[int] = []
+    while top and len(chosen) < budget:
+        _, _, sp, v = heapq.heappop(top)
+        if v != sver[sp]:
+            continue
+        e = clean(sp)
+        if e is None:
+            continue
+        g = e[2]
+        i = members[g][head[g]]
+        chosen.append(i)
+        taken_sp[sp] += 1
+        taken_b[g[1]] += 1
+        head[g] += 1
+        touched = {sp}
+        for h in in_burst[g[1]]:                                    # every group of this burst has a new burst factor
+            gver[h] += 1
+            if head[h] < len(members[h]):
+                j = members[h][head[h]]
+                heapq.heappush(sp_heap[h[0]], (-q[j] * burst_f(j), seq[j], h, gver[h]))
+            touched.add(h[0])
+        for t in touched:
+            push_top(t)
+    return chosen
+
+
 def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config", out: dict, seq: dict) -> None:
     """Strategy "select" (docs/stars.md): who gets a star is a budget spent greedily with diminishing returns per
     species and per burst; which star is decided by absolute conditions, not quotas."""
@@ -532,21 +607,7 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         x, a = res[i], area(i)
         return q[i] < c.q_floor or ((x.get("eye_p") or 0) < 0.5 and a is not None and a < c.weak_size and (pbq.get(i) or 0) <= 0.5)
     budget = round(c.keep * len(elig))
-    taken_sp, taken_b = defaultdict(int), defaultdict(int)
-    chosen: list[int] = []
-    heap = [(-q[i], seq[i], i, 0, 0) for i in elig if not weak(i)]
-    heapq.heapify(heap)
-    while heap and len(chosen) < budget:
-        neg, _, i, ks, kb = heapq.heappop(heap)
-        now = (taken_sp[pools[i]], taken_b[burst_of[i]])
-        if (ks, kb) != now:                                        # stale: re-score with the current counts
-            allow = max(1.0, c.burst_share * blen[burst_of[i]])          # stars a burst of this length can take before decay
-            eff = q[i] * c.d_species ** now[0] * c.d_burst ** (now[1] / allow if c.burst_share else now[1])
-            heapq.heappush(heap, (-eff, seq[i], i, *now))
-            continue
-        chosen.append(i)
-        taken_sp[pools[i]] += 1
-        taken_b[burst_of[i]] += 1
+    chosen = _spend(budget, [i for i in elig if not weak(i)], q, seq, pools, burst_of, blen, c)
     picked = set(chosen)
     floor = set()
     for sp, ids in by_pool.items():                               # every confirmed species: at least its best photo

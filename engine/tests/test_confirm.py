@@ -94,3 +94,16 @@ def test_variants_are_stored_on_the_shot(tmp_path):
     sid = st.create_scan(str(tmp_path), False, None, {}, "fp", [("/x/A1.ARW", 1, 1), ("/x/A2.ARW", 1, 1)], {"/x/A1.ARW": ["/x/A1-Enhanced-NR.dng"]})
     ph = {p["file"]: p for p in st.snapshot(sid)["photos"]}
     assert ph["A1.ARW"]["variants"] == ["/x/A1-Enhanced-NR.dng"] and ph["A2.ARW"]["variants"] == [] and len(ph) == 2
+
+
+def test_a_variant_that_is_another_shot_becomes_its_own_photo(tmp_path):
+    """Codex P4: pairing is by name at once; the EXIF check runs afterwards and un-pairs a wrong one."""
+    from birdcm.store import Store
+    (tmp_path / "A1-Enhanced-NR.dng").write_bytes(b"x")
+    st = Store(tmp_path / "t.db")
+    main, var = str(tmp_path / "A1.ARW"), str(tmp_path / "A1-Enhanced-NR.dng")
+    sid = st.create_scan(str(tmp_path), False, None, {}, "fp", [(main, 1, 1)], {main: [var]})
+    st.set_state(sid, "completed")
+    st.unpair(sid, [(main, var)])
+    ph = {p["file"]: p for p in st.snapshot(sid)["photos"]}
+    assert ph["A1.ARW"]["variants"] == [] and ph["A1-Enhanced-NR.dng"]["state"] == "queued" and st.state(sid) == "queued"
