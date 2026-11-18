@@ -32,7 +32,7 @@ final class Flows:XCTestCase {
     }
     func reveal(_ id:String)->XCUIElement {
         let e=element(id)
-        for i in 0..<30 {
+        for i in 0..<60 {
             if e.exists && e.isHittable && clear(e,id) {return e}
             // Short slow drags with a hold (no momentum overshoot); alternate start points so neither the bottom bar nor the pager swallows every attempt.
             let y=[0.62,0.45,0.7,0.35][i%4], x=i%8<4 ? 0.94:0.06, up = !(e.exists && e.frame.maxY < 90)
@@ -111,6 +111,18 @@ final class Flows:XCTestCase {
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout:5));for _ in 0..<6 {app.swipeUp()}
         let last=rows.allElementsBoundByIndex.last!;XCTAssertTrue(clear(last,last.identifier));try shot("photos-last-row")
         tab("tab.stats","统计");XCTAssertTrue(reveal("stats.row.Haliaeetus leucocephalus").exists);try shot("stats-last-row")
+    }
+    /// 10,000 synthetic photos / 30,000 subjects: cold relaunch to a usable records grid, statistics and search (simulator timings).
+    func testTenThousandColdStart() throws {
+        app.terminate();app.launchArguments=["-uiTesting","YES","-resetHistory","YES","-fixtureImage",image,"-fixtureState","normal","-seedSynthetic","10000"];app.launch()
+        XCTAssertTrue(element("home.photos").waitForExistence(timeout:120))
+        app.terminate();app.launchArguments=["-uiTesting","YES","-resetHistory","NO","-fixtureImage",image,"-fixtureState","normal"]
+        var t=Date();app.launch();XCTAssertTrue(element("home.photos").waitForExistence(timeout:60));print(String(format:"PERF cold launch to 识别 %.2f s",Date().timeIntervalSince(t)))
+        t=Date();tab("tab.records","记录");XCTAssertTrue(app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'records.species.'")).firstMatch.waitForExistence(timeout:30));print(String(format:"PERF records species grid %.2f s",Date().timeIntervalSince(t)))
+        t=Date();segment("照片");outcome("history.sort");print(String(format:"PERF records photos %.2f s",Date().timeIntervalSince(t)))
+        t=Date();tab("tab.stats","统计");outcome("stats.species");print(String(format:"PERF statistics %.2f s",Date().timeIntervalSince(t)))
+        t=Date();tab("tab.explore","探索");segment("全部物种");search("hawk");XCTAssertTrue(app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'explore.row.'")).firstMatch.waitForExistence(timeout:30));print(String(format:"PERF explore search %.2f s (includes typing)",Date().timeIntervalSince(t)))
+        try shot("tenk-explore")
     }
     /// The installed app shows the K1 icon on the home screen.
     func testHomeScreenIcon() throws {
@@ -220,12 +232,13 @@ final class Flows:XCTestCase {
     }
     func testResultUnknownPrior() throws {try resultState("unknown-prior")}
     func testCropBackgroundSaveAndShare() throws {
+        // Revoking a privacy grant terminates a running app (TCC exit, seen in the full suite); reset before launching.
+        app.resetAuthorizationStatus(for:.photos)
         launch();pick();outcome("result.crop.0")
         // The simulator does not run Vision foreground segmentation: an explicit unsupported state, rectangle still usable.
         element("result.background").tap();outcome("result.maskUnsupported")
         XCTAssertFalse(element("result.background").exists);XCTAssertTrue(element("result.save").exists)
         try shot("background-unsupported")
-        app.resetAuthorizationStatus(for:.photos)
         element("result.save").tap()
         let spring=XCUIApplication(bundleIdentifier:"com.apple.springboard")
         XCTAssertTrue(spring.alerts.firstMatch.waitForExistence(timeout:5))
