@@ -86,6 +86,20 @@ def place_codes(label: str | None) -> tuple[str, str, str]:
     return country["en"], "", country["code"]
 
 
+def point_codes(lat: float, lon: float) -> tuple[str, str, str]:
+    """A point -> (location name in English, state/province code, country code), through the one point -> region
+    mapping (rarity.place_region: the global table's shapes when installed, else the bundled outlines)."""
+    from birdcm import rarity
+    div, country = rarity.place_region(lat, lon)
+    label = rarity.iso_label(div) or rarity.iso_label(country)
+    if label and (not div or rarity.iso_label(div)):
+        return place_codes(label)
+    if not country:
+        return "", "", ""
+    en = (rarity.region_names(div or country) or (div or country,))[0]
+    return (f"{en} {country}" if div else en), (div.split("-", 1)[1] if div else ""), country
+
+
 def _effective(p: dict) -> dict | None:
     """The photo's burst-corrected species when confirmed; a rejected photo counts when its own species is confirmed."""
     r = p.get("result")
@@ -162,17 +176,15 @@ def checklists(photos: list[dict], location, keep: set[str] | None = None) -> li
         if cell[0] == "gps":
             lat = min(89.99999, max(-89.99999, sum(g[0] for _, _, g in items) / len(items)))
             lon = sum(g[1] for _, _, g in items) / len(items)
-            hit = geo.locate(lat, lon)
-            name, state, country = place_codes(hit[1] or hit[0]) if hit else ("", "", "")
+            name, state, country = point_codes(lat, lon)
             name = f"{name} {lat:.4f} {lon:.4f}".strip()
         else:
             lat = lon = None
             name, state, country = place_codes(location_label(location) if src == "region" else label)
             if pt and src != "region":
                 lat, lon = pt[0], pt[1]
-                hit = geo.locate(lat, lon)
-                if hit:
-                    name, state, country = place_codes(hit[1] or hit[0])
+                if (codes := point_codes(lat, lon))[2]:
+                    name, state, country = codes
                 name = f"{name} {lat:.4f} {lon:.4f}".strip()
         out.append({"key": f"{day.isoformat()}|{cell}", "date": day.strftime("%m/%d/%Y"), "start": times[0].strftime("%H:%M"),
                     "minutes": max(1, math.ceil((times[-1] - times[0]).total_seconds() / 60)),

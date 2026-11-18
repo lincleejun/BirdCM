@@ -90,15 +90,9 @@ def score_both(rows: list[dict]) -> dict:
 
 def region_label(lat: float, lon: float) -> str | None:
     """The place-list label ("国家 · 州/省" or "国家") of the division or country around a point."""
-    from birdcm import geo, rarity
-    key = rarity.region_key(lat, lon)
-    if not key:
-        return None
-    c = next((c for c in geo.countries() if c["code"] == key[0]), None)
-    if not c:
-        return None
-    sub = next((zh for cz, zh, en, *_ in rarity._divisions() if cz == c["zh"] and en == key[1]), None) if key[1] else None
-    return f'{c["zh"]} · {sub}' if sub else c["zh"]
+    from birdcm import rarity
+    div, country = rarity.place_region(lat, lon)
+    return rarity.iso_label(div) or rarity.iso_label(country)
 
 
 def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit: int | None = None,

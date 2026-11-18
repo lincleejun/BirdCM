@@ -7,6 +7,7 @@ import multiprocessing as mp
 import sqlite3
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -58,6 +59,9 @@ def check_location(loc) -> None:
         raise ValueError("位置要有合法的经纬度（纬度 −90–90，经度 −180–180），来源是 map / device / region")
     if not isinstance(loc.get("label", ""), str) or len(loc.get("label", "")) > 200:
         raise ValueError("位置名称要是文字")
+    code = loc.get("code")
+    if code is not None and not (isinstance(code, str) and re.fullmatch(r"[A-Z]{2}(-[A-Z0-9]{1,3})?", code)):
+        raise ValueError("地区代码要是 ISO 3166 代码（如 US、US-CA）")
 
 
 def slim_result(res: dict | None, subject: int | None) -> dict | None:

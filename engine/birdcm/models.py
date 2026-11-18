@@ -62,7 +62,8 @@ FETCH_HINT = "Mac 应用：在菜单栏的观羽图标里下载模型；从源�
 # What the app does without an optional file (models.toml optional = true).
 OPTIONAL_EFFECT = {"clear": "没有“清楚的鸟”判断：每个检测框都当作鸟来认",
                    "aesthetic": "没有美学分：星级只用其余的信号",
-                   "rarity": "没有本地稀有度和 IUCN 等级：显示“数据不足”"}
+                   "rarity": "没有本地稀有度和 IUCN 等级：显示“数据不足”",
+                   "rarity-global": "没有全球稀有度表：本地稀有度只覆盖美国、加拿大、中国，其他地方显示“数据不足”"}
 
 
 def status() -> dict:
@@ -71,8 +72,10 @@ def status() -> dict:
     files = [{"name": e["name"], "role": e["role"], "path": str(p) if (p := locate(e)) else None,
               "optional": bool(e.get("optional")), "released": e.get("released", True)} for e in manifest()["file"]]
     missing = [f["name"] for f in files if not f["path"] and not f["optional"]]
+    have = {f["role"] for f in files if f["path"]}
     opt = [{"name": f["name"], "role": f["role"], "released": f["released"], "effect": OPTIONAL_EFFECT.get(f["role"], "")}
-           for f in files if not f["path"] and f["optional"]]
+           for f in files if not f["path"] and f["optional"]
+           and not (f["role"] == "rarity" and "rarity-global" in have)]      # the global table replaces the older one
     return {"ready": not missing, "files": files, "missing": missing, "optional_missing": opt, "fetch": "birdcm models fetch",
             "fetch_hint": FETCH_HINT}
 
@@ -95,8 +98,10 @@ def paths() -> dict[str, Path]:
 
 def digest() -> str:
     """The models' part of the result fingerprint: which file (sha256) fills which role; an optional file that is not
-    here counts as absent, so results made with and without it never mix."""
-    roles = sorted((e["role"], e["sha256"] if not e.get("optional") or locate(e) else "absent") for e in manifest()["file"])
+    here counts as absent, so results made with and without it never mix. An entry marked neutral_when_absent (added
+    to the manifest later) leaves the digest as it was while it is absent: adding it must not make every scan stale."""
+    roles = sorted((e["role"], e["sha256"] if not e.get("optional") or locate(e) else "absent") for e in manifest()["file"]
+                   if not (e.get("neutral_when_absent") and not locate(e)))
     return hashlib.sha256(json.dumps(roles).encode()).hexdigest()[:16]
 
 
