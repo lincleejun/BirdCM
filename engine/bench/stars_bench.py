@@ -52,13 +52,35 @@ def load(name: str, src: str, scan: int | None):
     return stems, keep, res, gard, supk
 
 
-def evaluate(name: str, stems, keep, res, gard, supk, table) -> list[dict]:
+def burst_metrics(stems, keep, selected: set, bursts: dict, order: dict) -> dict:
+    """Burst-level hit (kept bursts with any star; starred bursts holding a keep) and near hit (a keep that is starred or
+    has a starred neighbour, one frame either side in capture order, in its burst)."""
+    kb = {b for b, ss in bursts.items() if any(keep[x] for x in ss)}
+    sb = {b for b, ss in bursts.items() if any(x in selected for x in ss)}
+    near = 0
+    for b, ss in bursts.items():
+        seqd = sorted(ss, key=lambda x: order[x])
+        for k, x in enumerate(seqd):
+            if keep[x] and any(y in selected for y in seqd[max(0, k - 1):k + 2]):
+                near += 1
+    return {"burst_recall": round(len(kb & sb) / len(kb), 3) if kb else None, "burst_precision": round(len(kb & sb) / len(sb), 3) if sb else None,
+            "near_hit": near}
+
+
+def evaluate(name: str, stems, keep, res, gard, supk, table, grid=None) -> list[dict]:
     rows = [{"id": n, "result": res[s]} for n, s in enumerate(stems)]
     K = sum(keep[s] for s in stems)
     eligible = sum(1 for s in stems if res[s] and not res[s]["rejected"])
     own = round(100 * K / eligible, 1)
-    grid = [("quota 30/30", {"strategy": "quota"})] + [(f"select {k}%", {"keep": k}) for k in (25, 20, 10)] \
-        + [(f"select {own}% (= owner's keep share)", {"keep": own})]
+    if grid:
+        grid = [(label, {**cfg, "keep": own if cfg.get("keep") == "own" else cfg.get("keep", 25)}) for label, cfg in grid]
+    else:
+        grid = [("quota 30/30", {"strategy": "quota"})] + [(f"select {k}%", {"keep": k}) for k in (25, 20, 10)] \
+            + [(f"select {own}% (= owner's keep share)", {"keep": own})]
+    import random
+    from birdcm.stars import _seconds
+    order = {s: (_seconds((res[s] or {}).get("exif", {}).get("taken_at")) or 0, s) for s in stems}
+    elig_stems = [s for s in stems if res[s] and not res[s]["rejected"]]
     out = []
     for label, cfg in grid:
         r = rate(rows, cfg, rarity=table)
@@ -73,6 +95,15 @@ def evaluate(name: str, stems, keep, res, gard, supk, table) -> list[dict]:
             hit = sum(keep[s] for s in t)
             row[nm] = {"n": len(t), "keeps": hit, "recall": round(hit / K, 3) if K else None, "precision": round(hit / len(t), 3) if t else None}
         row["random_at_N"] = round(N * K / len(stems), 1)
+        bursts_s = defaultdict(list)
+        for n, s in enumerate(stems):
+            bursts_s[r[n]["burst_group"]].append(s)
+        row.update(burst_metrics(stems, keep, set(sel), bursts_s, order))
+        rng = random.Random(0)
+        sims = [burst_metrics(stems, keep, set(rng.sample(elig_stems, min(N, len(elig_stems)))), bursts_s, order) for _ in range(100)]
+        row["random_burst_recall"] = round(sum(x["burst_recall"] or 0 for x in sims) / len(sims), 3)
+        row["random_burst_precision"] = round(sum(x["burst_precision"] or 0 for x in sims) / len(sims), 3)
+        row["random_near_hit"] = round(sum(x["near_hit"] for x in sims) / len(sims), 1)
         row["gardener_at_N"] = sum(keep[s] for s in sorted(stems, key=lambda s: gard.get(s, (0, 0, 0)), reverse=True)[:N])
         if supk:
             row["superpicky_at_N"] = sum(keep[s] for s in sorted(stems, key=lambda s: supk.get(s, (0, 0)), reverse=True)[:N])
@@ -98,10 +129,11 @@ def evaluate(name: str, stems, keep, res, gard, supk, table) -> list[dict]:
 
 def main() -> None:
     name, src = sys.argv[1], sys.argv[2]
-    scan = int(sys.argv[3]) if len(sys.argv) > 3 else None
+    scan = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] != "-" else None
     stems, keep, res, gard, supk = load(name, src, scan)
     table = Rarity(str(models.paths()["rarity"]))
-    print(json.dumps({"batch": name, "results": evaluate(name, stems, keep, res, gard, supk, table)}, ensure_ascii=False, indent=1))
+    grid = json.loads(sys.argv[4]) if len(sys.argv) > 4 else None
+    print(json.dumps({"batch": name, "results": evaluate(name, stems, keep, res, gard, supk, table, grid)}, ensure_ascii=False, indent=1))
 
 
 if __name__ == "__main__":

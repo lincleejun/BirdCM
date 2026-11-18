@@ -51,7 +51,7 @@ class Config:
     fly_boost: float = 0.15           # added to Q for a flying bird
     rare_boost: float = 0.05          # 少见 (and 0.1 for 罕见 / 无记录) locally this month
     size_full: float = 0.04           # box area share at which size counts fully
-    d_species: float = 0.995          # diminishing return per photo already starred of the same species (pool); set on a synthetic scan only
+    d_species: float = 0.999          # diminishing return per photo already starred of the same species (pool); docs/stars.md
     d_burst: float = 0.6              # ... of the same burst
     q_floor: float = 0.35             # below this Q a photo is not starred just to fill the budget
     weak_size: float = 0.005          # "weak" = eye not visible AND box share below this AND burst sharpness pct < 0.5
@@ -63,6 +63,10 @@ class Config:
     size3: float = 0.01               # box share at least this
     margin3: float = 0.05             # Q above the median Q of the starred photos of its species ("鸟都差不多" -> 2★)
     q2_min: float = 0.50              # 2★: Q at least this and (eye visible or flying)
+    w_burst: float = 0.15             # how long the burst is (frames, percentile over the scan's bursts): a long burst is a moment
+    burst_share: float = 0.5          # a burst of n frames may take about burst_share * n stars before d_burst bites (0 = flat)
+    alike: float = 0.10               # a 0★ frame whose head sharpness is within 10 % of its burst's starred frame (and aesthetic
+                                      # within 0.03) is "差不多，任选其一": the owner's choice among such frames looked arbitrary
     # ---- quota ----
     q3: float = 0.30
     q2: float = 0.30
@@ -398,6 +402,9 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
     for ids in by_pool.values():
         psp.update(_pctl(ids, sharp))
     pa = _pctl(elig, lambda i: res[i].get("aesthetic"))
+    # a long burst is a moment the photographer kept shooting: each photo carries its burst's length percentile
+    blen = {b: len(ids) for b, ids in by_burst.items()}
+    bl_pct = dict(zip(blen, percentiles(list(blen.values())))) if len(blen) > 1 else {b: 0.5 for b in blen}
     fc = {i: focus_class(res[i]) for i in elig}
 
     def area(i: int) -> float | None:
@@ -415,7 +422,8 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         sig = {"sharp_burst": (pbq.get(i), c.w_sharp_burst), "sharp_species": (psp.get(i), c.w_sharp_species),
                "eye": (x.get("eye_p"), c.w_eye), "size": (None if a is None else min(1.0, math.sqrt(a / c.size_full)), c.w_size),
                "focus": (focus, c.w_focus), "aesthetic": (pa.get(i), c.w_aes),
-               "detection": (None if det is None else min(1.0, max(0.0, (det - 0.1) / 0.6)), c.w_det)}
+               "detection": (None if det is None else min(1.0, max(0.0, (det - 0.1) / 0.6)), c.w_det),
+               "burst_length": (bl_pct[burst_of[i]], c.w_burst)}
         tw = sum(w for _, w in sig.values()) or 1.0
         base = sum((0.5 if v is None else v) * w for v, w in sig.values()) / tw      # a missing signal is neutral
         fly = c.fly_boost if (x.get("p_fly") or 0) >= 0.5 else 0.0
@@ -437,7 +445,8 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         neg, _, i, ks, kb = heapq.heappop(heap)
         now = (taken_sp[pools[i]], taken_b[burst_of[i]])
         if (ks, kb) != now:                                        # stale: re-score with the current counts
-            eff = q[i] * c.d_species ** now[0] * c.d_burst ** now[1]
+            allow = max(1.0, c.burst_share * blen[burst_of[i]])          # stars a burst of this length can take before decay
+            eff = q[i] * c.d_species ** now[0] * c.d_burst ** (now[1] / allow if c.burst_share else now[1])
             heapq.heappush(heap, (-eff, seq[i], i, *now))
             continue
         chosen.append(i)
@@ -458,13 +467,19 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         sel = [i for i in ids if i in picked]
         if sel:
             best_in_burst[b] = max(sel, key=lambda i: (q[i], -seq[i]))
+    def alike(i: int, j: int) -> bool:
+        a, b = res[i].get("sharpness"), res[j].get("sharpness")
+        ea, eb = res[i].get("aesthetic"), res[j].get("aesthetic")
+        return (a is not None and b is not None and abs(a - b) <= c.alike * max(a, b)
+                and (ea is None or eb is None or abs(ea - eb) <= 0.03))
     for i in elig:
         x = res[i]
         flying = (x.get("p_fly") or 0) >= 0.5
         name = _name(res[i], fixes.get(i))
         if i not in picked:
             other = best_in_burst.get(burst_of[i])
-            why = (f"同组 {res[other].get('file', '另一张')} 更好" if other is not None
+            why = (f"和同组 {res[other].get('file', '另一张')} 差不多，任选其一" if other is not None and alike(i, other)
+                   else f"同组 {res[other].get('file', '另一张')} 更好" if other is not None
                    else "整体质量不够，不为凑比例而给星" if weak(i) else "比例已满，排在后面")
             out[i].update(stars=0, star_reason=why)
             continue

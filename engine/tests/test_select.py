@@ -63,6 +63,7 @@ def test_near_identical_burst_gives_one_or_two_stars():
     o = run(burst + rest)
     assert 1 <= sum(1 for x in o[:6] if x["stars"] and x["stars"] > 0) <= 2
     assert any("同组" in x["star_reason"] for x in o[:6] if x["stars"] == 0)
+    assert any("任选其一" in x["star_reason"] for x in o[:6] if x["stars"] == 0)          # near-identical: either will do
 
 
 def test_a_scan_can_have_no_three_stars():
@@ -94,3 +95,14 @@ def test_old_shaped_settings_migrate_to_select():
     assert c.strategy == "select" and c.keep == 0.20
     assert Config.from_ratio({"strategy": "quota", "p3": 20, "p2": 30}).strategy == "quota"
     assert Config.from_ratio(None).strategy == "select" and Config.from_ratio(None).keep == 0.25
+
+
+def test_long_burst_may_take_more_than_a_short_one():
+    long = [photo(0.4 * k, sharp=3.0 + 0.3 * (k % 3), aes=0.6 + 0.01 * k) for k in range(20)]
+    short = [photo(100.0 + 0.4 * k, sp="Bb cc", sharp=3.0, aes=0.6) for k in range(2)]
+    rest = [photo(300.0 + 60 * j, sp=f"R{j} x", sharp=2.0, aes=0.5) for j in range(18)]
+    o = run(long + short + rest, keep=25)
+    n_long = sum(1 for x in o[:20] if (x["stars"] or 0) > 0)
+    assert n_long >= 3 and n_long > sum(1 for x in o[20:22] if (x["stars"] or 0) > 0)
+    flat = run(long + short + rest, keep=25, burst_share=0, w_burst=0)
+    assert sum(1 for x in flat[:20] if (x["stars"] or 0) > 0) < n_long
