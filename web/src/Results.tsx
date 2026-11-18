@@ -248,7 +248,9 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
 
   if (error && !scan) return <p className="error-text">{error}</p>;
   if (!scan) return <p className="hint">读取中…</p>;
-  const c = scan.counts, finished = c.done + c.failed;
+  // counts come from the rows on screen: scan events only arrive on state changes, photo events on every result
+  const c = { total: photos.length, done: photos.filter((p) => p.state === "done").length, failed: photos.filter((p) => p.state === "failed").length };
+  const finished = c.done + c.failed;
   const rejected = photos.filter((p) => p.result?.rejected).length;
   const copy = complete ? `已完成 · ${c.total} 张${c.failed ? `（${c.failed} 张失败）` : ""}`
     : `${phase === "paused" ? (scan.state === "failed" ? "出错已停" : "已停止") : scan.state === "stopping" ? "正在停止" : scan.state === "finalizing" ? "正在汇总" : "扫描中"} · 已完成 ${finished} / ${c.total}`;
