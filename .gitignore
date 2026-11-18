@@ -4,3 +4,4 @@ __pycache__/
 node_modules/
 web/dist/
 .DS_Store
+web/tsconfig.tsbuildinfo
