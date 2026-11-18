@@ -31,7 +31,12 @@ def main(argv: list[str] | None = None) -> int:
     v = sub.add_parser("serve", help="start the local web app")
     v.add_argument("--port", type=int, default=8765)
     v.add_argument("--no-open", action="store_true", help="do not open the browser")
+    sub.add_parser("admin", help="JSON commands for the macOS app (birdcm admin -h)").add_argument("args", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
+    from birdcm import admin
+    admin.apply_config()
+    if a.cmd == "admin":
+        return admin.main(a.args)
 
     if a.cmd == "models":
         from birdcm import models
