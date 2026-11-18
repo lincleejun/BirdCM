@@ -7,7 +7,8 @@ export const DEFAULT_KEEP: KeepSetting = { preset: "std", keep: 25 };
 
 export function keepOf(ratio: { preset?: string; keep?: number } | null | undefined): KeepSetting {
   const k = ratio?.keep;
-  if (typeof k === "number") return { preset: ratio?.preset ?? "custom", keep: k };
+  // the preset follows the value, never a stored label: {preset: "std", keep: 10} reads as 自定义 10 % (Codex I3)
+  if (typeof k === "number") return { preset: KEEP_PRESETS.find((x) => x[2] === k)?.[0] ?? "custom", keep: k };
   const p = KEEP_PRESETS.find((x) => x[0] === ratio?.preset);      // an older scan's {preset, p3, p2}: same preset, new ratio
   return p ? { preset: p[0], keep: p[2] } : DEFAULT_KEEP;
 }

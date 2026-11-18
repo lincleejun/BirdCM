@@ -184,11 +184,12 @@ def test_consensus_skips_rejected_and_single_frames_and_feeds_quotas():
 
 
 def test_consensus_carries_the_rare_flag_to_corrected_frames():
-    tk = lambda: {**sp("Tyrannus melancholicus", 1.0), "check": "rare"}               # noqa: E731
+    tk = lambda: {**sp("Tyrannus melancholicus", 1.0), "check": "rare", "prior": {"max": 0.15, "median": 0.016}}  # noqa: E731
     odd = sp("Tyrannus sp.", 0.99, level="genus", top=[("Tyrannus melancholicus", 0.13)])
     odd["top5"][0] = {"sci": "Tyrannus couchii", "en": "x", "zh": None, "p": 0.87}
     o = run(burst(tk(), tk(), tk(), odd))
     assert o[3]["species_fix"]["label"]["sci"] == "Tyrannus melancholicus" and o[3]["species_fix"]["check"] == "rare"
+    assert o[3]["species_fix"]["prior"] == {"max": 0.15, "median": 0.016}       # Codex I4: the evidence travels with the flag
 
 
 

@@ -66,7 +66,7 @@ def slim_result(res: dict | None, subject: int | None) -> dict | None:
         return None
     i = subject if subject is not None else res.get("subject")
     b = res["boxes"][i] if i is not None and i < len(res.get("boxes") or []) else None
-    return {"species": b["species"] if b else None, "rejected": res["rejected"], "reject_reason": res["reject_reason"],
+    return {"species": b["species"] if b else res.get("species"), "rejected": res["rejected"], "reject_reason": res["reject_reason"],
             "taken_at": res["exif"].get("taken_at"), "gps": res["exif"].get("gps")}
 
 
@@ -351,7 +351,15 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
 
     @api.put("/api/scans/{sid}/ratio")
     def ratio(sid: int, body: dict):
-        get_scan(sid)
+        """Changes the given star settings and keeps the others (a ratio change must not drop custom weights,
+        Codex I3); {"replace": true, ...} replaces the whole set."""
+        scan = get_scan(sid)
+        body = dict(body)
+        if not body.pop("replace", False):
+            body = {**(scan.get("ratio") or {}), **body}
+            if "keep" in body and "p3" in body and body.get("strategy") != "quota":   # an old {p3, p2} set: the new ratio wins
+                body.pop("p3", None)
+                body.pop("p2", None)
         try:
             stars.validate(body)
         except ValueError as e:
@@ -408,11 +416,13 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         rec = store.single(sid)
         path = str(stored_path(rec))
         try:
-            res = sched.submit(lambda e: e.identify(path, region, boxes)).result(timeout=600)
-            store.update_single(sid, result=res, subject=res["subject"], boxes=boxes, region=region, error=None)
+            res, fp = sched.submit(lambda e: (e.identify(path, region, boxes), e.fingerprint(region))).result(timeout=600)
+            store.update_single(sid, result=res, subject=res["subject"], boxes=boxes, region=region, error=None, fp=fp)
         except Exception as e:  # noqa: BLE001 - kept with the entry; the person can retry
-            store.update_single(sid, error=f"{type(e).__name__}: {e}"[:500], boxes=boxes, region=region)
-        return store.single(sid)
+            # the stored result, region and boxes stay one consistent set (the last success); only the error is new (Codex I6)
+            store.update_single(sid, error=f"{type(e).__name__}: {e}"[:500])
+        rec = store.single(sid)
+        return {**rec, "stale": single_stale(rec)}
 
     @api.post("/api/singles")
     async def upload(request: Request):
@@ -467,7 +477,8 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             if not 0 <= body.subject < n:
                 raise HTTPException(400, "没有这只鸟")
             store.update_single(sid, subject=body.subject)
-            return store.single(sid)
+            rec = store.single(sid)
+            return {**rec, "stale": single_stale(rec)}
         try:
             check_location(body.region)
         except ValueError as e:
@@ -477,17 +488,27 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             raise HTTPException(400, "框的坐标不对")
         return run_single(sid, body.region if body.region is not None else rec["region"], [box] if box else rec["boxes"])
 
+    def single_stale(rec: dict) -> bool:
+        """A history entry made under another fingerprint (models, rules, data) than this engine's now."""
+        if not rec.get("result"):
+            return False
+        try:
+            want = sched.engine.fingerprint(rec["region"]) if sched.engine else fingerprint(rec["region"])
+        except Exception:  # noqa: BLE001 - no models: nothing to compare with
+            return False
+        return rec.get("fp") != want
+
     @api.get("/api/singles")
     def list_singles():
         return [{k: r[k] for k in ("id", "name", "created_at", "region", "subject", "error")} |
-                {"result": slim_result(r["result"], r["subject"])} for r in store.singles()]
+                {"result": slim_result(r["result"], r["subject"]), "stale": single_stale(r)} for r in store.singles()]
 
     @api.get("/api/singles/{sid}")
     def get_single(sid: int):
         rec = store.single(sid)
         if not rec:
             raise HTTPException(404, "没有这条记录")
-        return rec
+        return {**rec, "stale": single_stale(rec)}
 
     @api.get("/api/singles/{sid}/image")
     def single_image(sid: int, size: str = "preview"):

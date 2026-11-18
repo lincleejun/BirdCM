@@ -75,3 +75,24 @@ export function MarkControls({ m, set, missing = {} }: { m: MarkSet; set: (m: Ma
     </div>
   );
 }
+
+/** Why the naming reads as it does, the same on the batch page and for one photo (Codex I5): a possible rare record,
+ * a name ruled out by the place and season, a look-alike flip in a burst, or simply an unclear picture. */
+export function Verdict({ sp }: { sp: Species }) {
+  const pct = (p: number) => `${Math.round(p * 100)}%`;
+  const as = (n: Name) => named({ ...sp, label: n, level: "species" });
+  return (
+    <>
+      {sp.check === "rare" && <p className="rare-note"><span className="tbd">本地少见 · 请核对</span> 这里这个季节大部分地方很少有它
+        {sp.prior?.median != null && `（地区里一半地方的概率不到 ${(sp.prior.median * 100).toFixed(1)}%）`}，但不是不可能；可能是一条稀有记录。</p>}
+      {sp.override && (
+        <p className="fixed-note">图像最像：{as(sp.override.visual).title} <i>{sp.override.visual.sci}</i> {pct(sp.override.visual.p)}
+          · 但此地此季几乎没有它，所以只报到{sp.level === "genus" ? "属" : "“不确定”"}
+          {sp.override.local && <>；当地有的同属：{as(sp.override.local).title} <i>{sp.override.local.sci}</i></>}</p>
+      )}
+      {sp.lookalike && <p className="rare-note"><span className="tbd">近似种来回跳</span> 这一组同一只鸟在 {named(sp).title} 和 <i>{sp.lookalike}</i> 之间来回认，按多数算 {named(sp).title}；两种很像，请核对。</p>}
+      {sp.level === "uncertain" && !sp.override && <p className="hint">照片里的特征不够清楚，前几个候选把握都不高。</p>}
+      {sp.prior?.unknown && <p className="hint">地区模型里没有这个鸟种，没按地点修正。</p>}
+    </>
+  );
+}

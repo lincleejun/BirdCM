@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { del, get, post, upload } from "./api";
 import LocationPicker, { type Country, placeText } from "./Location";
-import { Candidates, named, SpName } from "./names";
+import { Verdict, Candidates, named, SpName } from "./names";
 import { nameOf } from "./Results";
 import type { Box, Detection, PhotoResult, Place, Species } from "./types";
 
 // Single photo + history, laid out like prototype/mobile.html's result page: photo on top, then reading order.
 interface Single {
+  stale?: boolean;
   id: number; name: string; created_at: number; region: string | Place | null; subject: number | null;
   boxes: Box[] | null; result: PhotoResult | null; error: string | null;
 }
@@ -186,7 +187,9 @@ function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick }: 
             <h1 tabIndex={-1} id="h-result" style={{ margin: 0 }}><SpName sp={sp} big /></h1>
             <span className="conf">{sure ? "初步把握" : "最高候选"} {pct(sure || sp?.level === "genus" ? sp!.label!.p : sp!.top5[0].p)}</span>
           </div>
-          {!sure && sp?.level !== "genus" && <p className="hint">照片里的特征不够清楚。</p>}
+          {sp && <Verdict sp={sp} />}
+          {rec.stale && <p className="hint">这是旧版本算的结果（模型、规则或地区数据变过）·
+            <button className="btn link" disabled={!!busy} onClick={() => onAct({})}>重新识别</button></p>}
           <p className="facts-inline">
             <strong>{b.p_fly == null ? "姿态未知" : b.p_fly >= 0.5 ? "在飞" : "不在飞"}</strong>
             {i === r.subject && r.rarity ? <><span>当地当月 <strong>{r.rarity.label}</strong></span>{r.rarity.iucn && <span>IUCN {r.rarity.iucn}</span>}</>

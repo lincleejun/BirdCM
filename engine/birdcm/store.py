@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS event (
 CREATE INDEX IF NOT EXISTS event_scan ON event(scan_id, n);
 CREATE TABLE IF NOT EXISTS single (
   id INTEGER PRIMARY KEY, stored TEXT NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, region TEXT,
-  boxes TEXT, subject INTEGER, result TEXT, error TEXT);
+  boxes TEXT, subject INTEGER, result TEXT, error TEXT, fp TEXT);
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
 TERMINAL = ("done", "failed")
@@ -48,10 +48,29 @@ def location(v):
     return v
 
 
+def present(v):
+    """A stored result as shown today: Chinese names from the current table, and no IUCN category anywhere when it is
+    switched off (BIRDCM_IUCN=0) — old batch, single and export results included (Codex I7)."""
+    from birdcm import rarity
+    v = relabel(v)
+    if not rarity.SHOW_IUCN:
+        def strip(x):
+            if isinstance(x, dict):
+                if "iucn" in x:
+                    x["iucn"] = None
+                for y in x.values():
+                    strip(y)
+            elif isinstance(x, list):
+                for y in x:
+                    strip(y)
+        strip(v)
+    return v
+
+
 def photo_row(r: sqlite3.Row) -> dict:
     d = dict(r)
-    d["result"] = relabel(json.loads(d["result"])) if d["result"] else None
-    d["species_fix"] = relabel(json.loads(d["species_fix"])) if d.get("species_fix") else None
+    d["result"] = present(json.loads(d["result"])) if d["result"] else None
+    d["species_fix"] = present(json.loads(d["species_fix"])) if d.get("species_fix") else None
     d["quality"] = json.loads(d["quality"]) if d.get("quality") else None
     d["variants"] = json.loads(d["variants"]) if d.get("variants") else []
     d["file"] = Path(d["path"]).name
@@ -71,6 +90,8 @@ class Store:
             for col in ("species_fix", "quality", "variants"):                 # databases from before these columns
                 if col not in have:
                     db.execute(f"ALTER TABLE photo ADD COLUMN {col} TEXT")
+            if "fp" not in {r[1] for r in db.execute("PRAGMA table_info(single)")}:
+                db.execute("ALTER TABLE single ADD COLUMN fp TEXT")
 
     def _db(self) -> sqlite3.Connection:
         """One connection per thread, autocommit (transactions are explicit)."""
@@ -150,6 +171,8 @@ class Store:
             key = (d["folder"], d["recursive"])
             if key in seen:
                 seen[key]["previous"].append(d["id"])
+                if d["state"] == "completed" and seen[key]["state"] != "completed" and not seen[key].get("last_completed"):
+                    seen[key]["last_completed"] = d["id"]          # the newest scan failed / paused: the last good one
                 if not every:
                     continue
             else:
@@ -172,7 +195,8 @@ class Store:
         if newer:
             st = db.execute("SELECT state FROM scan WHERE id = ?", (newer,)).fetchone()[0]
             info = {"id": newer, "state": st, "counts": self._counts(db, newer)}
-        return {"newer": info, "previous": prev}
+        cursor = db.execute("SELECT coalesce(max(n), 0) FROM event WHERE scan_id = ?", (scan_id,)).fetchone()[0]
+        return {"newer": info, "previous": prev, "cursor": cursor}      # cursor: another tab re-rated it (Codex I1)
 
     def scan(self, scan_id: int) -> dict | None:
         r = self._db().execute("SELECT * FROM scan WHERE id = ?", (scan_id,)).fetchone()
@@ -343,7 +367,7 @@ class Store:
     @staticmethod
     def _single(r: sqlite3.Row) -> dict:
         d = dict(r)
-        d["result"] = relabel(json.loads(d["result"])) if d["result"] else None
+        d["result"] = present(json.loads(d["result"])) if d["result"] else None
         d["boxes"] = json.loads(d["boxes"]) if d["boxes"] else None
         d["region"] = location(d["region"])
         return d
@@ -357,7 +381,7 @@ class Store:
         reg = f.get("region")
         cols = {"region": json.dumps(reg, ensure_ascii=False) if isinstance(reg, dict) else reg, "boxes": json.dumps(f["boxes"]) if f.get("boxes") is not None else None,
                 "subject": f.get("subject"), "result": json.dumps(f["result"], ensure_ascii=False) if f.get("result") else None,
-                "error": f.get("error")}
+                "error": f.get("error"), "fp": f.get("fp")}
         keys = [k for k in cols if k in f]
         if keys:
             self._write(lambda db: db.execute(f"UPDATE single SET {', '.join(k + ' = ?' for k in keys)} WHERE id = ?",

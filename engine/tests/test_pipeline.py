@@ -144,6 +144,7 @@ def test_clear_gate_rejects_and_forced_box_bypasses(tmp_path):
     fut.set_result({})
     _, r, _ = next(e._gpu([({"id": 1, "path": "/x/1", "size": 1, "mtime_ns": 1}, d)], {"/x/1": fut}, None))
     assert r["rejected"] and r["reject_reason"] == "没有清楚的鸟" and r["eye"] is None and r["boxes"][0]["eye"] is None
+    assert r["species"] is not None and r["species"] == r["boxes"][0]["species"]       # still names the bird
     fut2 = Future()
     fut2.set_result({})
     _, r, _ = next(e._gpu([({"id": 1, "path": "/x/1", "size": 1, "mtime_ns": 1, "boxes": [[0, 0, 1, 1]]}, d)], {"/x/1": fut2}, None))

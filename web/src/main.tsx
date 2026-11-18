@@ -88,11 +88,14 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
         {scans.length > 0 && (
           <div className="recent"><span className="label">最近的扫描</span>
             {scans.slice(0, 6).map((s) => (
-              <button key={s.id} onClick={() => onOpen(s.id)}>
-                {s.folder} · {s.counts.total} 张 · {STATE_LABEL[s.state]}
-                {["running", "queued", "stopping", "finalizing"].includes(s.state) && `（已完成 ${s.counts.done + s.counts.failed} / ${s.counts.total}）`}
-                {s.previous?.length ? ` · 之前扫过 ${s.previous.length} 次` : ""}
-              </button>
+              <div key={s.id} className="recent-row">
+                <button onClick={() => onOpen(s.id)}>
+                  {s.folder} · {s.counts.total} 张 · {STATE_LABEL[s.state]}
+                  {["running", "queued", "stopping", "finalizing"].includes(s.state) && `（已完成 ${s.counts.done + s.counts.failed} / ${s.counts.total}）`}
+                  {s.previous?.length ? ` · 之前扫过 ${s.previous.length} 次` : ""}
+                </button>
+                {s.last_completed && <button className="btn link" onClick={() => onOpen(s.last_completed!)}>上次完成的结果</button>}
+              </div>
             ))}
           </div>
         )}

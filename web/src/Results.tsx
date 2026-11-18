@@ -4,7 +4,7 @@ import { get, post, put } from "./api";
 const CHIPS = 3;                                   // species chips shown before "+n", so the bar stays one row at 1440 px
 import KeepControl, { KeepButton, keepOf, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, placeText } from "./Location";
-import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks } from "./names";
+import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks, Verdict } from "./names";
 import type { Exif, PhotoResult, PhotoRow, Place, Scan, Snapshot } from "./types";
 
 export const STATE_LABEL: Record<string, string> = { queued: "排队中", running: "扫描中", stopping: "正在停止", paused: "已停止",
@@ -43,7 +43,9 @@ export function nameOf(r: PhotoResult): string {
   return s.label.zh || s.label.en || s.label.sci;
 }
 const confirmed = (r: PhotoResult | null) => !!r && !r.rejected && r.species?.level === "species" && !!r.species.label;
-const speciesKey = (r: PhotoResult | null) => (confirmed(r) ? r!.species!.label!.sci : "");
+// the species a photo is about, rejected or not (a rejected photo still names its bird)
+const named_ = (r: PhotoResult | null) => !!r && r.species?.level === "species" && !!r.species.label;
+const speciesKey = (r: PhotoResult | null) => (named_(r) ? r!.species!.label!.sci : "");
 
 function Settings({ e }: { e: Partial<Exif> | null | undefined }) {
   if (!e) return <div className="settings"><span>读取拍摄信息…</span></div>;
@@ -144,7 +146,7 @@ function keepOld(id: number, set = false): boolean {
   } catch { return set; }
 }
 
-interface Related { newer: { id: number; state: Scan["state"]; counts: Scan["counts"] } | null; previous: number | null; stale: boolean }
+interface Related { newer: { id: number; state: Scan["state"]; counts: Scan["counts"] } | null; previous: number | null; stale: boolean; cursor?: number }
 
 export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav }: {
   scanId: number; onBack: () => void; onOpen: (id: number) => void; catalogue: Country[]; brand: ReactNode; nav: ReactNode }) {
@@ -157,6 +159,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const [error, setError] = useState("");
   const index = useRef(new Map<number, number>());
   const lastN = useRef(0);          // newest event seen (dedupe)
+  const completeRef = useRef(false);
   const snapN = useRef(-1);         // cursor of the snapshot on screen: events at or below it are already in it
   const pending = useRef<{ rows: Map<number, { n: number; row: PhotoRow }>; scan: { n: number; data: Partial<Scan> } | null }>({ rows: new Map(), scan: null });
   const flushTimer = useRef<number | null>(null);
@@ -214,7 +217,10 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     const poll = () => get<Related>(`/api/scans/${scanId}/related`).then((r) => {
       if (dead) return;
       setRel(r);
-      if (r.newer && Date.now() - lastTouch.current > 6000 && !document.querySelector("dialog[open]") && !keepOld(scanId)) onOpen(r.newer.id);
+      // settings or stars changed elsewhere (another tab) after this page finished listening: reload (Codex I1)
+      if (r.cursor != null && snapN.current >= 0 && r.cursor > lastN.current && completeRef.current) load();
+      // switch to a re-scan only once it has finished: a failed or paused one is no place to land (Codex I9)
+      if (r.newer?.state === "completed" && Date.now() - lastTouch.current > 6000 && !document.querySelector("dialog[open]") && !keepOld(scanId)) onOpen(r.newer.id);
     }).catch(() => {});
     poll();
     const t = window.setInterval(poll, 3000);
@@ -232,6 +238,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
 
   const phase: Phase = scan?.state === "completed" ? "complete" : scan && ["paused", "failed"].includes(scan.state) ? "paused" : "scanning";
   const complete = phase === "complete";
+  completeRef.current = complete;
   const starsReady = complete && photos.some((p) => p.stars !== null);   // also true for a batch that is all 淘汰
   const rowState = (p: PhotoRow): RowState => (p.state === "done" ? "ready" : p.state === "failed" ? "failed"
     : p.state === "queued" && phase === "paused" ? "unscanned" : p.state);
@@ -240,6 +247,11 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const [fs, setFs] = useState("all");
   const [fsp, setFsp] = useState("");
   const [allChips, setAllChips] = useState(false);
+  // look-alike flips: the corrected frames and the burst-mates they were corrected to (the whole group is the question)
+  const lookIds = useMemo(() => {
+    const groups = new Set(photos.filter((p) => p.result?.species?.lookalike).map((p) => p.burst_group));
+    return new Set(photos.filter((p) => groups.has(p.burst_group) && p.result && !p.result.rejected).map((p) => p.id));
+  }, [photos]);
   const rareIds = useMemo(() => new Set(photos.filter((p) => p.result?.species?.check === "rare" && !p.result.rejected).map((p) => p.id)), [photos]);
   const [ffly, setFfly] = useState("all");
   const [frar, setFrar] = useState("0");
@@ -265,18 +277,31 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const [fold, setFold] = useState(false);              // 连拍折叠: one row per burst, its best frame
   const view = useMemo(() => {
     const usesResults = fsp || ffly !== "all" || frar !== "0";
-    const v = photos.filter((p) => {
+    // filters first, then (folded) one row per burst: its best-ranked frame AMONG the matches (Codex I8)
+    const matches = (p: PhotoRow) => {
       if (onlyIds) return onlyIds.ids.has(p.id);
-      if (fold && groupOnly === null && (p.burst_rank ?? 1) > 1) return false;
       if (groupOnly !== null) return p.burst_group === groupOnly;
-      if (starsReady && fs !== "all" && (fs === "drop" ? (p.stars ?? 0) > 0 : p.stars !== +fs)) return false;
-      if (!usesResults) return true;
       const r = p.result;
-      if (!r || r.rejected) return false;
+      if (starsReady && fs !== "all") {
+        if (fs === "drop" ? !(p.stars != null && p.stars <= 0) : p.stars !== +fs) return false;
+      } else if (usesResults && r?.rejected) return false;     // rejected photos show only with 淘汰 / 不留
+      if (!usesResults) return true;
+      if (!r) return false;
       const t = r.rarity?.tier;
-      return (!fsp || (fsp === "unsure" ? !confirmed(r) : speciesKey(r) === fsp)) && (ffly === "all" || (ffly === "fly") === !!r.flying)
-        && (frar === "0" || (t != null && t > 0 && t <= +frar));
-    });
+      return (!fsp || (fsp === "unsure" ? !confirmed(r) && !r.rejected : speciesKey(r) === fsp)) && (ffly === "all" || (ffly === "fly") === !!r.flying)
+        && (frar === "0" || (t != null && t <= +frar));
+    };
+    let v = photos.filter(matches);
+    if (fold && groupOnly === null && !onlyIds) {
+      const best = new Map<number, PhotoRow>();
+      for (const p of v) {
+        const g = p.burst_group ?? -p.id;
+        const cur = best.get(g);
+        if (!cur || (p.burst_rank ?? 99) < (cur.burst_rank ?? 99)) best.set(g, p);
+      }
+      const keep = new Set([...best.values()].map((p) => p.id));
+      v = v.filter((p) => keep.has(p.id));
+    }
     const ready = (p: PhotoRow) => (p.result ? 1 : 0);
     const cmp: Record<string, (a: PhotoRow, b: PhotoRow) => number> = {
       queue: (a, b) => a.seq - b.seq,
@@ -423,9 +448,12 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
       {scan.state === "failed" && <p className="warn-strip stale" role="alert">扫描出错停下了：{scan.error ?? "原因未知"}</p>}
       {rel.newer ? (
         <p className="warn-strip" role="status">
-          {rel.newer.state === "completed" ? "这个文件夹已经重新扫描完了" : `这个文件夹正在重新扫描（已完成 ${rel.newer.counts.done + rel.newer.counts.failed} / ${rel.newer.counts.total}）`}
-          {" · "}<button className="btn link" onClick={() => onOpen(rel.newer!.id)}>查看新结果</button>
-          {!keepOld(scanId) && <span className="hint">（几秒钟没有操作就会自动切过去）</span>}
+          {rel.newer.state === "completed" ? "这个文件夹已经重新扫描完了"
+            : rel.newer.state === "failed" ? "这个文件夹的重新扫描出错停下了，这里仍是上次完成的结果"
+            : rel.newer.state === "paused" ? `这个文件夹的重新扫描已暂停（已完成 ${rel.newer.counts.done + rel.newer.counts.failed} / ${rel.newer.counts.total}）`
+            : `这个文件夹正在重新扫描（已完成 ${rel.newer.counts.done + rel.newer.counts.failed} / ${rel.newer.counts.total}）`}
+          {" · "}<button className="btn link" onClick={() => onOpen(rel.newer!.id)}>{rel.newer.state === "completed" ? "查看新结果" : "去看重新扫描"}</button>
+          {rel.newer.state === "completed" && !keepOld(scanId) && <span className="hint">（几秒钟没有操作就会自动切过去）</span>}
         </p>
       ) : rel.stale && (
         <p className="warn-strip stale">这些结果是旧版本算的（模型、地点修正或规则变过） · <button className="btn link" onClick={() => setRescanOpen(true)}>重新扫描</button></p>
@@ -454,6 +482,10 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
             {rareIds.size > 0 && (
               <button type="button" className="cull-chip rare" title="确认到种，但这里这个季节大部分地方很少有它：可能是稀有记录，请核对"
                 onClick={() => setOnlyIds({ ids: rareIds, label: "可能的稀有记录" })}>可能的稀有记录 {rareIds.size}</button>
+            )}
+            {lookIds.size > 0 && (
+              <button type="button" className="cull-chip rare" title="同一只鸟在两个很像的种之间来回认，已按多数统一；请核对"
+                onClick={() => setOnlyIds({ ids: lookIds, label: "近似种来回跳" })}>近似种来回跳，请核对 {lookIds.size}</button>
             )}
             {(allChips ? notable : notable.slice(0, CHIPS)).map((n) => (
               <button key={n.sci} type="button" className={`cull-chip rare${fsp === n.sci ? " on" : ""}`} title={n.why} onClick={() => setFsp(fsp === n.sci ? "" : n.sci)}>{n.name}<small>{n.tag}</small></button>
@@ -543,7 +575,8 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
                   onClick={() => { setSelected(p.id); if (matchMedia("(max-width: 720px)").matches) panelRef.current?.scrollIntoView({ block: "start" }); }}
                   onDoubleClick={() => { setSelected(p.id); viewerRef.current?.showModal(); }}>
                   <Photo row={p} marks={marks} show={!!r || active} />
-                  <span className="row-result">{r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">按连拍组修正</span>}
+                  <span className="row-result">{r && r.rejected && r.species?.label ? <span className="name dim" style={{ display: "block" }}>{name} · {named(r.species).title}</span>
+                    : r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">按连拍组修正</span>}
                     {r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}</> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
                     {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
                     {fold && groupOnly === null && (p.burst_size ?? 1) > 1 && (
@@ -622,17 +655,14 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
             {r!.rejected ? (
               <>
                 <div className="sp-cn">{r!.reject_reason ?? "没有找到鸟"}</div>
-                <p className="preview-note">{r!.boxes.length ? `检测到 ${r!.boxes.length} 个框，但都没有通过"清楚的鸟"判断，标为淘汰。` : "检测模型在这张照片里没有找到鸟，标为淘汰。"}</p>
+                <p className="preview-note">{r!.boxes.length ? `检测到 ${r!.boxes.length} 个框，但都没有通过"清楚的鸟"判断，标为淘汰（不参与标星）。` : "检测模型在这张照片里没有找到鸟，标为淘汰。"}</p>
+                {sp && <><p className="conf-line">照片淘汰，但鸟本身认得出：</p><SpName sp={sp} /><Verdict sp={sp} />
+                  <h4 className="panel-h">前 5 个候选</h4><Candidates sp={sp} /></>}
               </>
             ) : sp ? (
               <>
                 <SpName sp={sp} big />
-                {sp.check === "rare" && <p className="rare-note"><span className="tbd">本地少见 · 请核对</span> 这里这个季节大部分地方很少有它{sp.prior?.median != null && `（地区里一半地方的概率不到 ${(sp.prior.median * 100).toFixed(1)}%）`}，但不是不可能；可能是一条稀有记录。</p>}
-                {sp.override && (
-                  <p className="fixed-note">图像最像：{named({ ...sp, label: sp.override.visual, level: "species" }).title} <i>{sp.override.visual.sci}</i> {pct(sp.override.visual.p)}
-                    · 但此地此季几乎没有它，所以只报到{sp.level === "genus" ? "属" : "“不确定”"}{sp.override.local && <>；当地有的同属：{named({ ...sp, label: sp.override.local, level: "species" }).title} <i>{sp.override.local.sci}</i></>}</p>
-                )}
-                {sp.lookalike && <p className="rare-note"><span className="tbd">近似种来回跳</span> 这一组同一只鸟在 {named(sp).title} 和 <i>{sp.lookalike}</i> 之间来回认，按多数算 {named(sp).title}；两种很像，请核对。</p>}
+                <Verdict sp={sp} />
                 {r!.species_own && (
                   <p className="fixed-note"><span className="tbd">按连拍组修正</span> 这一组 {sp.consensus?.frames} 张里 {sp.consensus?.support} 张支持它；
                     这张自己最像 {named({ ...r!.species_own, label: r!.species_own.top5[0], level: "species" }).title} <i>{r!.species_own.top5[0]?.sci}</i>（{pct(r!.species_own.top5[0]?.p ?? 0)}），按连拍组改成它</p>

@@ -279,6 +279,27 @@ def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
     return out
 
 
+def same_look(a: dict, b: dict, same_species: bool, place: float = 0.05, size: float = 0.25, diff: float = 0.25) -> bool:
+    """Two frames show the same bird the same way: same species, subject centre within `place` (normalised), box
+    area within `size` of each other, and their 8 x 8 grey subject thumbnails (each normalised to zero mean, unit
+    spread) differ by at most `diff` on average. Missing evidence -> False (the reason then only says "评分接近")."""
+    if not same_species or a.get("subject") is None or b.get("subject") is None or not a.get("look") or not b.get("look"):
+        return False
+    ba, bb = a["boxes"][a["subject"]]["box"], b["boxes"][b["subject"]]["box"]
+    ca, cb = ((ba[0] + ba[2]) / 2, (ba[1] + ba[3]) / 2), ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)
+    if abs(ca[0] - cb[0]) > place or abs(ca[1] - cb[1]) > place:
+        return False
+    sa, sb = (ba[2] - ba[0]) * (ba[3] - ba[1]), (bb[2] - bb[0]) * (bb[3] - bb[1])
+    if min(sa, sb) <= 0 or abs(sa - sb) / max(sa, sb) > size:
+        return False
+    def norm(v):
+        m = sum(v) / len(v)
+        sd = (sum((x - m) ** 2 for x in v) / len(v)) ** 0.5 or 1.0
+        return [(x - m) / sd for x in v]
+    na, nb = norm(a["look"]), norm(b["look"])
+    return sum(abs(x - y) for x, y in zip(na, nb)) / len(na) <= diff
+
+
 def lookalikes(frames: list[tuple[int, dict]], fixes: dict[int, dict], near: float = 0.12) -> dict[int, dict]:
     """Two confirmed species of the same genus alternating inside one burst on the same bird (a look-alike pair the
     model flips between, e.g. Elegant / Royal Tern frame to frame): when one holds at least twice the frames of the
@@ -544,11 +565,16 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         sel = [i for i in ids if i in picked]
         if sel:
             best_in_burst[b] = max(sel, key=lambda i: (q[i], -seq[i]))
-    def alike(i: int, j: int) -> bool:
+    def close_scores(i: int, j: int) -> bool:
         a, b = res[i].get("sharpness"), res[j].get("sharpness")
         ea, eb = res[i].get("aesthetic"), res[j].get("aesthetic")
         return (a is not None and b is not None and abs(a - b) <= c.alike * max(a, b)
                 and (ea is None or eb is None or abs(ea - eb) <= 0.03))
+
+    def alike(i: int, j: int) -> bool:
+        """Really the same picture, not just close scores (Codex E3): same species, the bird in the same place and
+        size, and the subject's 8 x 8 grey thumbnails nearly equal."""
+        return close_scores(i, j) and same_look(res[i], res[j], pools[i] == pools[j])
     for i in elig:
         x = res[i]
         flying = (x.get("p_fly") or 0) >= 0.5
@@ -556,6 +582,7 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         if i not in picked:
             other = best_in_burst.get(burst_of[i])
             why = (f"和同组 {res[other].get('file', '另一张')} 差不多，任选其一" if other is not None and alike(i, other)
+                   else f"和同组 {res[other].get('file', '另一张')} 评分接近，选了那张" if other is not None and close_scores(i, other)
                    else f"同组 {res[other].get('file', '另一张')} 更好" if other is not None
                    else "整体质量不够，不为凑比例而给星" if weak(i) else "比例已满，排在后面")
             out[i].update(stars=0, star_reason=why)

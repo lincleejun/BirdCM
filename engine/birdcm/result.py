@@ -83,7 +83,8 @@ class PhotoResult(TypedDict):
     focus: Point | None             # trusted camera focus point; None when missing / default centre
     boxes: list[Detection]
     subject: int | None             # index into boxes; chosen among the clear ones
-    species: Species | None
+    look: NotRequired[list[int] | None]  # the subject as an 8 x 8 grey thumbnail (64 values): frame-to-frame likeness
+    species: Species | None         # also for a rejected photo (its likeliest box), when any box was looked at
     eye: Point | None               # the more visible eye
     eye_p: float | None             # its P(visible)
     eye_visible: bool | None

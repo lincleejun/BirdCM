@@ -304,4 +304,4 @@ def test_new_scan_of_a_folder_supersedes_the_old_one(store):
     assert {s["id"] for s in store.scans(every=True)} == {a, other, flat, b}
     r = store.related(a)
     assert r["newer"]["id"] == b and r["newer"]["counts"]["total"] == 2 and r["previous"] is None
-    assert store.related(b) == {"newer": None, "previous": a}
+    assert {k: v for k, v in store.related(b).items() if k != "cursor"} == {"newer": None, "previous": a}

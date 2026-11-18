@@ -404,3 +404,7 @@ main.res-main { padding-top: 0; }
 .hero-mark svg { width: min(56%, 260px); height: auto; color: #b8d6af; }
 .hero-name { font: 700 44px/1.1 var(--serif); letter-spacing: .1em; }
 .hero-tag { color: var(--mat-muted); font-size: 14px; letter-spacing: .08em; }
+.name.dim { color: var(--muted); }
+.recent-row { display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line); }
+.recent-row > button:first-child { border-bottom: 0; flex: 1; }
+.recent-row .btn.link { min-height: 0; padding: 2px 4px; font-size: 12px; white-space: nowrap; }

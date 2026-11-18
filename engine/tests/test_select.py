@@ -58,7 +58,8 @@ def test_dominant_species_does_not_swallow_the_budget():
 
 
 def test_near_identical_burst_gives_one_or_two_stars():
-    burst = [photo(0.4 * k, sharp=3.0 + 0.01 * k, aes=0.65) for k in range(6)]
+    look = [(k * 37) % 256 for k in range(64)]
+    burst = [photo(0.4 * k, sharp=3.0 + 0.01 * k, aes=0.65, look=look) for k in range(6)]
     rest = [photo(100.0 + 60 * j, sp=f"R{j} x", sharp=2.5, aes=0.6) for j in range(24)]
     o = run(burst + rest)
     assert 1 <= sum(1 for x in o[:6] if x["stars"] and x["stars"] > 0) <= 2
@@ -119,3 +120,21 @@ def test_floor_photos_are_marked_for_the_summary():
     ps = [photo(10.0 * i, sp="Big x", sharp=3.0, aes=0.7) for i in range(40)] + [photo(9000.0, sp="Lone y", sharp=1.5, aes=0.5)]
     o = run(ps, keep=10)
     assert o[40]["stars"] > 0 and o[40]["q_parts"].get("floor") == 1
+
+
+
+def test_either_will_do_only_for_frames_that_really_look_alike():
+    """Codex E3: same sharpness and aesthetic but a different picture (another pose / another place in the frame)
+    is "评分接近", not "任选其一"."""
+    a = [(k * 37) % 256 for k in range(64)]
+    b = [255 - v for v in a]                                            # the opposite picture
+    def two(look2, x2=0.4):
+        p1 = photo(0.0, sharp=3.0, aes=0.65, look=a)
+        p2 = photo(0.4, sharp=3.0, aes=0.65, look=look2)
+        p2["boxes"] = [{"box": [x2, 0.4, x2 + 0.17, 0.57], "score": 0.9}]
+        rest = [photo(100.0 + 60 * j, sp=f"R{j} x", sharp=2.5, aes=0.6) for j in range(10)]
+        o = run([p1, p2] + rest, keep=10)
+        return [x["star_reason"] for x in o[:2] if x["stars"] == 0]
+    assert any("任选其一" in r for r in two(a))
+    assert not any("任选其一" in r for r in two(b)) and any("评分接近" in r for r in two(b))
+    assert not any("任选其一" in r for r in two(a, x2=0.7))             # the bird elsewhere in the frame

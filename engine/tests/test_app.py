@@ -130,6 +130,11 @@ def test_singles_upload_switch_delete(env):
     calls = []
 
     class Eng:
+        fp = "fp1"
+
+        def fingerprint(self, region):
+            return self.fp
+
         def identify(self, path, region, boxes):
             calls.append((path, region, boxes))
             sp = {"level": "species", "label": {"sci": "A b", "en": "A", "zh": None, "p": 0.9}, "top5": [], "geo": False}
@@ -270,3 +275,90 @@ def test_bad_star_settings_are_refused_and_nothing_changes(env):
     for bad in ({"size_full": 0}, {"d_burst": -1}, {"eye3": 2}):
         assert c.put(f"/api/scans/{sid}/ratio", json=bad, headers=h).status_code == 400
     assert c.get(f"/api/scans/{sid}", headers=OK).json()["scan"]["ratio"] == before
+
+
+
+def test_ratio_change_keeps_the_other_settings(env):
+    """Codex I3: the UI sends {preset, keep}; custom weights set before must survive."""
+    c, api, tmp = env
+    h = {**OK, "X-BirdCM-Token": "tok"}
+    (tmp / "shoot").mkdir()
+    sid = c.post("/api/scans", json={"folder": str(tmp / "shoot"), "ratio": {"keep": 20, "w_eye": 0.3}}, headers=h).json()["id"]
+    assert c.put(f"/api/scans/{sid}/ratio", json={"preset": "stricter", "keep": 10}, headers=h).status_code == 200
+    r = c.get(f"/api/scans/{sid}", headers=OK).json()["scan"]["ratio"]
+    assert r["keep"] == 10 and r["w_eye"] == 0.3
+    assert c.put(f"/api/scans/{sid}/ratio", json={"replace": True, "keep": 25}, headers=h).status_code == 200
+    assert c.get(f"/api/scans/{sid}", headers=OK).json()["scan"]["ratio"] == {"keep": 25}
+
+
+def _single_env(env, fail_regions=()):
+    import io
+    from concurrent.futures import Future
+
+    from PIL import Image
+    c, api, tmp = env
+
+    class Eng:
+        fp = "fp1"
+
+        def fingerprint(self, region):
+            return self.fp
+
+        def identify(self, path, region, boxes):
+            if region in fail_regions:
+                raise RuntimeError("GPU gone")
+            sp = {"level": "species", "label": {"sci": "A b", "en": "A", "zh": None, "p": 0.9}, "top5": [], "geo": False,
+                  "rarity": {"iucn": "NT"}}
+            return {"subject": 0, "rejected": False, "reject_reason": None, "exif": {"taken_at": None, "gps": None},
+                    "rarity": {"tier": 4, "label": "常见", "iucn": "NT", "region": "X"},
+                    "boxes": [{"box": [0, 0, 0.5, 0.5], "species": sp}], "species": sp}
+    eng = Eng()
+
+    def submit(fn):
+        f = Future()
+        try:
+            f.set_result(fn(eng))
+        except Exception as e:  # noqa: BLE001
+            f.set_exception(e)
+        return f
+    api.state.scheduler.submit = submit
+    api.state.scheduler.engine = eng
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 30)).save(buf, "PNG")
+    h = {**OK, "x-birdcm-token": "tok"}
+    rec = c.post("/api/singles", files={"file": ("a.png", buf.getvalue())}, data={"region": "美国 · 加利福尼亚州"}, headers=h).json()
+    return c, h, rec, eng
+
+
+def test_failed_retry_keeps_the_last_consistent_result(env):
+    """Codex I6: a new place that fails must not sit beside the old place's result."""
+    c, h, rec, _ = _single_env(env, fail_regions=("美国 · 得克萨斯州",))
+    r = c.post(f"/api/singles/{rec['id']}/identify", json={"region": "美国 · 得克萨斯州"}, headers=h).json()
+    assert r["error"] and r["region"] == "美国 · 加利福尼亚州" and r["result"]["species"]["label"]["sci"] == "A b"
+
+
+def test_single_history_goes_stale_and_iucn_switch_applies_on_read(env, monkeypatch):
+    """Codex I7: history entries carry their fingerprint; BIRDCM_IUCN=0 hides IUCN in old results too."""
+    c, h, rec, eng = _single_env(env)
+    assert c.get(f"/api/singles/{rec['id']}", headers=OK).json()["stale"] is False
+    eng.fp = "fp2"
+    assert c.get(f"/api/singles/{rec['id']}", headers=OK).json()["stale"] is True
+    from birdcm import rarity
+    monkeypatch.setattr(rarity, "SHOW_IUCN", False)
+    r = c.get(f"/api/singles/{rec['id']}", headers=OK).json()["result"]
+    assert r["rarity"]["iucn"] is None and r["species"]["rarity"]["iucn"] is None
+
+
+def test_related_reports_cursor_and_last_good_scan(env):
+    """Codex I1 / I9: a finished page can see that the stars changed; a failed re-scan keeps the last good one in view."""
+    c, api, tmp = env
+    store = api.state.store
+    (tmp / "shoot").mkdir()
+    a = store.create_scan(str(tmp / "shoot"), False, None, {"keep": 20}, "fp", [])
+    store.set_state(a, "completed")
+    b = store.create_scan(str(tmp / "shoot"), False, None, {"keep": 20}, "fp", [])
+    store.set_state(b, "failed", error="x")
+    top = [s for s in store.scans() if s["folder"] == str(tmp / "shoot")][0]
+    assert top["id"] == b and top["last_completed"] == a
+    rel = c.get(f"/api/scans/{a}/related", headers=OK).json()
+    assert rel["newer"]["state"] == "failed" and "cursor" in rel

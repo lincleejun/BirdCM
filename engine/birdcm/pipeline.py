@@ -30,7 +30,7 @@ from birdcm.result import PhotoResult
 from birdcm.sharpness import head_sharpness
 
 SMALL_BOX = 128                 # a subject box shorter than this (2048-frame px) is cropped from the decode resolution
-PIPELINE_VERSION = 7            # bump when any step's output changes: old results stop being reused
+PIPELINE_VERSION = 8            # bump when any step's output changes: old results stop being reused
 SETTINGS = {"frame": decode.FRAME, "embedded_min": decode.EMBEDDED_MIN, "min_crop": geometry.MIN_CROP,
             "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR, "max_boxes": 5}
 DECODE_TIMEOUT = 120.0          # seconds one decode may run before its pool is killed and the file isolated
@@ -418,9 +418,20 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
     pick = geometry.choose_subject([(dets[i]["score"], dets[i]["box"]) for i in usable], focus, W, H)
     subject = usable[pick] if pick is not None else None
     s = dets[subject] if subject is not None else None
+    # a rejected photo still says what the bird is (rejection is about keeping the photo, not about the bird):
+    # the box the subject rule would pick among all of them
+    gone = None
+    if s is None and dets:
+        k = geometry.choose_subject([(x["score"], x["box"]) for x in dets], focus, W, H)
+        gone = dets[k]["species"] if k is not None else None
     sharp = None
     if s and d.get("gray") is not None and s["eye"] is not None:
         sharp = head_sharpness_of(d["gray"], s)
+    look = None
+    if s:                                   # a tiny grey thumbnail of the subject: "are these two frames alike" (stars.py)
+        x0, y0, x1, y1 = s["box"]
+        cut = Image.fromarray(d["frame"]).crop((int(x0 * fw), int(y0 * fh), max(int(x0 * fw) + 1, int(x1 * fw)), max(int(y0 * fh) + 1, int(y1 * fh))))
+        look = list(cut.convert("L").resize((8, 8), Image.Resampling.BOX).tobytes())
     ex = {k: exif.get(k) for k in ("camera", "camera_id", "lens", "focal_mm", "aperture", "shutter", "iso", "ev", "focus_mode", "taken_at", "gps")}
     reason = None if s else ("没有清楚的鸟" if dets else "没有找到鸟")
     return {
@@ -430,7 +441,7 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
                    "source": "photo" if ex["gps"] else ("scan" if region else None), "gps": ex["gps"],
                    "prior": {k: where[k] for k in ("lat", "lon", "source", "week")} if where else None},
         "focus": [round(v, 5) for v in focus] if focus else None, "boxes": dets, "subject": subject,
-        "species": s["species"] if s else None,
+        "species": s["species"] if s else gone,
         "eye": s["eye"] if s else None, "eye_p": s["eye_p"] if s else None,
         "eye_visible": (s["eye_p"] >= 0.5) if s and s["eye_p"] is not None else None,
         "beak": s["beak"] if s else None, "beak_p": s["beak_p"] if s else None,
@@ -438,7 +449,7 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         "clear": s["clear"] if s else (False if dets else None),
         "sharpness": sharp["score"] if sharp else None, "sharpness_region": sharp["region"] if sharp else None,
         "sharpness_window": sharp["window"] if sharp else None,
-        "aesthetic": None, "rarity": None,
+        "aesthetic": None, "rarity": None, "look": look,
         "rejected": s is None, "reject_reason": reason,
         "pending": (["aesthetic"] if s else []) + ([] if where else ["geo"]) + ["rarity"],
     }
