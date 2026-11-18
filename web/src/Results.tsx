@@ -210,8 +210,8 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
       fly: (a, b) => (b.result?.p_fly ?? 0) - (a.result?.p_fly ?? 0),
       eye: (a, b) => (b.result?.sharpness ?? -1) - (a.result?.sharpness ?? -1),
     };
-    if (sort === "queue" || sort === "time" || sort === "star") v.sort(cmp[sort]);
-    else v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp[sort](a, b) : a.seq - b.seq));
+    // finished photos first in the chosen order; the ones still waiting stay behind them in queue order
+    v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp[sort](a, b) : a.seq - b.seq));
     return v;
   }, [photos, fs, fsp, ffly, sort, starsReady]);
 

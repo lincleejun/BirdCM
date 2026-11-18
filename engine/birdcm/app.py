@@ -292,7 +292,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                                "thumb": str(thumb), "preview": str(preview)})
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(404, f"无法生成预览：{e}") from None
-        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, no-cache"})
 
     @api.get("/api/photos/{pid}/thumb")
     def thumb(pid: int):
@@ -406,7 +406,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         out = thumb if size == "thumb" else preview
         if not out.exists():
             previews.make({"path": str(path), "size": st.st_size, "mtime_ns": st.st_mtime_ns, "thumb": str(thumb), "preview": str(preview)})
-        return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+        return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, no-cache"})
 
     def remove(names: list[str]) -> None:
         for n in names:
