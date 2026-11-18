@@ -3,14 +3,12 @@
 in float16 on a GPU, the names product and softmax in float32."""
 from __future__ import annotations
 
-import csv
-from pathlib import Path
-
 import numpy as np
 import torch
 from PIL import Image
 from safetensors.torch import load_file
 
+from birdcm import names
 from birdcm.detect import unpack
 from birdcm.geometry import SIZE
 
@@ -30,7 +28,6 @@ def level_of(p1: float, p2: float, genus_p: float) -> str:
         return "species"
     return "genus" if genus_p >= GENUS_P else "uncertain"
 EYE_VISIBLE = 0.5
-ZH = Path(__file__).with_name("data") / "names-zh.csv"
 
 
 def square(im: Image.Image) -> Image.Image:
@@ -57,8 +54,7 @@ class Tower:
         self.sci, self.en = [str(s) for s in z["scientific"]], [str(s) for s in z["common"]]
         genera, inverse = np.unique(np.array([str(t[5]) for t in z["taxonomy"]]), return_inverse=True)
         self.genera, self.genus_of = [str(g) for g in genera], torch.from_numpy(inverse).to(device)
-        with open(ZH, newline="", encoding="utf-8") as f:
-            self.zh = {r["scientific"]: r["zh"] for r in csv.DictReader(f)}
+        self.zh = names.zh()
         self.parts = {k: v.float().to(device) for k, v in load_file(parts).items()}
         self.flight = {k: v.float().to(device) for k, v in load_file(flight).items()}
         self.clear = {k: v.float().to(device) for k, v in load_file(clear).items()} if clear else None

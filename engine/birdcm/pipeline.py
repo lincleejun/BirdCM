@@ -37,13 +37,14 @@ MAX_BOXES = 5            # boxes looked at per photo (strongest first); ponytail
 
 
 def fingerprint(region, model_digest: str | None = None) -> str:
-    """Models (role -> sha256), bundled data (Chinese names), pipeline version, settings and the effective region: a
+    """Models (role -> sha256), bundled data (regions; Chinese names are joined at read time, names.py, so not here),
+    pipeline version, settings and the effective region: a
     stored result is reused only when this and the file's (size, mtime) match. An Engine passes the digest of the
     manifest it actually loaded (Engine.fingerprint)."""
     from birdcm import detect, tower
     cfg = {**SETTINGS, "det": [detect.FLOOR, detect.SECOND, detect.SECOND_TOP],
            "level": [tower.SPECIES_P, tower.SPECIES_MARGIN, tower.GENUS_P, tower.RANGE_EPS, tower.RANGE_TAU]}
-    data = hashlib.sha256(b"".join(f.read_bytes() for f in (tower.ZH, geo.REGIONS, geo.COUNTRIES, geo.INDEX))).hexdigest()[:16]
+    data = hashlib.sha256(b"".join(f.read_bytes() for f in (geo.REGIONS, geo.COUNTRIES, geo.INDEX))).hexdigest()[:16]
     from birdcm import rarity
     cfg["iucn"] = rarity.SHOW_IUCN
     cfg["geo_grid"] = geo.GRID

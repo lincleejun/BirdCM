@@ -12,6 +12,8 @@ import threading
 import time
 from pathlib import Path
 
+from birdcm.names import relabel
+
 SCHEMA = """
 PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS scan (
@@ -48,8 +50,8 @@ def location(v):
 
 def photo_row(r: sqlite3.Row) -> dict:
     d = dict(r)
-    d["result"] = json.loads(d["result"]) if d["result"] else None
-    d["species_fix"] = json.loads(d["species_fix"]) if d.get("species_fix") else None
+    d["result"] = relabel(json.loads(d["result"])) if d["result"] else None
+    d["species_fix"] = relabel(json.loads(d["species_fix"])) if d.get("species_fix") else None
     d["quality"] = json.loads(d["quality"]) if d.get("quality") else None
     d["file"] = Path(d["path"]).name
     return d
@@ -318,7 +320,7 @@ class Store:
     @staticmethod
     def _single(r: sqlite3.Row) -> dict:
         d = dict(r)
-        d["result"] = json.loads(d["result"]) if d["result"] else None
+        d["result"] = relabel(json.loads(d["result"])) if d["result"] else None
         d["boxes"] = json.loads(d["boxes"]) if d["boxes"] else None
         d["region"] = location(d["region"])
         return d

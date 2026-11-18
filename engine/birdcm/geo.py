@@ -47,6 +47,12 @@ def week_of(taken_at: str | None) -> int | None:
 
 
 @lru_cache(maxsize=1)
+def _region_en() -> dict[tuple[str, str], str]:
+    with open(REGIONS, newline="", encoding="utf-8") as f:
+        return {(r["country"], r["region"]): r["name_en"] for r in csv.DictReader(f)}
+
+
+@lru_cache(maxsize=1)
 def regions() -> dict[str, dict[str, tuple[float, float]]]:
     """country -> {region display name: (lat, lon)}, in file order."""
     out: dict[str, dict[str, tuple[float, float]]] = {}
@@ -68,7 +74,7 @@ def catalogue() -> list[dict]:
     out = []
     for c in countries():
         subs = regions().get(c["zh"], {})
-        out.append({**c, "regions": [{"zh": n, "lat": p[0], "lon": p[1]} for n, p in subs.items()]})
+        out.append({**c, "regions": [{"zh": n, "en": _region_en().get((c["zh"], n), ""), "lat": p[0], "lon": p[1]} for n, p in subs.items()]})
     return out
 
 
