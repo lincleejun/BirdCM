@@ -342,8 +342,20 @@ def lookalikes(frames: list[tuple[int, dict]], fixes: dict[int, dict], near: flo
     return out
 
 
-def rate(rows: list[dict], ratio: dict | None, rarity=None) -> dict[int, dict]:
-    """rows: {id, result (PhotoResult or None)} -> id: {stars, star_reason, burst_group, burst_rank, burst_size, q}."""
+def manual_species(own: dict | None, sci: str | None, names: dict | None = None) -> dict:
+    """The species block of a person's correction: sci None = 不确定. names: sci -> {en, zh} (for the label)."""
+    top5 = (own or {}).get("top5", [])
+    if sci is None:
+        return {"level": "uncertain", "label": None, "top5": top5, "geo": (own or {}).get("geo", False), "manual": True}
+    known = next((c for c in top5 if c["sci"] == sci), None) or {}
+    n = (names or {}).get(sci, {})
+    label = {"sci": sci, "en": known.get("en") or n.get("en"), "zh": known.get("zh") or n.get("zh"), "p": known.get("p")}
+    return {"level": "species", "label": label, "top5": top5, "geo": (own or {}).get("geo", False), "manual": True}
+
+
+def rate(rows: list[dict], ratio: dict | None, rarity=None, manual: dict[int, dict] | None = None) -> dict[int, dict]:
+    """rows: {id, result (PhotoResult or None)} -> id: {stars, star_reason, burst_group, burst_rank, burst_size, q}.
+    manual: id -> the person's species block (manual_species); it wins over burst consensus and the photo's own."""
     c = Config.from_ratio(ratio)
     res = {r["id"]: r.get("result") for r in rows}
     bursts = group_bursts([{"id": i, "camera": (x or {}).get("exif", {}).get("camera_id") or (x or {}).get("exif", {}).get("camera"),
@@ -356,6 +368,9 @@ def rate(rows: list[dict], ratio: dict | None, rarity=None) -> dict[int, dict]:
     for frames in members.values():
         fixes.update(consensus(frames))
         fixes.update(lookalikes(frames, fixes))
+    for i, sp in (manual or {}).items():                           # the person's word: manual > burst consensus > own
+        if i in res and res[i] is not None:
+            fixes[i] = sp
     if rarity is not None:                                         # a corrected frame shows its new species' rarity
         from birdcm.pipeline import rarity_for
         for i, fix in fixes.items():

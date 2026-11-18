@@ -18,7 +18,9 @@ export interface Species {
   override?: { why: "range"; visual: Name; local: Name | null };   // not confirmed: first name not expected here
   prior?: { max?: number; median?: number; unknown?: boolean };
   lookalike?: string;
-  closer?: Name;                                       // a look-alike congener this place expects at least twice as much                                  // burst fix: the look-alike name this frame flipped to
+  closer?: Name;
+  manual?: boolean;                                    // the person's correction (改正鸟种)
+  scope?: "one" | "burst" | "same";                                       // a look-alike congener this place expects at least twice as much                                  // burst fix: the look-alike name this frame flipped to
 }
 export interface Detection {
   box: Box; score: number; clear: boolean | null; species: Species;

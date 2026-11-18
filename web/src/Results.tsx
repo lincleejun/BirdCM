@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post, put } from "./api";
 const CHIPS = 3;                                   // species chips shown before "+n", so the bar stays one row at 1440 px
+import CorrectPanel, { type Pick, type Scope } from "./Correct";
 import ExportDialog from "./Export";
 import KeepControl, { KeepButton, keepOf, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, placeText } from "./Location";
@@ -88,7 +89,7 @@ const Tile = memo(function Tile({ p, st, active, complete, more, marks, exif: e,
       onClick={() => act.current.pick(p.id)} onDoubleClick={() => act.current.open(p.id)}>
       <Photo row={p} marks={marks} show={!!r || active} />
       <span className="row-result">{r && r.rejected && r.species?.label ? <span className="name dim" style={{ display: "block" }}>{name} · {named(r.species).title}</span>
-        : r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">按连拍组修正</span>}
+        : r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">{r.species?.manual ? "主人改正" : "按连拍组修正"}</span>}
         {r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}</> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
         {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
         {more && (p.burst_size ?? 1) > 1 && (
@@ -140,7 +141,7 @@ function exportRow(p: PhotoRow) {
     文件: p.file, 路径: p.path, 状态: p.state === "failed" ? "失败" : p.state === "done" ? "已识别" : "未扫描", 错误: p.error ?? "",
     星级: starLabel(p.stars), 理由: p.star_reason ?? "",
     中文名: l?.zh ?? "", 英文名: l?.en ?? "", 学名: l?.sci ?? (s ? named(s).sci : ""),
-    按连拍组修正: r?.species_own ? "是" : "", 原识别: r?.species_own ? `${named(r.species_own).title} · ${named(r.species_own).sci} · ${pct(r.species_own.top5[0]?.p ?? 0)}` : "",
+    按连拍组修正: r?.species_own && !r.species?.manual ? "是" : "", 鸟种来源: !r?.species ? "" : r.species.manual ? "手动改正" : r.species_own ? "连拍组修正" : "应用", 原识别: r?.species_own ? `${named(r.species_own).title} · ${named(r.species_own).sci} · ${pct(r.species_own.top5[0]?.p ?? 0)}` : "",
     识别结果: r ? nameOf(r) : "", 识别层级: s?.level ?? "", 把握: s?.label?.p ?? s?.top5[0]?.p ?? "",
     候选: s ? s.top5.map((c) => [c.zh, c.en, c.sci, pct(c.p)].filter(Boolean).join(" · ")).join(" / ") : "",
     在飞: r?.flying == null ? "" : r.flying ? "是" : "否", 在飞概率: r?.p_fly ?? "",
@@ -303,7 +304,6 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     return new Set(photos.filter((p) => groups.has(p.burst_group) && p.result && !p.result.rejected).map((p) => p.id));
   }, [photos]);
   const rareIds = useMemo(() => new Set(photos.filter((p) => p.result?.species?.check === "rare" && !p.result.rejected).map((p) => p.id)), [photos]);
-  const chipsN = Math.max(1, CHIPS - (rareIds.size > 0 ? 1 : 0) - (lookIds.size > 0 ? 1 : 0));   // one row at 1440 px
   const [ffly, setFfly] = useState("all");
   const [frar, setFrar] = useState("0");
   const [sort, setSort] = useState("queue");
@@ -322,6 +322,13 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     }
     return { list: [...m].sort((a, b) => a[1].localeCompare(b[1], "zh-CN")), unsure };
   }, [photos]);
+  const manualIds = useMemo(() => new Set(photos.filter((p) => p.result?.species?.manual).map((p) => p.id)), [photos]);
+  const inScan = useMemo(() => species.list.map(([sci, name]) => ({ sci, zh: name.split(" ")[0], en: name.split(" ").slice(1).join(" ") || null })), [species]);
+  // the person's word: sci = species, null = 不确定, undefined = undo; stars are re-rated on the server
+  const correct = useCallback(async (id: number, sci: string | null | undefined, scope: Scope) => {
+    await post(`/api/scans/${scanId}/corrections`, sci === undefined ? { photo_id: id, scope, undo: true } : { photo_id: id, scope, sci });
+    await load();
+  }, [scanId, load]);
 
   // "只看这一组": the list shows one burst, whatever the other filters say (they are kept, and come back on clearing)
   const [groupOnly, setGroupOnly] = useState<number | null>(null);
@@ -411,6 +418,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     } catch (e) { setError(String((e as Error).message)); }
   };
 
+  const chipsN = Math.max(0, CHIPS - (rareIds.size > 0 ? 1 : 0) - (lookIds.size > 0 ? 1 : 0) - (manualIds.size > 0 ? 1 : 0));   // one row at 1440 px
   if (error && !scan) return <p className="error-text">{error}</p>;
   if (!scan) return <p className="hint">读取中…</p>;
   // counts come from the rows on screen: scan events only arrive on state changes, photo events on every result
@@ -534,6 +542,9 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
               <button type="button" className="cull-chip rare" title="确认到种，但这里这个季节大部分地方很少有它：可能是稀有记录，请核对"
                 onClick={() => setOnlyIds({ ids: rareIds, label: "可能的稀有记录" })}>可能稀有 {rareIds.size}</button>
             )}
+            {manualIds.size > 0 && (
+              <button type="button" className="cull-chip" onClick={() => setOnlyIds({ ids: manualIds, label: "手动改正" })}>手动改正 {manualIds.size}</button>
+            )}
             {lookIds.size > 0 && (
               <button type="button" className="cull-chip rare" title="同一只鸟在两个很像的种之间来回认，已按多数统一；请核对"
                 onClick={() => setOnlyIds({ ids: lookIds, label: "近似种来回跳" })}>近似种请核对 {lookIds.size}</button>
@@ -622,6 +633,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
           </div>
         </section>
         {current && <Inspector ref={panelRef} p={current} st={rowState(current)} marks={marks} setMarks={setMarks} complete={complete}
+          inScan={inScan} onCorrect={correct}
           exif={current.result?.exif ?? exifs[current.id]} onOpen={openViewer} burst={burst} onPick={pick}
           groupOnly={groupOnly !== null} onGroupOnly={(on) => setGroupOnly(on ? current.burst_group : null)} />}
       </div>
@@ -647,8 +659,11 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
 interface Burst { members: PhotoRow[]; order: Map<number, number> }
 
 const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: MarkSet; setMarks: (m: MarkSet) => void; complete: boolean;
-  exif?: Exif; onOpen: () => void; burst: Burst | null; onPick: (id: number) => void; groupOnly: boolean; onGroupOnly: (on: boolean) => void }>(
-  function Inspector({ p, st, marks, setMarks, complete, exif, onOpen, burst, onPick, groupOnly, onGroupOnly }, ref) {
+  exif?: Exif; onOpen: () => void; burst: Burst | null; onPick: (id: number) => void; groupOnly: boolean; onGroupOnly: (on: boolean) => void;
+  inScan: Pick[]; onCorrect: (id: number, sci: string | null | undefined, scope: Scope) => Promise<void> }>(
+  function Inspector({ p, st, marks, setMarks, complete, exif, onOpen, burst, onPick, groupOnly, onGroupOnly, inScan, onCorrect }, ref) {
+  const [correcting, setCorrecting] = useState(false);
+  useEffect(() => setCorrecting(false), [p.id]);
   const r = p.result, ready = st === "ready" && !!r;
   const sp = r?.species, sure = confirmed(r), e = exif;
   const missing: Partial<Record<keyof MarkSet, string>> = r ? {
@@ -681,12 +696,20 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
               <>
                 <SpName sp={sp} big />
                 <Verdict sp={sp} />
-                {r!.species_own && (
+                {sp.manual && r!.species_own && (
+                  <p className="fixed-note"><span className="tbd">主人改正</span> 应用自己认的是 {named(r!.species_own).title}
+                    {r!.species_own.label && <> <i>{r!.species_own.label.sci}</i></>}</p>
+                )}
+                {!sp.manual && r!.species_own && (
                   <p className="fixed-note"><span className="tbd">按连拍组修正</span> 这一组 {sp.consensus?.frames} 张里 {sp.consensus?.support} 张支持它；
                     这张自己最像 {named({ ...r!.species_own, label: r!.species_own.top5[0], level: "species" }).title} <i>{r!.species_own.top5[0]?.sci}</i>（{pct(r!.species_own.top5[0]?.p ?? 0)}），按连拍组改成它</p>
                 )}
                 <p className="conf-line">{r!.species_own ? (sp.label?.p != null ? `这张自己给它 ${pct(sp.label.p)}` : "这张自己的前五里没有它")
                   : `${sure ? "把握" : "最高候选"} ${pct((sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p) ?? 0)}`} <span className="ref">· {!sp.geo ? "没有位置，只凭图像" : sp.prior?.unknown ? "地区模型里没有这个鸟种，没按地点修正" : "已按拍摄地点和季节修正"}</span></p>
+                {correcting ? <CorrectPanel own={sp.top5} inScan={inScan} current={sp.level !== "uncertain" ? sp.label?.sci ?? null : null}
+                    burst={(p.burst_size ?? 1) > 1} manual={!!sp.manual} onClose={() => setCorrecting(false)}
+                    onApply={(sci, scope) => onCorrect(p.id, sci, scope)} onUndo={(scope) => onCorrect(p.id, undefined, scope)} />
+                  : complete && <button type="button" className="btn slim" onClick={() => setCorrecting(true)}>改正鸟种</button>}
                 <h4 className="panel-h">{r!.species_own ? "这张自己的前 5 个候选" : "前 5 个候选"}</h4>
                 <Candidates sp={sp} />
               </>

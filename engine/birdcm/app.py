@@ -160,6 +160,18 @@ class EbirdBody(BaseModel):
     ids: list[int] | None = None              # only these photos (the current filter)
 
 
+class Correction(BaseModel):
+    photo_id: int
+    scope: str = "one"                        # one | burst | same (every photo of the scan named like this one)
+    sci: str | None = None                    # the right species; None = 不确定
+    undo: bool = False                        # remove the corrections of this scope instead
+
+
+class SingleCorrection(BaseModel):
+    sci: str | None = None
+    undo: bool = False
+
+
 class NewScan(BaseModel):
     folder: str
     recursive: bool = False
@@ -421,6 +433,56 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.get("/api/photos/{pid}/preview")
     def preview(pid: int, request: Request):
         return photo_file(pid, 1, request)
+
+    @api.get("/api/species")
+    def species_search(q: str = ""):
+        """Species by Chinese, English or Latin name (for correcting a photo's species)."""
+        from birdcm import names
+        return names.search(q[:100])
+
+    @api.post("/api/scans/{sid}/corrections")
+    def correct(sid: int, body: Correction):
+        """The person says what the bird is: for this photo, its burst, or every photo of the scan named like it.
+        Stored per file signature (survives re-scans); stars re-rated at once."""
+        from birdcm import names
+        get_scan(sid)
+        if body.scope not in ("one", "burst", "same"):
+            raise HTTPException(400, "范围只能是 one / burst / same")
+        if not body.undo and body.sci is not None and body.sci not in names.catalogue():
+            raise HTTPException(400, f"名录里没有这个学名：{body.sci}")
+        photos = store.snapshot(sid)["photos"]
+        me = next((p for p in photos if p["id"] == body.photo_id), None)
+        if not me:
+            raise HTTPException(404, "这次扫描里没有这张照片")
+
+        def named(p):
+            sp = p.get("species_fix") or (p.get("result") or {}).get("species") or {}
+            return (sp.get("label") or {}).get("sci") if sp.get("level") in ("species", "genus") else None
+        if body.scope == "one":
+            ids = [me["id"]]
+        elif body.scope == "burst":
+            ids = [p["id"] for p in photos if me["burst_group"] is not None and p["burst_group"] == me["burst_group"]] or [me["id"]]
+        else:
+            target = named(me)
+            ids = [p["id"] for p in photos if target is not None and named(p) == target] or [me["id"]]
+        if body.undo:
+            store.clear_corrections(ids)
+        else:
+            store.set_corrections(ids, body.sci, body.scope)
+        sched.rerate_now(sid)
+        return {"ok": True, "photos": len(ids)}
+
+    @api.post("/api/singles/{sid}/correct")
+    def correct_single(sid: int, body: SingleCorrection):
+        from birdcm import names
+        rec = store.single(sid)
+        if not rec:
+            raise HTTPException(404, "没有这条记录")
+        if not body.undo and body.sci is not None and body.sci not in names.catalogue():
+            raise HTTPException(400, f"名录里没有这个学名：{body.sci}")
+        store.update_single(sid, correction=None if body.undo else {"sci": body.sci, **(names.catalogue().get(body.sci or "", {}))})
+        rec = store.single(sid)
+        return {**rec, "stale": single_stale(rec)}
 
     @api.get("/api/scans/{sid}/ebird/plan")
     def ebird_plan(sid: int):

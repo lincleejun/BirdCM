@@ -29,9 +29,12 @@ CREATE INDEX IF NOT EXISTS photo_scan_state ON photo(scan_id, state);
 CREATE TABLE IF NOT EXISTS event (
   n INTEGER PRIMARY KEY AUTOINCREMENT, scan_id INTEGER NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS event_scan ON event(scan_id, n);
+CREATE TABLE IF NOT EXISTS correction (
+  path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, species TEXT, scope TEXT NOT NULL,
+  app TEXT, created_at REAL NOT NULL, PRIMARY KEY (path, size, mtime_ns));
 CREATE TABLE IF NOT EXISTS single (
   id INTEGER PRIMARY KEY, stored TEXT NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, region TEXT,
-  boxes TEXT, subject INTEGER, result TEXT, error TEXT, fp TEXT);
+  boxes TEXT, subject INTEGER, result TEXT, error TEXT, fp TEXT, correction TEXT);
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
 TERMINAL = ("done", "failed")
@@ -101,8 +104,10 @@ class Store:
             for col in ("species_fix", "quality", "variants"):                 # databases from before these columns
                 if col not in have:
                     db.execute(f"ALTER TABLE photo ADD COLUMN {col} TEXT")
-            if "fp" not in {r[1] for r in db.execute("PRAGMA table_info(single)")}:
-                db.execute("ALTER TABLE single ADD COLUMN fp TEXT")
+            have_s = {r[1] for r in db.execute("PRAGMA table_info(single)")}
+            for col in ("fp", "correction"):
+                if col not in have_s:
+                    db.execute(f"ALTER TABLE single ADD COLUMN {col} TEXT")
 
     def _db(self) -> sqlite3.Connection:
         """One connection per thread, autocommit (transactions are explicit)."""
@@ -320,6 +325,38 @@ class Store:
             self._scan_event(db, scan_id)
         self._write(go)
 
+    # ---- the person's species corrections: keyed by the file's signature, so they outlive re-scans and fingerprints --
+
+    def set_corrections(self, photo_ids: list[int], sci: str | None, scope: str) -> None:
+        """sci None = marked 不确定. app = what the app said (its own or burst-corrected name) when corrected."""
+        def go(db):
+            for pid in photo_ids:
+                r = db.execute("SELECT path, size, mtime_ns, result, species_fix FROM photo WHERE id = ?", (pid,)).fetchone()
+                if not r:
+                    continue
+                fix = json.loads(r["species_fix"]) if r["species_fix"] else None
+                own = (json.loads(r["result"]) or {}).get("species") if r["result"] else None
+                app = (fix if fix and not fix.get("manual") else own) or {}
+                app_name = (app.get("label") or {}).get("sci") if app.get("level") in ("species", "genus") else None
+                db.execute("INSERT OR REPLACE INTO correction (path, size, mtime_ns, species, scope, app, created_at) VALUES (?,?,?,?,?,?,?)",
+                           (r["path"], r["size"], r["mtime_ns"], sci, scope, app_name, time.time()))
+        self._write(go)
+
+    def clear_corrections(self, photo_ids: list[int]) -> None:
+        def go(db):
+            for pid in photo_ids:
+                db.execute("DELETE FROM correction WHERE (path, size, mtime_ns) = (SELECT path, size, mtime_ns FROM photo WHERE id = ?)", (pid,))
+        self._write(go)
+
+    def corrections_for(self, scan_id: int) -> dict[int, dict]:
+        """photo id -> {sci (None = 不确定), scope, app} for the photos of a scan that the person corrected."""
+        return {r[0]: {"sci": r[1], "scope": r[2], "app": r[3]} for r in self._db().execute(
+            "SELECT p.id, c.species, c.scope, c.app FROM photo p JOIN correction c ON c.path = p.path AND c.size = p.size "
+            "AND c.mtime_ns = p.mtime_ns WHERE p.scan_id = ?", (scan_id,))}
+
+    def all_corrections(self) -> list[dict]:
+        return [dict(r) for r in self._db().execute("SELECT path, species, scope, app, created_at FROM correction ORDER BY created_at")]
+
     def move_fp(self, scan_id: int, old: str, new: str) -> None:
         """Relabel a scan (and its photos, so they stay reusable) from an equivalent old fingerprint to the current one."""
         def go(db):
@@ -402,6 +439,7 @@ class Store:
         d["result"] = present(json.loads(d["result"])) if d["result"] else None
         d["boxes"] = json.loads(d["boxes"]) if d["boxes"] else None
         d["region"] = location(d["region"])
+        d["correction"] = json.loads(d["correction"]) if d.get("correction") else None
         return d
 
     def add_single(self, stored: str, name: str, region) -> int:
@@ -413,7 +451,8 @@ class Store:
         reg = f.get("region")
         cols = {"region": json.dumps(reg, ensure_ascii=False) if isinstance(reg, dict) else reg, "boxes": json.dumps(f["boxes"]) if f.get("boxes") is not None else None,
                 "subject": f.get("subject"), "result": json.dumps(f["result"], ensure_ascii=False) if f.get("result") else None,
-                "error": f.get("error"), "fp": f.get("fp")}
+                "error": f.get("error"), "fp": f.get("fp"),
+                "correction": json.dumps(f["correction"], ensure_ascii=False) if f.get("correction") is not None else None}
         keys = [k for k in cols if k in f]
         if keys:
             self._write(lambda db: db.execute(f"UPDATE single SET {', '.join(k + ' = ?' for k in keys)} WHERE id = ?",

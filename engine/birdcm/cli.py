@@ -12,6 +12,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("models", help="show model status; `models fetch` downloads what is missing")
     m.add_argument("action", nargs="?", choices=["status", "fetch"], default="status")
+    co = sub.add_parser("corrections", help="the species corrections made in the app (a test set, never for tuning)")
+    co.add_argument("action", choices=["export"])
+    co.add_argument("--out", help="CSV file (default: stdout)")
     s = sub.add_parser("scan", help="run the pipeline on a folder and print results (no database)")
     s.add_argument("folder")
     s.add_argument("--json", action="store_true", help="one JSON object per photo (JSON lines)")
@@ -53,6 +56,20 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  - {o['effect']}")
         print("ready" if st["ready"] else f"missing {len(st['missing'])}: {st['fetch_hint']}")
         return 0 if st["ready"] else 1
+
+    if a.cmd == "corrections":
+        import csv
+        from birdcm import config
+        from birdcm.store import Store
+        rows = Store(config.data_dir() / "birdcm.db").all_corrections()
+        f = open(a.out, "w", newline="", encoding="utf-8") if a.out else sys.stdout
+        w = csv.writer(f)
+        w.writerow(["file", "app_species", "corrected_species", "scope"])
+        for r in rows:
+            w.writerow([r["path"], r["app"] or "", r["species"] or "不确定", r["scope"]])
+        if a.out:
+            f.close()
+        return 0
 
     if a.cmd == "scan":
         return scan(a)

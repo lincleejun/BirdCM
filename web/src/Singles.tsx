@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { del, get, post, upload } from "./api";
 import LocationPicker, { type Country, placeText } from "./Location";
+import CorrectPanel from "./Correct";
 import { Verdict, Candidates, named, SpName } from "./names";
 import { nameOf } from "./Results";
 import type { Box, Detection, PhotoResult, Place, Species } from "./types";
@@ -8,6 +9,7 @@ import type { Box, Detection, PhotoResult, Place, Species } from "./types";
 // Single photo + history, laid out like prototype/mobile.html's result page: photo on top, then reading order.
 interface Single {
   stale?: boolean;
+  correction?: { sci: string | null; en?: string | null; zh?: string | null } | null;
   id: number; name: string; created_at: number; region: string | Place | null; subject: number | null;
   boxes: Box[] | null; result: PhotoResult | null; error: string | null;
 }
@@ -61,7 +63,8 @@ export default function Singles({ catalogue }: { catalogue: Country[] }) {
   };
 
   if (rec) return <Result rec={rec} busy={busy} err={err} catalogue={catalogue} onBack={() => { setRec(null); refresh(); }}
-    onAct={act} onDelete={() => remove(rec.id)} onPick={send} />;
+    onAct={act} onDelete={() => remove(rec.id)} onPick={send}
+    onCorrect={async (body) => { setRec(await post<Single>(`/api/singles/${rec.id}/correct`, body)); refresh(); }} />;
   return (
     <section className="single" aria-labelledby="h-single">
       <p className="kicker">认一张</p>
@@ -110,10 +113,12 @@ function Drop({ onFile, busy }: { onFile: (f: File) => void; busy: string }) {
   );
 }
 
-function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick }: {
+function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick, onCorrect }: {
   rec: Single; busy: string; err: string; catalogue: Country[]; onBack: () => void;
   onAct: (body: object, label?: string) => void; onDelete: () => void; onPick: (f: File) => void;
+  onCorrect: (body: object) => Promise<void>;
 }) {
+  const [correcting, setCorrecting] = useState(false);
   const r = rec.result;
   const [drawing, setDrawing] = useState(false);
   const [box, setBox] = useState<Box | null>(null);
@@ -124,7 +129,11 @@ function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick }: 
   const framing = (noBird && !rec.error) || drawing;
   const i = rec.subject ?? r?.subject ?? null;
   const b: Detection | null = r && i !== null ? r.boxes[i] ?? null : null;
-  const sp = b?.species ?? null;
+  const own = b?.species ?? null;
+  const cor = rec.correction;
+  // the person's correction wins; the app's own answer stays visible underneath
+  const sp = cor && own ? (cor.sci ? { ...own, level: "species" as const, manual: true, label: { sci: cor.sci, en: cor.en ?? null, zh: cor.zh ?? null, p: own.top5.find((c) => c.sci === cor.sci)?.p ?? 0 } }
+    : { ...own, level: "uncertain" as const, manual: true, label: null }) : own;
   const sure = sp?.level === "species" && !!sp.label;
   const multi = !!r && !r.rejected && r.boxes.filter((x) => x.clear !== false || rec.boxes).length > 1;
   const shown = r ? r.boxes.map((x, k) => ({ x, k })).filter(({ x }) => x.clear !== false || rec.boxes) : [];
@@ -187,7 +196,12 @@ function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick }: 
             <h1 tabIndex={-1} id="h-result" style={{ margin: 0 }}><SpName sp={sp} big /></h1>
             <span className="conf">{sure ? "初步把握" : "最高候选"} {pct(sure || sp?.level === "genus" ? sp!.label!.p : sp!.top5[0].p)}</span>
           </div>
-          {sp && <Verdict sp={sp} />}
+          {cor && own && <p className="fixed-note"><span className="tbd">主人改正</span> 应用自己认的是 {named(own).title}{own.label && <> <i>{own.label.sci}</i></>}</p>}
+          {sp && !cor && <Verdict sp={sp} />}
+          {own && (correcting
+            ? <CorrectPanel own={own.top5} inScan={[]} current={null} burst={false} manual={!!cor} onClose={() => setCorrecting(false)}
+                onApply={(sci) => onCorrect({ sci })} onUndo={() => onCorrect({ undo: true })} />
+            : <button type="button" className="btn slim" onClick={() => setCorrecting(true)}>改正鸟种</button>)}
           {rec.stale && <p className="hint">这是旧版本算的结果（模型、规则或地区数据变过）·
             <button className="btn link" disabled={!!busy} onClick={() => onAct({})}>重新识别</button></p>}
           <p className="facts-inline">

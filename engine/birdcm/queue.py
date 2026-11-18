@@ -122,7 +122,7 @@ class Scheduler:
         for _ in range(5):                                         # the settings may change while we compute: redo
             scan = self.store.scan(sid)
             try:
-                rating = stars.rate(self.store.rows_for_rating(sid), scan["ratio"], rarity=self._rarity())
+                rating = stars.rate(self.store.rows_for_rating(sid), scan["ratio"], rarity=self._rarity(), manual=self.manual(sid))
             except Exception as e:  # noqa: BLE001
                 traceback.print_exc()
                 self.store.set_state(sid, "failed", error=f"标星出错：{type(e).__name__}: {e}"[:500])
@@ -141,12 +141,32 @@ class Scheduler:
                 self._rarity_table = None
         return self._rarity_table
 
+    def manual(self, sid: int) -> dict[int, dict]:
+        """The person's corrections of this scan as species blocks for stars.rate."""
+        from birdcm import names
+        cor = self.store.corrections_for(sid)
+        if not cor:
+            return {}
+        own = {r["id"]: (r.get("result") or {}).get("species") for r in self.store.rows_for_rating(sid) if r["id"] in cor}
+        cat = names.catalogue()
+        return {i: {**stars.manual_species(own.get(i), c["sci"], cat), "scope": c["scope"]} for i, c in cor.items()}
+
+    def rerate_now(self, sid: int) -> None:
+        """Stars again with the current settings (after a correction), stored only if the settings did not change."""
+        for _ in range(5):
+            scan = self.store.scan(sid)
+            if not scan or scan["state"] != "completed":
+                return
+            rating = stars.rate(self.store.rows_for_rating(sid), scan["ratio"], rarity=self._rarity(), manual=self.manual(sid))
+            if self.store.write_rating(sid, rating, complete=False, ratio=scan["ratio"]):
+                return
+
     def set_ratio(self, sid: int, ratio: dict) -> None:
         """New star settings. A completed scan is re-rated first and the settings are stored together with their stars
         (ValueError / any rating error: nothing changes); otherwise only stored, finalize uses them."""
         scan = self.store.scan(sid)
         if scan and scan["state"] == "completed":
-            rating = stars.rate(self.store.rows_for_rating(sid), ratio, rarity=self._rarity())
+            rating = stars.rate(self.store.rows_for_rating(sid), ratio, rarity=self._rarity(), manual=self.manual(sid))
             self.store.write_rating(sid, rating, complete=False, ratio=ratio, set_ratio=True)
         else:
             self.store.set_ratio(sid, ratio)

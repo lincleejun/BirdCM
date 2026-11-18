@@ -28,3 +28,32 @@ def relabel(v):
         for x in v:
             relabel(x)
     return v
+
+
+@cache
+def catalogue() -> dict[str, dict]:
+    """Every AviList species: sci -> {en, zh} (English from the installed name list, Chinese from the table); {} when
+    the name list is not installed."""
+    import numpy as np
+    from birdcm import models
+    try:
+        z = np.load(models.paths()["names"])
+    except Exception:  # noqa: BLE001 - no models: corrections can still use names already in the scan
+        return {}
+    cn = zh()
+    return {str(s): {"en": str(e), "zh": cn.get(str(s))} for s, e in zip(z["scientific"], z["common"])}
+
+
+def search(q: str, limit: int = 30) -> list[dict]:
+    """Species whose Chinese, English or Latin name contains q (any case); exact and prefix matches first."""
+    q = q.strip().lower()
+    if not q:
+        return []
+    hits = []
+    for sci, n in catalogue().items():
+        keys = [sci.lower(), (n["en"] or "").lower(), n["zh"] or ""]
+        if any(q in k for k in keys):
+            rank = 0 if q in keys else 1 if any(k.startswith(q) for k in keys) else 2
+            hits.append((rank, sci, n))
+    hits.sort(key=lambda h: (h[0], h[1]))
+    return [{"sci": s, "en": n["en"], "zh": n["zh"]} for _, s, n in hits[:limit]]

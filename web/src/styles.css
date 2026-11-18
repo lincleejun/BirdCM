@@ -421,3 +421,8 @@ main.res-main { padding-top: 0; }
 .eb-table .warn { color: var(--rust); font-size: 12px; }
 .eb-n { width: 56px; min-height: 30px; }
 .eb-note { width: 100%; min-height: 30px; }
+.correct { border: 1px solid var(--line); border-radius: 9px; padding: 8px; margin: 8px 0; display: grid; gap: 6px; }
+.correct-list { list-style: none; margin: 0; padding: 0; max-height: 200px; overflow: auto; }
+.correct-list button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 5px 6px; color: inherit; }
+.correct-list button[aria-pressed=true] { background: var(--soft); box-shadow: inset 3px 0 0 var(--green); }
+.correct-list small { color: var(--muted); margin-left: 4px; }
