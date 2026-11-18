@@ -12,11 +12,16 @@ what this follows:
 - Common name and scientific name: either or both. eBird matches its own (Clements / eBird) taxonomy; names it does
   not know are fixed by hand in the import's "Fix Species" step.
 - Protocol: one word (Stationary, Traveling, Historical, Incidental). Incidental lists are never complete.
-- The column order follows the Record Format template. NOT verified against eBird's Data Fields PDF / sample XLS
-  (attachments, not read: downloading them needs the owner's permission). Order used, 19 columns:
-  common name, genus, species, number, species comments, location name, latitude, longitude, date, start time,
-  state/province, country, protocol, number of observers, duration (min), all observations reported (Y/N),
-  distance (miles), area (acres), submission comments.
+- Column order, types and limits: eBird's "Appendix A (eBird Data Fields)" PDF and the Record Format sample sheet,
+  linked from that page, read 2026-11-18. 19 columns, in this order (max length / range from Appendix A):
+  common name STRING(128) [common or scientific name required], genus STRING(64), species STRING(64),
+  species count NUMBER(0<x<999999, anything else = present), species comments STRING(4000), location name* TEXT(254),
+  latitude (-90<x<90), longitude (-180<=x<=180), observation date* MM/dd/yyyy, start time (kk:mm), state TEXT(3),
+  country TEXT(2), protocol, number of observers (x>0), duration minutes (0<x<1440), all observations reported Y/N,
+  distance miles (x>0), area acres (x>0), checklist (submission) comments TEXT(4000).
+- Protocol values: Appendix A (an older sheet) lists casual / stationary / traveling / area; the current upload page
+  says protocols "should be one word (e.g., Stationary, Traveling, Historical, or Incidental)". The current page's
+  terms are used: Incidental (default) and Stationary.
 
 Checklists: one per calendar day (camera clock) and place. The place is the scan's location; photos with their own GPS
 are grouped by a 0.01 degree cell (about 1 km). A chosen region gives no coordinates (its centre is not where the
@@ -49,10 +54,14 @@ def clements() -> dict[str, tuple[str, str]]:
         return {r["scientific"]: (r["clements_en"], r["ebird_code"]) for r in csv.DictReader(f)}
 
 
-def clean(v) -> str:
-    """One field as eBird accepts it: no quotation marks, no line breaks, no commas (there is no quoting)."""
+def clean(v, limit: int = 4000) -> str:
+    """One field as eBird accepts it: no quotation marks, no line breaks, no commas (there is no quoting), at most
+    `limit` characters (Appendix A)."""
     s = "" if v is None else str(v)
-    return " ".join(s.replace('"', "").replace(",", " ").split())
+    return " ".join(s.replace('"', "").replace(",", " ").split())[:limit]
+
+
+LIMITS = [128, 64, 64, 6, 4000, 254, 12, 12, 10, 5, 3, 2, 16, 4, 4, 1, 8, 8, 4000]   # per column (Appendix A)
 
 
 @lru_cache(maxsize=1)
@@ -151,7 +160,7 @@ def checklists(photos: list[dict], location, keep: set[str] | None = None) -> li
     for (day, cell), items in sorted(groups.items(), key=lambda kv: (kv[0][0], str(kv[0][1]))):
         times = sorted(t for t, _, _ in items)
         if cell[0] == "gps":
-            lat = sum(g[0] for _, _, g in items) / len(items)
+            lat = min(89.99999, max(-89.99999, sum(g[0] for _, _, g in items) / len(items)))
             lon = sum(g[1] for _, _, g in items) / len(items)
             hit = geo.locate(lat, lon)
             name, state, country = place_codes(hit[1] or hit[0]) if hit else ("", "", "")
@@ -189,15 +198,17 @@ def record_csv(photos: list[dict], location, species: list[str], counts: dict[st
             genus, _, epithet = sci.partition(" ")
             common = "" if genus_only else names.get(sci, ("", ""))[0] or (_effective(per[sci][0])["label"].get("en") or "")
             n = (counts or {}).get(sci) or "X"
+            if n.upper() != "X" and not (n.isdigit() and 0 < int(n) < 999999):
+                raise ValueError(f"{sci} 的数量要是 1–999998 的整数或 X")
             note = (comments or {}).get(sci) or ""
             if with_files:
                 note = (note + " " if note else "") + "photos: " + " ".join(Path(p["path"]).name for p in per[sci])
             row = [common, genus, epithet, n, note, cl["name"],
                    "" if cl["lat"] is None else f"{cl['lat']:.5f}", "" if cl["lon"] is None else f"{cl['lon']:.5f}",
                    cl["date"], cl["start"], cl["state"], cl["country"], protocol,
-                   "1" if protocol == "Stationary" else "", str(cl["minutes"]) if protocol == "Stationary" else "", "N",
+                   "1" if protocol == "Stationary" else "", str(min(cl["minutes"], 1439)) if protocol == "Stationary" else "", "N",
                    "", "", f"From BirdCM photo review ({len(cl['photos'])} photos); not a complete count"]
-            lines.append(",".join(clean(v) for v in row))
+            lines.append(",".join(clean(v, n) for v, n in zip(row, LIMITS)))
     text = "\n".join(lines) + ("\n" if lines else "")
     if len(text.encode("utf-8")) > MAX_BYTES:
         raise ValueError("文件超过 eBird 的 1 MB 上限：请少选几种或分几次导出")

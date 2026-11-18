@@ -442,7 +442,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             keep = set(body.ids)
             photos = [p for p in photos if p["id"] in keep]
         for v in body.counts.values():
-            if not (v.upper() == "X" or (v.isdigit() and 0 < int(v) < 100000)):
+            if not (v.upper() == "X" or (v.isdigit() and 0 < int(v) < 999999)):
                 raise HTTPException(400, "数量只能是正整数或 X")
         try:
             text = ebird.record_csv(photos, scan["region"], body.species, body.counts, body.comments, body.protocol, body.with_files)

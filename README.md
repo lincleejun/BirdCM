@@ -38,8 +38,10 @@ Docs: `docs/design.md` (design), `docs/perf.md` (speed), `docs/eval.md` (accurac
 
 Export → choose the birds → "导出 eBird 文件" writes `ebird-record-format.csv` in eBird's **Record Format** (no header
 row, one row per species per checklist; a checklist is one day at one place). Format followed: eBird Help Center,
-"Upload Spreadsheet Data to eBird" (read 2026-11-18). The column order follows eBird's Record Format template; it has
-not been checked against eBird's Data Fields PDF.
+"Upload Spreadsheet Data to eBird", and its "Appendix A (eBird Data Fields)" PDF and Record Format sample sheet (all
+read 2026-11-18): the 19 columns in Appendix A's order, its field lengths and ranges, MM/dd/yyyy dates, 24 h times,
+duration in minutes, Y/N, X for present. Protocol names follow the current upload page (Incidental, Stationary); the
+older Appendix A lists casual / stationary / traveling / area.
 
 To import (nothing is uploaded by BirdCM):
 1. On ebird.org: Submit → Import Data → choose **eBird Record Format** → Import File, pick the CSV.

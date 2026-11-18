@@ -16,10 +16,23 @@ def photo(i, sci, t, en=None, gps=None, level="species", rejected=False, boxes=1
 REGION = {"label": "美国 · 加利福尼亚州", "lat": 37.2, "lon": -119.5, "source": "region"}
 
 
+# Column order and formats as in eBird's "Appendix A (eBird Data Fields)" and the Record Format sample sheet
+# (both read 2026-11-18): common name, genus, species, count, species comments, location name, latitude, longitude,
+# date MM/dd/yyyy, start time kk:mm, state, country, protocol, observers, duration (min), all reported Y/N,
+# distance (miles), area (acres), checklist comments.
+APPENDIX_A = ["common name", "genus", "species", "count", "species comments", "location name", "latitude", "longitude",
+              "date", "start time", "state", "country", "protocol", "observers", "duration", "all reported", "distance",
+              "area", "checklist comments"]
+
+
 def test_golden_row_column_order_and_formats():
     ps = [photo(1, "Tyrannus melancholicus", "2026-11-14T10:02:31"), photo(2, "Tyrannus melancholicus", "2026-11-14T10:40:00")]
     assert ebird.record_csv(ps, REGION, ["Tyrannus melancholicus"]) == GOLDEN
-    assert GOLDEN.count(",") == 18                                   # 19 columns
+    f = dict(zip(APPENDIX_A, GOLDEN.rstrip("\n").split(",")))
+    assert len(f) == 19 and GOLDEN.count(",") == 18
+    assert f["common name"] == "Tropical Kingbird" and f["genus"] == "Tyrannus" and f["species"] == "melancholicus"
+    assert f["count"] == "X" and f["date"] == "11/14/2026" and f["start time"] == "10:02" and f["state"] == "CA"
+    assert f["country"] == "US" and f["protocol"] == "Incidental" and f["all reported"] == "N"
     assert not GOLDEN.startswith("﻿") and '"' not in GOLDEN     # no BOM, no quotation marks
 
 
@@ -59,3 +72,15 @@ def test_burst_correction_wins_and_rejected_confirmed_photos_count():
           photo(2, "Thalasseus elegans", "2026-11-14T09:01:00", rejected=True, stars=-1)]
     pl = ebird.plan(ps, REGION)
     assert [s["sci"] for s in pl["species"]] == ["Thalasseus elegans"] and pl["species"][0]["photos"] == 2
+
+
+
+def test_field_limits_from_appendix_a():
+    import pytest
+    long = "x" * 5000
+    ps = [photo(1, "Tyrannus melancholicus", "2026-11-14T00:00:00"), photo(2, "Tyrannus melancholicus", "2026-11-14T23:59:59")]
+    row = ebird.record_csv(ps, REGION, ["Tyrannus melancholicus"], comments={"Tyrannus melancholicus": long},
+                           protocol="Stationary").rstrip("\n").split(",")
+    assert len(row[4]) == 4000 and row[14] == "1439"                    # comments STRING(4000); duration 0<x<1440
+    with pytest.raises(ValueError):
+        ebird.record_csv(ps, REGION, ["Tyrannus melancholicus"], counts={"Tyrannus melancholicus": "999999"})
