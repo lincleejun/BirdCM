@@ -145,6 +145,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
         let r = lines.compactMap { decode(Reply.self, $0) }.first { $0.error != nil }
         switch (code, r) {
         case (3, _): Task { await adoptOrStart(open: openWhenReady) }           // someone else started one first
+        case (0, nil), (SIGTERM, nil): state = .stopped                         // stopped from elsewhere (`admin stop`)
         case (4, let r?): suggestPort = r.suggest; state = .failed(r.message ?? "端口被占用")
         case (_, let r?): state = .failed(r.message ?? r.error ?? "启动失败")
         default: state = .failed("引擎退出了（代码 \(code)），详情见日志")
