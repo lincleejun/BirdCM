@@ -19,3 +19,10 @@ BirdCM's code is MIT. The models are downloaded (see `models.toml`), never commi
 | `engine/birdcm/data/region-grid.csv`, `engine/birdcm/data/boundaries.json` (in this repository) | Points covering each country and first-level division of the place list (reading the location prior over a whole region), and their simplified outlines (which country / division a point is in) | Derived from Natural Earth 1:50m cultural vectors v5.1.1 (admin 0 countries, admin 1 states/provinces), public domain (https://www.naturalearthdata.com/about/terms-of-use/); built by `engine/tools/build_region_grid.py` |
 
 Pending: a global rarity table (same schema) to replace the US / CA / CN one.
+
+## Bundled in the macOS app (macos/)
+
+| Component | Licence / terms |
+|---|---|
+| ExifTool 13.64 by Phil Harvey (https://exiftool.org), unmodified, in `观羽.app/Contents/Resources/engine/exiftool` | "This is free software; you can redistribute it and/or modify it under the same terms as Perl itself": the Artistic License or the GNU GPL (version 1 or later), at the recipient's choice. Both texts ship in `Contents/Resources/licenses` (`ExifTool-LICENSE.txt`, `ExifTool-GPL.pod`) |
+| CPython 3.12 (python-build-standalone) and the engine's locked Python dependencies | PSF License and each package's own licence (in its `*.dist-info`); see `macos/THIRD-PARTY.md` |
