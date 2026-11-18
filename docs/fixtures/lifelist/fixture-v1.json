@@ -1,0 +1,92 @@
+{
+  "format": "birdcm-lifelist-fixture",
+  "version": 1,
+  "source": "docs/design-lifelist.md §10 'Exact deterministic fixture'. Synthetic: invented dates, coordinates and bytes.",
+  "today": "2026-11-18",
+  "taxonomy": "avilist-2026",
+  "species": {"A": "Sterna hirundo", "B": "Ardea alba", "genus": "Sterna"},
+  "points": {"P": [10.123, 20.123], "Q": [10.145, 20.145]},
+  "default_first_identified": "2026-11-18T09:00:00-08:00",
+  "photos": [
+    {"id": "A-P-dec31", "bytes": "birdcm fixture A/P 2025-12-31 frame 1", "taken_at": "2025-12-31T23:58:00-08:00", "place": "P",
+     "subjects": [{"box": [0.1, 0.1, 0.3, 0.3], "level": "species", "key": "A"},
+                  {"box": [0.5, 0.5, 0.7, 0.7], "level": "species", "key": "A"}]},
+    {"id": "A-P-jan1-burst", "repeat": 300, "bytes": "birdcm fixture A/P 2026-01-01 burst frame {n}", "taken_at": "2026-01-01T00:02:00-08:00",
+     "place": "P", "subjects": [{"box": [0.2, 0.2, 0.6, 0.6], "level": "species", "key": "A"}]},
+    {"id": "B-P-jan1", "bytes": "birdcm fixture B/P 2026-01-01 +14", "taken_at": "2026-01-01T00:30:00+14:00", "place": "P",
+     "subjects": [{"box": [0.2, 0.2, 0.6, 0.6], "level": "species", "key": "B"}]},
+    {"id": "A-Q-jan31", "bytes": "birdcm fixture A/Q 2026-01-31", "taken_at": "2026-01-31T23:59:00-08:00", "place": "Q",
+     "subjects": [{"box": [0.2, 0.2, 0.6, 0.6], "level": "species", "key": "A"}]},
+    {"id": "B-P-feb1", "bytes": "birdcm fixture B/P 2026-02-01 +14", "taken_at": "2026-02-01T00:01:00+14:00", "place": "P",
+     "subjects": [{"box": [0.2, 0.2, 0.6, 0.6], "level": "species", "key": "B"}]},
+    {"id": "A-P-noexif", "bytes": "birdcm fixture A/P no EXIF date", "taken_at": null, "place": "P",
+     "first_identified": "2026-11-18T09:00:00-08:00", "reidentified": "2026-11-19T09:00:00-08:00",
+     "subjects": [{"box": [0.1, 0.1, 0.4, 0.4], "level": "species", "key": "A"},
+                  {"box": [0.6, 0.6, 0.9, 0.9], "level": "unclassified"}]},
+    {"id": "genus-jan1", "bytes": "birdcm fixture genus 2026-01-01", "taken_at": "2026-01-01T08:00:00-08:00", "place": "P",
+     "subjects": [{"box": [0.2, 0.2, 0.6, 0.6], "level": "genus", "key": "genus"}]},
+    {"id": "uncertain-jan1", "bytes": "birdcm fixture uncertain 2026-01-01", "taken_at": "2026-01-01T09:00:00-08:00", "place": "P",
+     "subjects": [{"box": [0.2, 0.2, 0.6, 0.6], "level": "uncertain"}]},
+    {"id": "no-bird-nov18", "bytes": "birdcm fixture no bird 2026-11-18", "taken_at": "2026-11-18T10:00:00-08:00", "place": "P",
+     "subjects": []}
+  ],
+  "expected": {
+    "scopes": [
+      {"name": "2025-12", "from": "2025-12-01", "to": "2025-12-31", "species": 1, "observations": 1, "estimated_count": 2,
+       "species_keys": ["Sterna hirundo"], "new_species": 1, "active_days": 1, "photos": 1, "pending_subjects": 0, "no_bird_photos": 0},
+      {"name": "2026-01", "from": "2026-01-01", "to": "2026-01-31", "species": 2, "observations": 3, "estimated_count": 3,
+       "species_keys": ["Ardea alba", "Sterna hirundo"], "new_species": 1, "active_days": 2, "photos": 304, "pending_subjects": 2, "no_bird_photos": 0},
+      {"name": "2026-02", "from": "2026-02-01", "to": "2026-02-28", "species": 1, "observations": 1, "estimated_count": 1,
+       "species_keys": ["Ardea alba"], "new_species": 0, "active_days": 1, "photos": 1, "pending_subjects": 0, "no_bird_photos": 0},
+      {"name": "2026-11", "from": "2026-11-01", "to": "2026-11-30", "species": 1, "observations": 1, "estimated_count": 1,
+       "species_keys": ["Sterna hirundo"], "new_species": 0, "active_days": 1, "photos": 2, "pending_subjects": 1, "no_bird_photos": 1},
+      {"name": "2026", "from": "2026-01-01", "to": "2026-12-31", "species": 2, "observations": 5, "estimated_count": 5,
+       "species_keys": ["Ardea alba", "Sterna hirundo"], "new_species": 1, "active_days": 4, "photos": 307, "pending_subjects": 3, "no_bird_photos": 1},
+      {"name": "all", "from": null, "to": null, "species": 2, "observations": 6, "estimated_count": 7,
+       "species_keys": ["Ardea alba", "Sterna hirundo"], "new_species": 2, "active_days": 5, "photos": 308, "pending_subjects": 3, "no_bird_photos": 1}
+    ],
+    "first_seen": {"Sterna hirundo": "2025-12-31", "Ardea alba": "2026-01-01"},
+    "groups": [
+      ["obs-v1", "Sterna hirundo", "2025-12-31", "p:1012:2012", 2, 1],
+      ["obs-v1", "Sterna hirundo", "2026-01-01", "p:1012:2012", 1, 300],
+      ["obs-v1", "Ardea alba", "2026-01-01", "p:1012:2012", 1, 1],
+      ["obs-v1", "Sterna hirundo", "2026-01-31", "p:1014:2014", 1, 1],
+      ["obs-v1", "Ardea alba", "2026-02-01", "p:1012:2012", 1, 1],
+      ["obs-v1", "Sterna hirundo", "2026-11-18", "p:1012:2012", 1, 1]
+    ],
+    "groups_note": "[group_key elements..., estimate, photo_count]; group_key is the compact JSON of the first four",
+    "fallback_date_photos": 1
+  },
+  "vectors": {
+    "place_key": [
+      [10.123, 20.123, null, "p:1012:2012"],
+      [10.145, 20.145, null, "p:1014:2014"],
+      [-0.001, -0.001, null, "p:-1:-1"],
+      [-10.123, -20.123, null, "p:-1013:-2013"],
+      [0.0, 0.0, null, "p:0:0"],
+      [90.0, 180.0, null, "p:8999:-18000"],
+      [-90.0, -180.0, null, "p:-9000:-18000"],
+      [89.999, 179.999, null, "p:8999:17999"],
+      [null, null, "US-CA", "r:US-CA"],
+      [null, null, null, "none"]
+    ],
+    "local_day": [
+      ["2026-01-01T00:30:00+14:00", "2026-01-01", 840],
+      ["2025-12-31T23:58:00-08:00", "2025-12-31", -480],
+      ["2026-03-08T02:30:00", "2026-03-08", null],
+      ["2026-11-01T01:30:00-07:00", "2026-11-01", -420],
+      ["2026-11-01T01:30:00-08:00", "2026-11-01", -480],
+      ["2024-02-29T12:00:00.123+05:30", "2024-02-29", 330],
+      ["2026-02-29T12:00:00", null, null],
+      ["2026-13-01T00:00:00", null, null],
+      ["2026-01-01T00:00:00+15:00", null, null],
+      ["2026-05-04", "2026-05-04", null],
+      ["", null, null],
+      [null, null, null]
+    ],
+    "group_key": [
+      ["Sterna hirundo", "2026-01-01", "p:1012:2012", "[\"obs-v1\",\"Sterna hirundo\",\"2026-01-01\",\"p:1012:2012\"]"],
+      ["Ardea alba", "2026-02-01", "r:US-CA", "[\"obs-v1\",\"Ardea alba\",\"2026-02-01\",\"r:US-CA\"]"]
+    ]
+  }
+}

@@ -108,6 +108,8 @@ class Store:
             for col in ("fp", "correction"):
                 if col not in have_s:
                     db.execute(f"ALTER TABLE single ADD COLUMN {col} TEXT")
+            from birdcm import library
+            self.library_ok = library.init(db)              # the life list's derived index (additive, user_version 1)
 
     def _db(self) -> sqlite3.Connection:
         """One connection per thread, autocommit (transactions are explicit)."""
@@ -130,6 +132,12 @@ class Store:
             except BaseException:
                 db.execute("ROLLBACK")
                 raise
+
+    def _touch(self, db: sqlite3.Connection) -> None:
+        """A life-list source changed in this transaction: the derived index must be rebuilt (library.py)."""
+        if self.library_ok:
+            from birdcm import library
+            library.touch(db)
 
     @staticmethod
     def _event(db: sqlite3.Connection, scan_id: int, kind: str, data: dict) -> int:
@@ -248,12 +256,15 @@ class Store:
     def set_state(self, scan_id: int, new: str, *, when: tuple[str, ...] | None = None, error: str | None = None) -> bool:
         """Compare-and-set: change the state only from one of `when` (any when None). True if it changed."""
         def go(db):
+            old = db.execute("SELECT state FROM scan WHERE id = ?", (scan_id,)).fetchone()
             q, args = "UPDATE scan SET state = ?, error = ? WHERE id = ?", [new, error, scan_id]
             if when:
                 q += f" AND state IN ({','.join('?' * len(when))})"
                 args += list(when)
             if db.execute(q, args).rowcount:
                 self._scan_event(db, scan_id)
+                if new == "completed" or (old and old[0] == "completed"):    # which scan counts for its folder changed
+                    self._touch(db)
                 return True
             return False
         return self._write(go)
@@ -323,6 +334,7 @@ class Store:
                            (scan_id, seq, v, st.st_size, st.st_mtime_ns, "queued"))
             db.execute("UPDATE scan SET state = 'queued' WHERE id = ? AND state = 'completed'", (scan_id,))
             self._scan_event(db, scan_id)
+            self._touch(db)
         self._write(go)
 
     # ---- the person's species corrections: keyed by the file's signature, so they outlive re-scans and fingerprints --
@@ -340,12 +352,14 @@ class Store:
                 app_name = (app.get("label") or {}).get("sci") if app.get("level") in ("species", "genus") else None
                 db.execute("INSERT OR REPLACE INTO correction (path, size, mtime_ns, species, scope, app, created_at) VALUES (?,?,?,?,?,?,?)",
                            (r["path"], r["size"], r["mtime_ns"], sci, scope, app_name, time.time()))
+            self._touch(db)
         self._write(go)
 
     def clear_corrections(self, photo_ids: list[int]) -> None:
         def go(db):
             for pid in photo_ids:
                 db.execute("DELETE FROM correction WHERE (path, size, mtime_ns) = (SELECT path, size, mtime_ns FROM photo WHERE id = ?)", (pid,))
+            self._touch(db)
         self._write(go)
 
     def corrections_for(self, scan_id: int) -> dict[int, dict]:
@@ -372,6 +386,7 @@ class Store:
                        "burst_group=NULL, burst_rank=NULL, burst_size=NULL, species_fix=NULL, quality=NULL WHERE scan_id = ?", (fp, scan_id))
             self._event(db, scan_id, "stars", {})                 # clients refetch the snapshot
             self._scan_event(db, scan_id)
+            self._touch(db)
         self._write(go)
 
     def requeue_working(self, scan_id: int | None = None) -> int:
@@ -413,6 +428,7 @@ class Store:
                            (f.get("stars"), f.get("star_reason"), f.get("burst_group"), f.get("burst_rank"), f.get("burst_size"),
                             json.dumps(fix, ensure_ascii=False) if fix else None, json.dumps(qual) if qual else None, pid, scan_id))
             self._event(db, scan_id, "stars", {})
+            self._touch(db)                                        # burst species / corrections changed
             if complete and db.execute("UPDATE scan SET state='completed', error=NULL WHERE id=? AND state='finalizing'", (scan_id,)).rowcount:
                 self._scan_event(db, scan_id)
             return True
@@ -455,8 +471,10 @@ class Store:
                 "correction": json.dumps(f["correction"], ensure_ascii=False) if f.get("correction") is not None else None}
         keys = [k for k in cols if k in f]
         if keys:
-            self._write(lambda db: db.execute(f"UPDATE single SET {', '.join(k + ' = ?' for k in keys)} WHERE id = ?",
-                                              [cols[k] for k in keys] + [sid]))
+            def go(db):
+                db.execute(f"UPDATE single SET {', '.join(k + ' = ?' for k in keys)} WHERE id = ?", [cols[k] for k in keys] + [sid])
+                self._touch(db)
+            self._write(go)
 
     def single(self, sid: int) -> dict | None:
         r = self._db().execute("SELECT * FROM single WHERE id = ?", (sid,)).fetchone()
@@ -471,6 +489,7 @@ class Store:
             q, a = ("SELECT stored FROM single WHERE id = ?", (sid,)) if sid is not None else ("SELECT stored FROM single", ())
             names = [r[0] for r in db.execute(q, a)]
             db.execute("DELETE FROM single" + (" WHERE id = ?" if sid is not None else ""), (sid,) if sid is not None else ())
+            self._touch(db)
             return names
         return self._write(go)
 

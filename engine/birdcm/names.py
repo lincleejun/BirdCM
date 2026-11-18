@@ -41,7 +41,9 @@ def catalogue() -> dict[str, dict]:
     except Exception:  # noqa: BLE001 - no models: corrections can still use names already in the scan
         return {}
     cn = zh()
-    return {str(s): {"en": str(e), "zh": cn.get(str(s))} for s, e in zip(z["scientific"], z["common"])}
+    tax = z["taxonomy"] if "taxonomy" in z.files else None      # kingdom .. family, genus, species: family filter
+    return {str(s): {"en": str(e), "zh": cn.get(str(s)), **({"family": str(tax[i][4])} if tax is not None else {})}
+            for i, (s, e) in enumerate(zip(z["scientific"], z["common"]))}
 
 
 def search(q: str, limit: int = 30) -> list[dict]:
