@@ -40,9 +40,16 @@ class Species(TypedDict):
     geo: bool                       # location prior applied (False until geo.py exists)
 
 
-class Detection(TypedDict):
+class Detection(TypedDict):        # every box the tower looked at (at most 5, strongest first)
     box: Box
-    score: float
+    score: float                    # detector score (1.0 for a box the person drew)
+    clear: bool | None              # clear-bird gate; None without its head file
+    species: Species                # this box's own naming (for switching between birds)
+    eye: Point | None               # eye / beak / flight only when clear
+    eye_p: float | None
+    beak: Point | None
+    beak_p: float | None
+    p_fly: float | None
 
 
 class Region(TypedDict):
@@ -66,7 +73,7 @@ class PhotoResult(TypedDict):
     region: Region
     focus: Point | None             # trusted camera focus point; None when missing / default centre
     boxes: list[Detection]
-    subject: int | None             # index into boxes
+    subject: int | None             # index into boxes; chosen among the clear ones
     species: Species | None
     eye: Point | None               # the more visible eye
     eye_p: float | None             # its P(visible)
@@ -75,16 +82,15 @@ class PhotoResult(TypedDict):
     beak_p: float | None
     flying: bool | None
     p_fly: float | None
-    clear: bool | None              # pending: clear-bird gate
-    sharpness: float | None         # pending: head / eye sharpness (0-1); None is "unknown", not zero
-    aesthetic: float | None         # pending: no released aesthetic head
+    clear: bool | None              # the subject passed the clear-bird gate (False: boxes but none clear)
+    sharpness: float | None         # head sharpness, grad ratio (~1 blurred, larger crisper); uncalibrated scale
+    sharpness_region: str | None    # eye | head | box
+    sharpness_window: Box | None    # where it was measured
+    aesthetic: float | None         # 0-1 (EVA general score / 10), whole photo
     rarity: Rarity | None           # pending: rarity table
-    rejected: bool                  # 淘汰: no bird (or, later, no clear bird)
+    rejected: bool                  # 淘汰: no bird, or no clear bird
     reject_reason: str | None
-    pending: list[str]              # steps not run yet, e.g. ["clear", "sharpness", "aesthetic", "geo", "rarity"]
-
-
-PENDING = ["clear", "sharpness", "aesthetic", "geo", "rarity"]
+    pending: list[str]              # steps not run for this photo, e.g. ["geo", "rarity"]
 
 
 class ScanFields(TypedDict):        # per scan, computed by stars.py at finalizing

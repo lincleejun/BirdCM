@@ -5,8 +5,7 @@
 # at revision cfd3195ba4ea9592eec887ded089f4c08eff231d is all defaults plus four values, inlined in detect.py,
 # and the one prompt "a bird" is pre-tokenised there (see docs/deviations.md). Nothing is fetched at run time.
 #
-# Not yet listed (no released file): the aesthetic head (block-15 ridge head, distill/aesthetic.py fits it at
-# run time from EVA), the rarity table, BirdNET geo data. Their steps report "待定".
+# Not yet listed: the rarity table and the BirdNET geo data (research still running). Their steps report "待定".
 
 [detector]
 use = "owlv2-int8"
@@ -50,3 +49,19 @@ url     = "https://github.com/lincleejun/bioclip-bird-heads/releases/download/v0
 sha256  = "06b5671ccc010a6011151514dd03bb31381a04afdc6d5114db46515c00a45280"
 bytes   = 15628
 license = "non-commercial only (bioclip-bird-heads WEIGHTS-LICENSE.md)"
+
+[[file]]
+name    = "clear.safetensors"
+role    = "clear"
+url     = "https://github.com/lincleejun/bioclip-bird-heads/releases/download/v0.1.0/clear.safetensors"
+sha256  = "d105665ac6ae8f9ded3480af00c9d85b628d13d61c9f3219f3d96cfee109bd8a"
+bytes   = 12684
+license = "CC BY attribution for its CC BY training photos (clear-training-photos.csv); no non-commercial limit"
+
+[[file]]
+name    = "aesthetic.safetensors"
+role    = "aesthetic"
+url     = "https://github.com/lincleejun/bioclip-bird-heads/releases/download/v0.1.0/aesthetic.safetensors"
+sha256  = "418430e07cb922400cdb80510f703d990e1f258e52b795579fafb5c6e133b46a"
+bytes   = 10760
+license = "EVA scores CC0; the EVA (AVA) images' own licence is not established (AESTHETIC-WEIGHTS-LICENSE.md)"

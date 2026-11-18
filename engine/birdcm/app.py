@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import multiprocessing as mp
+import sqlite3
 import json
 import os
 import secrets
@@ -11,6 +13,7 @@ import sys
 import threading
 import time
 import webbrowser
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -60,6 +63,43 @@ class Guard:
         await self.app(scope, receive, send)
 
 
+class Previews:
+    """Thumbnail + preview of a photo the scan has not reached, made in its own small process pool (a RAW that crashes
+    LibRaw takes a worker, not the server), with a timeout and one decode per photo however many requests ask."""
+
+    TIMEOUT = 30.0
+
+    def __init__(self) -> None:
+        self.lock, self.pool, self.busy = threading.Lock(), None, {}
+
+    def make(self, job: dict) -> None:
+        from concurrent.futures.process import BrokenProcessPool
+        with self.lock:
+            fut = self.busy.get(job["path"])
+            if fut is None:
+                if self.pool is None:
+                    self.pool = ProcessPoolExecutor(2, mp_context=mp.get_context("spawn"), initializer=decode.worker_init)
+                fut = self.busy[job["path"]] = self.pool.submit(decode.decode, job)
+                fut.add_done_callback(lambda _f, k=job["path"]: self.busy.pop(k, None))
+        try:
+            fut.result(timeout=self.TIMEOUT)
+        except (TimeoutError, BrokenProcessPool):
+            self._reset()
+            raise
+
+    def _reset(self) -> None:
+        with self.lock:
+            if self.pool:
+                for proc in list(getattr(self.pool, "_processes", {}).values()):
+                    proc.kill()
+                self.pool.shutdown(wait=False, cancel_futures=True)
+            self.pool, self.busy = None, {}
+
+    def close(self) -> None:
+        if self.pool:
+            self.pool.shutdown(wait=False, cancel_futures=True)
+
+
 def sse_cursor(last_event_id: str | None, after: int | None) -> int:
     """Reconnects carry Last-Event-ID (the browser's own); first connects carry ?after=. Header wins."""
     try:
@@ -89,6 +129,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             from birdcm.pipeline import Engine
             return Engine(exif=exif)
     sched = Scheduler(store, engine_factory)
+    previews = Previews()
 
     @contextlib.asynccontextmanager
     async def lifespan(_app):
@@ -96,6 +137,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             sched.start()
         yield
         sched.close()
+        previews.close()
         exif.close()
 
     api = FastAPI(title="BirdCM", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
@@ -137,10 +179,10 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             config.check_own_dirs(folder)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
-        files = []
-        for p in decode.list_photos(folder, body.recursive):
-            st = p.stat()
-            files.append((str(p), st.st_size, st.st_mtime_ns))
+        try:
+            files = [(str(p), (st := p.stat()).st_size, st.st_mtime_ns) for p in decode.list_photos(folder, body.recursive)]
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
         sid = store.create_scan(str(folder), body.recursive, body.region, body.ratio, fingerprint(body.region), files)
         sched.wake.set()
         return {"id": sid, "photos": len(files)}
@@ -202,11 +244,11 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         p = store.photo(pid)
         if not p:
             raise HTTPException(404, "没有这张照片")
-        path = image_paths(p["path"], p["size"], p["mtime_ns"])[which]
-        if not path.exists():                  # not processed yet: make it now from the embedded JPEG (fast)
-            thumb, preview = image_paths(p["path"], p["size"], p["mtime_ns"])
+        thumb, preview = image_paths(p["path"], p["size"], p["mtime_ns"])
+        path = (thumb, preview)[which]
+        if not path.exists():                  # not processed yet: make it now, in a worker process (crash / timeout safe)
             try:
-                decode.decode({"path": p["path"], "size": p["size"], "mtime_ns": p["mtime_ns"],
+                previews.make({"path": p["path"], "size": p["size"], "mtime_ns": p["mtime_ns"],
                                "thumb": str(thumb), "preview": str(preview)})
             except Exception as e:  # noqa: BLE001
                 raise HTTPException(404, f"无法生成预览：{e}") from None
@@ -238,13 +280,26 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     return Guard(api, port, token), api
 
 
+def preflight() -> None:
+    """Before anything is created or written: an env change could have moved our dirs into a scanned photo folder.
+    Reads the existing database read-only (nothing is created when there is none)."""
+    db = config.data_dir() / "birdcm.db"
+    if db.is_file():
+        con = sqlite3.connect(f"{db.as_uri()}?mode=ro", uri=True)
+        try:
+            folders = [r[0] for r in con.execute("SELECT folder FROM scan")]
+        finally:
+            con.close()
+        for f in folders:
+            config.check_own_dirs(f)
+
+
 def serve(port: int = 8765, open_browser: bool = True) -> int:
     import uvicorn
+    preflight()
     for d in (config.data_dir(), config.cache_dir()):
         d.mkdir(parents=True, exist_ok=True)
     guarded, api = create_app(port)
-    for s in api.state.store.scans():                  # an env change could have moved our dirs into a photo folder
-        config.check_own_dirs(s["folder"])
     if not decode.ExifTool.available():
         print("警告：找不到 exiftool，拍摄信息和对焦点会是空的。`brew install exiftool` 安装。", file=sys.stderr)
     st = models.status()

@@ -8,14 +8,18 @@ from birdcm.store import Store
 class FakeEngine:
     """Engine.run's contract: batches of `batch`, should_stop checked between batches, on_submit per photo."""
 
-    def __init__(self, batch=2, fail=(), on_batch=None, explode_after=None):
-        self.batch, self.fail, self.on_batch, self.explode_after = batch, set(fail), on_batch, explode_after
+    def __init__(self, batch=2, fail=(), on_batch=None, explode_after=None, fp="fp1"):
+        self.batch, self.fail, self.on_batch, self.explode_after, self.fp = batch, set(fail), on_batch, explode_after, fp
         self.seen = []
 
-    def run(self, items, region=None, should_stop=lambda: False, on_submit=None):
+    def fingerprint(self, region):
+        return self.fp
+
+    def run(self, items, region=None, should_stop=lambda: False, on_submit=None, between=None):
         for i in range(0, len(items), self.batch):
             if should_stop():
                 return
+            between and between()
             chunk = items[i:i + self.batch]
             for it in chunk:
                 on_submit and on_submit(it)
@@ -57,7 +61,7 @@ def test_runs_to_completed(store):
     snap = store.snapshot(sid)
     assert snap["scan"]["state"] == "completed"
     assert [p["state"] for p in snap["photos"]] == ["done"] * 5
-    assert snap["photos"][0]["stars"] == -1 and snap["photos"][1]["stars"] is None     # 淘汰 / 待定
+    assert snap["photos"][0]["stars"] == -1 and snap["photos"][1]["stars"] == 0        # 淘汰 / gated (no subject score)
     assert {p["burst_size"] for p in snap["photos"]} == {1}                          # no times: own groups
     k = kinds(store, sid)
     assert k[-2:] == ["stars", "scan"] and k.count("photo") == 10                    # working + done per photo
@@ -167,7 +171,7 @@ def test_reuse_needs_same_fingerprint_and_signature(store):
     b = mk(store, 3)                                                                  # same files, same fingerprint
     snap = store.snapshot(b)
     assert all(p["state"] == "done" and p["reused"] for p in snap["photos"])
-    assert snap["photos"][1]["stars"] is None                                         # per-scan fields not copied
+    assert snap["photos"][1]["stars"] is None                                         # per-scan fields not copied (not rated yet)
     c = mk(store, 3, fp="fp2")                                                        # region / models changed
     assert all(p["state"] == "queued" for p in store.snapshot(c)["photos"])
     changed = [(p, s + 1, m) for p, s, m in files(3)]                                 # file size changed
@@ -201,3 +205,36 @@ def test_ratio_change_rerates_only(store):
     s.rerate(sid)
     assert [e["kind"] for e in store.events_after(sid, n)] == ["stars"]
     assert store.state(sid) == "completed"
+
+
+def test_stop_between_last_batch_and_finalizing(store):
+    """Deterministic interleaving: the scheduler has read `running` and all photos are done; a stop lands before it
+    moves to finalizing. The scan must end paused (not stuck in stopping), and resume must complete it."""
+    sid = mk(store, 2)
+    s = Scheduler(store, FakeEngine)
+    real = store.unfinished
+
+    def stop_first(scan_id):
+        store.stop(scan_id)
+        return real(scan_id)
+    store.unfinished = stop_first
+    s.run_until_idle()
+    store.unfinished = real
+    assert store.state(sid) == "paused"
+    store.resume(sid)
+    s.run_until_idle()
+    assert store.state(sid) == "completed"
+
+
+def test_engine_fingerprint_mismatch_recomputes_everything(store):
+    sid = mk(store, 3, fp="old")
+    pid = store.queued(sid)[0]["id"]
+    store.commit(pid, {"file": "stale", "rejected": False, "exif": {}}, None)     # done under the old engine
+    eng = FakeEngine(fp="new")
+    Scheduler(store, lambda: eng).run_until_idle()
+    assert store.state(sid) == "completed" and len(eng.seen) == 3                 # the stale one was redone too
+    assert store.scan(sid)["fp"] == "new"
+    rows = store._db().execute("SELECT fp, result FROM photo WHERE scan_id = ?", (sid,)).fetchall()
+    assert {r["fp"] for r in rows} == {"new"} and all("stale" not in r["result"] for r in rows)
+    again = mk(store, 3, fp="new")                                                # reuse only under the engine's fp
+    assert all(p["reused"] for p in store.snapshot(again)["photos"])

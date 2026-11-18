@@ -12,10 +12,15 @@ def test_focus_point_landscape_and_untrusted():
     assert g.focus_point("7008 4672 9000 10", 1) is None              # outside its own frame
 
 
-@pytest.mark.parametrize("orientation,expect", [(1, (0.25, 0.1)), (3, (0.75, 0.9)), (6, (0.9, 0.25)), (8, (0.1, 0.75))])
+@pytest.mark.parametrize("orientation,expect", [(1, (0.25, 0.1)), (2, (0.75, 0.1)), (3, (0.75, 0.9)), (4, (0.25, 0.9)),
+                                                (5, (0.1, 0.25)), (6, (0.9, 0.25)), (7, (0.9, 0.75)), (8, (0.1, 0.75))])
 def test_focus_point_rotation(orientation, expect):
     # sensor point at u=0.25 (from left), v=0.1 (from top) of a landscape frame
     assert g.focus_point("1000 800 250 80", orientation) == pytest.approx(expect)
+
+
+def test_focus_unknown_orientation_untrusted():
+    assert g.focus_point("1000 800 250 80", 9) is None
 
 
 def test_focus_rotation_matches_pixel_rotation():
@@ -26,6 +31,7 @@ def test_focus_rotation_matches_pixel_rotation():
     from birdcm.decode import TRANSPOSE
     a = np.zeros((80, 100), np.uint8)
     a[8, 25] = 255                                                    # x=25, y=8 in a 100 x 80 sensor frame
+    assert len(TRANSPOSE) == 7
     for o, t in TRANSPOSE.items():
         r = np.asarray(Image.fromarray(a).transpose(t))
         y, x = np.argwhere(r == 255)[0]

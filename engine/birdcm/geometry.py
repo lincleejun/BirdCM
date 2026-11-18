@@ -24,7 +24,8 @@ def focus_point(raw: str | None, orientation: int) -> tuple[float, float] | None
     if abs(x - w / 2) <= 1 and abs(y - h / 2) <= 1:
         return None
     u, v = x / w, y / h
-    return {3: (1 - u, 1 - v), 6: (1 - v, u), 8: (v, 1 - u)}.get(orientation, (u, v))
+    return {1: (u, v), 2: (1 - u, v), 3: (1 - u, 1 - v), 4: (u, 1 - v), 5: (v, u), 6: (1 - v, u), 7: (1 - v, 1 - u),
+            8: (v, 1 - u)}.get(orientation)                    # an unknown orientation: not trusted
 
 
 def crop_rect(box: tuple[float, float, float, float], width: int, height: int,

@@ -5,9 +5,11 @@ States (store.py): queued -> running -> stopping -> paused -> finalizing -> comp
 """
 from __future__ import annotations
 
+import queue
 import threading
 import traceback
 from collections.abc import Callable
+from concurrent.futures import Future
 
 from birdcm import stars
 from birdcm.store import Store
@@ -20,6 +22,29 @@ class Scheduler:
         self._quit = threading.Event()
         self.thread: threading.Thread | None = None
         self.engine_error: str | None = None
+        self.singles: queue.SimpleQueue = queue.SimpleQueue()
+
+    def submit(self, fn: Callable[[object], object]) -> Future:
+        """Run fn(engine) on the model thread: at once when idle, else at the next batch boundary of the running scan."""
+        f: Future = Future()
+        self.singles.put((fn, f))
+        self.wake.set()
+        return f
+
+    def drain(self) -> None:
+        while True:
+            try:
+                fn, f = self.singles.get_nowait()
+            except queue.Empty:
+                return
+            if not f.set_running_or_notify_cancel():
+                continue
+            try:
+                if self.engine is None:
+                    self.engine = self.engine_factory()
+                f.set_result(fn(self.engine))
+            except Exception as e:  # noqa: BLE001 - the caller gets it
+                f.set_exception(e)
 
     def start(self) -> None:
         self.store.recover()
@@ -36,6 +61,7 @@ class Scheduler:
 
     def _loop(self) -> None:
         while not self._quit.is_set():
+            self.drain()
             if not self.run_once():
                 self.wake.wait(1.0)
                 self.wake.clear()
@@ -57,11 +83,14 @@ class Scheduler:
         try:
             if self.engine is None:
                 self.engine = self.engine_factory()
+            fp = self.engine.fingerprint(scan["region"])
+            if fp != scan["fp"]:                                  # models, data or settings changed since the scan began:
+                self.store.reset_scan(sid, fp)                    # every result of it is recomputed, none kept under a stale fp
             items = self.store.queued(sid)
             for it, res, err in self.engine.run(items, region=scan["region"],
                                                 should_stop=lambda: self._quit.is_set() or self.store.state(sid) != "running",
-                                                on_submit=lambda it: self.store.mark_working(it["id"])):
-                self.store.commit(it["id"], res, err)
+                                                on_submit=lambda it: self.store.mark_working(it["id"]), between=self.drain):
+                self.store.commit(it["id"], res, err, fp)
         except Exception as e:  # noqa: BLE001 - a fatal engine error pauses this scan as failed, never marks photos bad
             traceback.print_exc()
             self.engine_error = f"{type(e).__name__}: {e}"
@@ -79,8 +108,11 @@ class Scheduler:
         return True
 
     def finalize(self, sid: int) -> None:
-        """Group bursts and rate, deterministically from the stored rows; safe to redo after a crash."""
-        self.store.set_state(sid, "finalizing", when=("queued", "running", "finalizing"))
+        """Group bursts and rate, deterministically from the stored rows; safe to redo after a crash. A stop that got in
+        first wins: the scan is paused instead (resume finalizes it)."""
+        if not self.store.set_state(sid, "finalizing", when=("queued", "running", "finalizing")):
+            self.store.set_state(sid, "paused", when=("stopping",))
+            return
         scan = self.store.scan(sid)
         self.store.write_rating(sid, stars.rate(self.store.rows_for_rating(sid), scan["ratio"]), complete=True)
 

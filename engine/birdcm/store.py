@@ -200,12 +200,23 @@ class Store:
                 self._photo_event(db, photo_id)
         self._write(go)
 
-    def commit(self, photo_id: int, result: dict | None, error: str | None) -> None:
-        """A photo's outcome and its event, one transaction; writing it again just overwrites."""
+    def commit(self, photo_id: int, result: dict | None, error: str | None, fp: str | None = None) -> None:
+        """A photo's outcome and its event, one transaction; writing it again just overwrites. fp: the fingerprint of
+        the engine that computed it (what reuse matches on)."""
         def go(db):
-            db.execute("UPDATE photo SET state = ?, result = ?, error = ? WHERE id = ?",
-                       ("failed" if error else "done", json.dumps(result, ensure_ascii=False) if result else None, error, photo_id))
+            db.execute("UPDATE photo SET state = ?, result = ?, error = ?, fp = coalesce(?, fp) WHERE id = ?",
+                       ("failed" if error else "done", json.dumps(result, ensure_ascii=False) if result else None, error, fp, photo_id))
             self._photo_event(db, photo_id)
+        self._write(go)
+
+    def reset_scan(self, scan_id: int, fp: str) -> None:
+        """The engine's fingerprint differs from the scan's: drop every result and queue the whole scan again."""
+        def go(db):
+            db.execute("UPDATE scan SET fp = ? WHERE id = ?", (fp, scan_id))
+            db.execute("UPDATE photo SET state='queued', result=NULL, error=NULL, reused=0, fp=?, stars=NULL, star_reason=NULL, "
+                       "burst_group=NULL, burst_rank=NULL, burst_size=NULL WHERE scan_id = ?", (fp, scan_id))
+            self._event(db, scan_id, "stars", {})                 # clients refetch the snapshot
+            self._scan_event(db, scan_id)
         self._write(go)
 
     def requeue_working(self, scan_id: int | None = None) -> int:

@@ -34,7 +34,8 @@ def square(im: Image.Image) -> Image.Image:
 
 
 class Tower:
-    def __init__(self, tower: str, names: str, parts: str, flight: str, device: str) -> None:
+    def __init__(self, tower: str, names: str, parts: str, flight: str, device: str, clear: str | None = None,
+                 aesthetic: str | None = None) -> None:
         import open_clip
         model = open_clip.model._build_vision_tower(1024, open_clip.model.CLIPVisionCfg(**VISION))
         model.load_state_dict(unpack(load_file(tower)))
@@ -52,6 +53,8 @@ class Tower:
             self.zh = {r["scientific"]: r["zh"] for r in csv.DictReader(f)}
         self.parts = {k: v.float().to(device) for k, v in load_file(parts).items()}
         self.flight = {k: v.float().to(device) for k, v in load_file(flight).items()}
+        self.clear = {k: v.float().to(device) for k, v in load_file(clear).items()} if clear else None
+        self.aes = {k: v.to(device) for k, v in load_file(aesthetic).items()} if aesthetic else None
         self.mean = torch.tensor(MEAN, device=device).view(1, 3, 1, 1)
         self.std = torch.tensor(STD, device=device).view(1, 3, 1, 1)
 
@@ -66,7 +69,9 @@ class Tower:
         x = torch.from_numpy(np.stack([np.asarray(square(c), np.float32) / 255 for c in crops])).permute(0, 3, 1, 2).to(self.device)
         f = self.model(((x - self.mean) / self.std).to(self.dtype)).float()
         f = f / f.norm(dim=-1, keepdim=True)
-        p = (self.scale * f @ self.matrix.T).softmax(-1)                          # (b, 11172) float32
+        cos = f @ self.matrix.T                                                   # (b, 11172) float32
+        p = (self.scale * cos).softmax(-1)
+        clear = self._clear(f, cos.max(-1).values)
         gmass = torch.zeros(len(crops), len(self.genera), device=self.device).index_add_(1, self.genus_of, p)
         tokens = self.got["t"][:, 1:].float()                                     # (b, 256, 1280); token 0 = class
         pts, vis = self._parts(tokens)
@@ -85,8 +90,35 @@ class Tower:
             out.append({"top5": [self.name(i, s) for i, s in zip(ids, ps)], "level": level, "label": label,
                         "beak": pts[b, 0].tolist(), "eyes": [pts[b, 1].tolist(), pts[b, 2].tolist()],
                         "p_beak": float(vis[b, 0]), "p_eyes": [float(vis[b, 1]), float(vis[b, 2])],
-                        "p_fly": float(fly[b])})
+                        "p_fly": float(fly[b]), "clear": clear[b]})
         return out
+
+    def _clear(self, f: torch.Tensor, max_cos: torch.Tensor) -> list[bool | None]:
+        """The clear-bird gate (bioclip-bird-heads clear.py passes()): a linear layer on the unit image vector and its
+        best cosine to the names, both thresholds stored in the file. Its thresholds were set on float16 MPS features;
+        this computes the vector the same way (float16 tower, normalised in float32). None without the head file."""
+        h = self.clear
+        if h is None:
+            return [None] * len(f)
+        z = ((f - h["mean"]) / h["std"]) @ h["weight"] + h["bias"]
+        return ((z.reshape(-1) >= h["z_min"]) & (max_cos >= h["cos_min"])).tolist()
+
+    @torch.no_grad()
+    def aesthetic(self, frames: list[np.ndarray]) -> list[float | None]:
+        """Whole-photo aesthetic score, 0-1 (EVA general score / 10): a second tower pass over the whole frame, mean of the
+        block-15 patch tokens, the linear head of aesthetic.safetensors. None without the head file."""
+        if self.aes is None or not frames:
+            return [None] * len(frames)
+        h = self.aes
+        squash = int(h["frame"]) == 1
+        ims = [Image.fromarray(f).resize((SIZE, SIZE), Image.Resampling.BICUBIC) if squash else square(Image.fromarray(f))
+               for f in frames]
+        x = torch.from_numpy(np.stack([np.asarray(im, np.float32) / 255 for im in ims])).permute(0, 3, 1, 2).to(self.device)
+        self.model(((x - self.mean) / self.std).to(self.dtype))
+        t = self.got["t"][:, 1:].float().mean(1)                                   # (b, 1280)
+        y = ((t - h["mean"]) / h["std"]) @ h["weight"] + h["bias"]
+        y = ((y - h["lo"]) / (h["hi"] - h["lo"])).clamp(0, 1)
+        return [round(float(v), 4) for v in y.reshape(-1)]
 
     def _parts(self, tokens: torch.Tensor) -> tuple[np.ndarray, np.ndarray]:
         """Beak / left eye / right eye: ((b, 3, 2) points in the 224 input, (b, 3) P(visible))."""

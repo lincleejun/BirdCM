@@ -62,7 +62,7 @@ def status() -> dict:
              for e in manifest()["file"]]
     missing = [f["name"] for f in files if not f["path"]]
     return {"ready": not missing, "files": files, "missing": missing, "fetch": "uv run birdcm models fetch",
-            "pending": ["aesthetic", "clear-bird", "sharpness", "geo", "rarity", "stars"]}
+            "pending": ["geo", "rarity"]}
 
 
 def paths() -> dict[str, Path]:
@@ -80,8 +80,9 @@ def paths() -> dict[str, Path]:
 
 
 def digest() -> str:
-    """The models' part of the result fingerprint: every manifest sha256."""
-    return hashlib.sha256("|".join(sorted(e["sha256"] for e in manifest()["file"])).encode()).hexdigest()[:16]
+    """The models' part of the result fingerprint: which file (sha256) fills which role."""
+    roles = sorted((e["role"], e["sha256"]) for e in manifest()["file"])
+    return hashlib.sha256(json.dumps(roles).encode()).hexdigest()[:16]
 
 
 def fetch(log=print) -> int:

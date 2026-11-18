@@ -23,23 +23,27 @@ from pathlib import Path
 from PIL import Image
 
 from birdcm import config, decode, geometry, models
-from birdcm.result import PENDING, PhotoResult
+from birdcm.result import PhotoResult
+from birdcm.sharpness import head_sharpness
 
-PIPELINE_VERSION = 1            # bump when any step's output changes: old results stop being reused
+PIPELINE_VERSION = 2            # bump when any step's output changes: old results stop being reused
 SETTINGS = {"frame": decode.FRAME, "embedded_min": decode.EMBEDDED_MIN, "min_crop": geometry.MIN_CROP,
-            "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR}
+            "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR, "max_boxes": 5}
 DECODE_TIMEOUT = 120.0          # seconds one decode may run before its pool is killed and the file isolated
 GPU_WAIT = 0.2                  # a partial GPU batch waits at most this long for more frames
 EXIF_CHUNK = 16
+MAX_BOXES = 5            # boxes looked at per photo (strongest first); ponytail: raise if flocks matter
 
 
-def fingerprint(region: str | None) -> str:
-    """Models, pipeline version, settings and the effective region: a stored result is reused only when this and
-    the file's (size, mtime) match."""
+def fingerprint(region: str | None, model_digest: str | None = None) -> str:
+    """Models (role -> sha256), bundled data (Chinese names), pipeline version, settings and the effective region: a
+    stored result is reused only when this and the file's (size, mtime) match. An Engine passes the digest of the
+    manifest it actually loaded (Engine.fingerprint)."""
     from birdcm import detect, tower
     cfg = {**SETTINGS, "det": [detect.FLOOR, detect.SECOND, detect.SECOND_TOP],
            "level": [tower.SPECIES_P, tower.SPECIES_MARGIN, tower.GENUS_P]}
-    s = json.dumps([models.digest(), PIPELINE_VERSION, cfg, region], sort_keys=True)
+    zh = hashlib.sha256(tower.ZH.read_bytes()).hexdigest()[:16]
+    s = json.dumps([model_digest or models.digest(), zh, PIPELINE_VERSION, cfg, region], sort_keys=True)
     return hashlib.sha256(s.encode()).hexdigest()[:16]
 
 
@@ -59,18 +63,22 @@ def _oom(e: Exception) -> bool:
     return "out of memory" in str(e).lower()
 
 
-def split_on_oom(fn: Callable[[list], list], xs: list) -> list:
-    """fn(xs), halving the batch on out-of-memory; a single item that still runs out raises."""
+def per_item(fn: Callable[[list], list], xs: list) -> list:
+    """fn over a batch, one result per item: when the batch fails (out of memory or anything else) it is halved until
+    the failing items stand alone; those get their exception, every other item its result."""
+    if not xs:
+        return []
     try:
-        return fn(xs)
-    except RuntimeError as e:
-        if not _oom(e) or len(xs) == 1:
-            raise
-        import torch
-        if torch.backends.mps.is_available():
-            torch.mps.empty_cache()
+        return list(fn(xs))
+    except Exception as e:  # noqa: BLE001
+        if len(xs) == 1:
+            return [e]
+        if _oom(e):
+            import torch
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
         h = len(xs) // 2
-        return split_on_oom(fn, xs[:h]) + split_on_oom(fn, xs[h:])
+        return per_item(fn, xs[:h]) + per_item(fn, xs[h:])
 
 
 class Engine:
@@ -79,15 +87,20 @@ class Engine:
                  exif: decode.ExifTool | None = None) -> None:
         from birdcm.detect import Detector
         from birdcm.tower import Tower
+        self.model_digest = models.digest()          # taken with the paths: the fingerprint of what is loaded
         p = models.paths()
         self.device = device or pick_device()
         self.detector = Detector(str(p["detector:owlv2-int8"]), self.device, half=det_half and self.device != "cpu")
-        self.tower = Tower(str(p["tower"]), str(p["names"]), str(p["parts"]), str(p["flight"]), self.device)
+        self.tower = Tower(str(p["tower"]), str(p["names"]), str(p["parts"]), str(p["flight"]), self.device,
+                           clear=str(p["clear"]), aesthetic=str(p["aesthetic"]))
         self.exif, self._own_exif = exif or decode.ExifTool(), exif is None
         self.workers, self.det_batch, self.tower_batch, self.mode = workers, det_batch, tower_batch, mode
         self.stats: dict[str, float] = {}
         self.decode_fn = decode.decode          # a module-level function (spawned workers import it); tests swap it
         self._pool: ProcessPoolExecutor | None = None
+
+    def fingerprint(self, region: str | None) -> str:
+        return fingerprint(region, self.model_digest)
 
     def close(self) -> None:
         if self._pool:
@@ -108,7 +121,8 @@ class Engine:
         self.stats[key] = self.stats.get(key, 0.0) + dt
 
     def run(self, items: list[dict], region: str | None = None, should_stop: Callable[[], bool] = lambda: False,
-            on_submit: Callable[[dict], None] | None = None) -> Iterator[tuple[dict, PhotoResult | None, str | None]]:
+            on_submit: Callable[[dict], None] | None = None, between: Callable[[], None] | None = None
+            ) -> Iterator[tuple[dict, PhotoResult | None, str | None]]:
         """items: {id, path, size, mtime_ns}. Yields (item, result, None) or (item, None, error) per photo, in
         completion order. Stops early (see module doc) when should_stop() turns true."""
         pool = self._pool or self._new_pool()
@@ -122,6 +136,9 @@ class Engine:
             while todo or suspects or inflight or ready:
                 if should_stop():
                     return
+                if between:                        # batch boundary: single photos waiting go first
+                    between()
+                    pool = self._pool or self._new_pool()
                 broken = crashed = False
                 stuck: set[int] = set()
                 # submit: normal work keeps 2 x workers in flight; after a pool crash, suspects go one at a time
@@ -134,7 +151,7 @@ class Engine:
                         exif_futs.update({c: fut for c in chunk})
                     thumb, preview = image_paths(it["path"], it["size"], it["mtime_ns"])
                     job = {"path": it["path"], "size": it["size"], "mtime_ns": it["mtime_ns"], "thumb": str(thumb),
-                           "preview": str(preview), "mode": self.mode}
+                           "preview": str(preview), "mode": self.mode, "gray": True}
                     try:
                         fut = pool.submit(self.decode_fn, job)
                     except BrokenProcessPool:             # a worker died while we were on the GPU
@@ -190,6 +207,26 @@ class Engine:
                 f.cancel()
             exif_exec.shutdown(wait=False, cancel_futures=True)
 
+    def identify(self, path: str, region: str | None = None, boxes: list[list[float]] | None = None) -> PhotoResult:
+        """One photo now (the single-photo view): same decode worker pool, same GPU path. boxes: normalised boxes the
+        person drew (or [[0, 0, 1, 1]] for the whole photo); they skip the detector and the clear-bird gate."""
+        st = os.stat(path)
+        thumb, preview = image_paths(path, st.st_size, st.st_mtime_ns)
+        job = {"path": path, "size": st.st_size, "mtime_ns": st.st_mtime_ns, "thumb": str(thumb), "preview": str(preview),
+               "mode": self.mode, "gray": True}
+        try:
+            d = (self._pool or self._new_pool()).submit(self.decode_fn, job).result(timeout=DECODE_TIMEOUT)
+        except (BrokenProcessPool, TimeoutError):
+            self._new_pool()
+            raise RuntimeError("解码失败：解码进程崩溃或超时（文件可能已损坏）") from None
+        done: Future = Future()
+        done.set_result(self._read_exif([path]))
+        it = {"id": None, "path": path, "size": st.st_size, "mtime_ns": st.st_mtime_ns, "boxes": boxes}
+        _, res, err = next(self._gpu([(it, d)], {path: done}, region))
+        if err:
+            raise RuntimeError(err)
+        return res
+
     def _read_exif(self, paths: list[str]) -> dict[str, dict]:
         t = time.perf_counter()
         try:
@@ -201,45 +238,63 @@ class Engine:
 
     def _gpu(self, batch: list[tuple[dict, dict]], exif_futs: dict[str, Future], region: str | None
              ) -> Iterator[tuple[dict, PhotoResult | None, str | None]]:
+        """Detect, look at every box (species, heads, clear-bird gate), choose the subject among the clear boxes, then
+        head sharpness (CPU, on the detail-resolution grey) and the whole-photo aesthetic pass. Failures are per photo."""
         t = time.perf_counter()
-        try:
-            dets = split_on_oom(self.detector, [d["frame"] for _, d in batch])
-        except Exception as e:  # noqa: BLE001 - a model failure fails these photos, not the scan
-            for it, _ in batch:
-                yield it, None, _err(e)
-            return
+        forced = [it.get("boxes") for it, _ in batch]
+        need = [d["frame"] for (it, d), f in zip(batch, forced) if f is None]
+        found = iter(per_item(self.detector, need))
+        dets = [[(1.0, tuple(b)) for b in f] if f is not None else next(found) for f in forced]
         self._sync()
         self._add("detect", time.perf_counter() - t)
         t = time.perf_counter()
         rows, crops = [], []
         for (it, d), boxes in zip(batch, dets):
+            if isinstance(boxes, Exception):
+                rows.append((it, d, boxes))
+                continue
             try:
                 exif = exif_futs.pop(it["path"]).result(timeout=60).get(it["path"], {})
             except Exception:  # noqa: BLE001
                 exif = {}
-            focus = geometry.focus_point(exif.get("focus_raw"), d["orientation"])
-            subject = geometry.choose_subject(boxes, focus, d["width"], d["height"])
-            frame = d["frame"]
-            fh, fw = frame.shape[:2]
-            crop = geometry.crop_rect(boxes[subject][1], fw, fh) if subject is not None else None
-            if crop:
-                crops.append(Image.fromarray(frame).crop(crop))
-            rows.append((it, d, exif, focus, boxes, subject, crop))
-        self._add("post", time.perf_counter() - t)
-        t = time.perf_counter()
-        try:
-            looks = [r for i in range(0, len(crops), self.tower_batch)
-                     for r in split_on_oom(self.tower, crops[i:i + self.tower_batch])]
-        except Exception as e:  # noqa: BLE001
-            for it, *_ in rows:
-                yield it, None, _err(e)
-            return
+            boxes = boxes[:MAX_BOXES]
+            fh, fw = d["frame"].shape[:2]
+            rects = [geometry.crop_rect(b, fw, fh) for _, b in boxes]
+            im = Image.fromarray(d["frame"])
+            first = len(crops)
+            crops += [im.crop(r) for r in rects]
+            rows.append((it, d, (exif, boxes, rects, first)))
+        looks = [r for i in range(0, len(crops), self.tower_batch) for r in per_item(self.tower, crops[i:i + self.tower_batch])]
         self._sync()
         self._add("tower", time.perf_counter() - t)
-        looks.reverse()
-        for it, d, exif, focus, boxes, subject, crop in rows:
-            look = looks.pop() if crop else None
-            yield it, build(it, d, exif, focus, boxes, subject, crop, look, region), None
+        t = time.perf_counter()
+        built = []
+        for it, d, x in rows:
+            if isinstance(x, Exception):
+                built.append((it, None, _err(x)))
+                continue
+            exif, boxes, rects, first = x
+            mine = looks[first:first + len(boxes)]
+            bad = next((m for m in mine if isinstance(m, Exception)), None)
+            if bad is not None:
+                built.append((it, None, _err(bad)))
+                continue
+            try:
+                built.append((it, build(it, d, exif, boxes, rects, mine, region, gate=it.get("boxes") is None), None))
+            except Exception as e:  # noqa: BLE001
+                built.append((it, None, _err(e)))
+        self._add("post", time.perf_counter() - t)
+        t = time.perf_counter()
+        keep = [(n, r) for n, (_, r, _) in enumerate(built) if r and not r["rejected"]]
+        frames = [batch[n][1]["frame"] for n, _ in keep]
+        scores = [s for i in range(0, len(frames), self.tower_batch) for s in per_item(self.tower.aesthetic, frames[i:i + self.tower_batch])]
+        for (n, r), sc in zip(keep, scores):
+            if not isinstance(sc, Exception) and sc is not None:
+                r["aesthetic"] = sc
+                r["pending"] = [p for p in r["pending"] if p != "aesthetic"]
+        self._sync()
+        self._add("aesthetic", time.perf_counter() - t)
+        yield from built
 
     def _sync(self) -> None:
         import torch
@@ -253,29 +308,66 @@ def _err(e: Exception) -> str:
     return f"{type(e).__name__}: {e}"[:500]
 
 
-def build(it: dict, d: dict, exif: dict, focus, boxes, subject, crop, look, region: str | None) -> PhotoResult:
+def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, region: str | None,
+          gate: bool = True) -> PhotoResult:
+    """One photo's result from its boxes and the tower's look at each. gate=False (boxes the person drew or "use the
+    whole photo") keeps every box even when the clear-bird gate says no."""
     fh, fw = d["frame"].shape[:2]
-    to = (lambda pt: [round(v, 5) for v in geometry.from_input(pt, crop, fw, fh)]) if crop else None
-    species = eye = eye_p = beak = beak_p = None
-    flying = p_fly = eye_visible = None
-    if look:
-        species = {"level": look["level"], "label": look["label"], "top5": look["top5"], "geo": False}
-        k = 0 if look["p_eyes"][0] >= look["p_eyes"][1] else 1
-        eye, eye_p = to(look["eyes"][k]), round(look["p_eyes"][k], 4)
-        eye_visible = eye_p >= 0.5
-        beak, beak_p = to(look["beak"]), round(look["p_beak"], 4)
-        p_fly = round(look["p_fly"], 4)
-        flying = p_fly >= 0.5
+    W, H = d["width"], d["height"]
+    focus = geometry.focus_point(exif.get("focus_raw"), d["orientation"])
+
+    def to(pt, rect):
+        return [round(v, 5) for v in geometry.from_input(pt, rect, fw, fh)]
+    dets = []
+    for (score, b), rect, lk in zip(boxes, rects, looks):
+        k = 0 if lk["p_eyes"][0] >= lk["p_eyes"][1] else 1
+        clear = lk["clear"] is not False
+        dets.append({"box": [round(v, 5) for v in b], "score": round(score, 4), "clear": lk["clear"],
+                     "species": {"level": lk["level"], "label": lk["label"], "top5": lk["top5"], "geo": False},
+                     # eyes, beak and flight only for a clear bird (the gate exists because they are noise otherwise)
+                     "eye": to(lk["eyes"][k], rect) if clear else None, "eye_p": round(lk["p_eyes"][k], 4) if clear else None,
+                     "beak": to(lk["beak"], rect) if clear else None, "beak_p": round(lk["p_beak"], 4) if clear else None,
+                     "p_fly": round(lk["p_fly"], 4) if clear else None})
+    usable = [i for i, x in enumerate(dets) if x["clear"] is not False or not gate]
+    pick = geometry.choose_subject([(dets[i]["score"], dets[i]["box"]) for i in usable], focus, W, H)
+    subject = usable[pick] if pick is not None else None
+    s = dets[subject] if subject is not None else None
+    sharp = None
+    if s and d.get("gray") is not None and s["eye"] is not None:
+        sharp = head_sharpness_of(d["gray"], s)
     ex = {k: exif.get(k) for k in ("camera", "lens", "focal_mm", "aperture", "shutter", "iso", "ev", "focus_mode", "taken_at", "gps")}
+    reason = None if s else ("没有清楚的鸟" if dets else "没有找到鸟")
     return {
-        "file": os.path.basename(it["path"]), "width": d["width"], "height": d["height"],
-        "orientation": d["orientation"], "source": d["source"], "exif": ex,
+        "file": os.path.basename(it["path"]), "width": W, "height": H, "orientation": d["orientation"],
+        "source": d["source"], "exif": ex,
         "region": {"name": region, "source": "photo" if ex["gps"] else ("scan" if region else None), "gps": ex["gps"]},
-        "focus": [round(v, 5) for v in focus] if focus else None,
-        "boxes": [{"box": [round(v, 5) for v in b], "score": round(s, 4)} for s, b in boxes],
-        "subject": subject, "species": species, "eye": eye, "eye_p": eye_p, "eye_visible": eye_visible,
-        "beak": beak, "beak_p": beak_p, "flying": flying, "p_fly": p_fly,
-        "clear": None, "sharpness": None, "aesthetic": None, "rarity": None,
-        "rejected": subject is None, "reject_reason": "没有找到鸟" if subject is None else None,
-        "pending": list(PENDING),
+        "focus": [round(v, 5) for v in focus] if focus else None, "boxes": dets, "subject": subject,
+        "species": s["species"] if s else None,
+        "eye": s["eye"] if s else None, "eye_p": s["eye_p"] if s else None,
+        "eye_visible": (s["eye_p"] >= 0.5) if s and s["eye_p"] is not None else None,
+        "beak": s["beak"] if s else None, "beak_p": s["beak_p"] if s else None,
+        "flying": (s["p_fly"] >= 0.5) if s and s["p_fly"] is not None else None, "p_fly": s["p_fly"] if s else None,
+        "clear": s["clear"] if s else (False if dets else None),
+        "sharpness": sharp["score"] if sharp else None, "sharpness_region": sharp["region"] if sharp else None,
+        "sharpness_window": sharp["window"] if sharp else None,
+        "aesthetic": None, "rarity": None,
+        "rejected": s is None, "reject_reason": reason,
+        "pending": ["aesthetic", "geo", "rarity"] if s else ["geo", "rarity"],
     }
+
+
+def head_sharpness_of(gray, det: dict) -> dict:
+    """Head sharpness of one bird on the detail-resolution grey: the box plus 10 % is cut out first (the noise is
+    estimated on that cut, the same for every photo), points mapped into it. window is returned normalised."""
+    gh, gw = gray.shape[:2]
+    x0, y0, x1, y1 = det["box"]
+    mx, my = (x1 - x0) * 0.1, (y1 - y0) * 0.1
+    cx0, cy0 = max(0, int((x0 - mx) * gw)), max(0, int((y0 - my) * gh))
+    cx1, cy1 = min(gw, int((x1 + mx) * gw) + 1), min(gh, int((y1 + my) * gh) + 1)
+    cut = gray[cy0:cy1, cx0:cx1]
+    px = lambda p: (p[0] * gw - cx0, p[1] * gh - cy0)                       # noqa: E731
+    r = head_sharpness(cut, (x0 * gw - cx0, y0 * gh - cy0, x1 * gw - cx0, y1 * gh - cy0), px(det["eye"]),
+                       det["eye_p"] or 0.0, px(det["beak"]) if det["beak"] else None)
+    a, b, c, e = r["window"]
+    r["window"] = [round((a + cx0) / gw, 5), round((b + cy0) / gh, 5), round((c + cx0) / gw, 5), round((e + cy0) / gh, 5)]
+    return r

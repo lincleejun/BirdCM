@@ -26,7 +26,9 @@ THUMB = 512
 EMBEDDED_MIN = 2048     # an embedded JPEG smaller than this (long edge) is not used; demosaic instead
 # LibRaw sizes.flip -> EXIF orientation
 FLIP_TO_ORIENTATION = {0: 1, 3: 3, 5: 8, 6: 6}
-TRANSPOSE = {3: Image.Transpose.ROTATE_180, 6: Image.Transpose.ROTATE_270, 8: Image.Transpose.ROTATE_90}
+TRANSPOSE = {2: Image.Transpose.FLIP_LEFT_RIGHT, 3: Image.Transpose.ROTATE_180, 4: Image.Transpose.FLIP_TOP_BOTTOM,
+             5: Image.Transpose.TRANSPOSE, 6: Image.Transpose.ROTATE_270, 7: Image.Transpose.TRANSVERSE,
+             8: Image.Transpose.ROTATE_90}       # EXIF orientation -> the transpose that makes the pixels upright
 
 
 class FileChanged(Exception):
@@ -39,14 +41,24 @@ def worker_init() -> None:
         os.environ[k] = "1"
 
 
+def safe_arg(path: str) -> bool:
+    """A path exiftool may receive: absolute, no CR / LF / NUL."""
+    return path.startswith("/") and not any(c in path for c in "\r\n\0")
+
+
 def list_photos(folder: str | Path, recursive: bool = False) -> list[Path]:
-    """Supported photos in a folder (top level unless recursive), sorted by path; hidden files and dirs skipped."""
+    """Supported photos in a folder (top level unless recursive), sorted by path; hidden files and dirs skipped.
+    Raises ValueError when a photo's path has a line break (it could inject exiftool options)."""
     root = Path(folder).expanduser().resolve()
     if not root.is_dir():
         raise NotADirectoryError(f"不是文件夹：{root}")
     it = root.rglob("*") if recursive else root.iterdir()
-    return sorted(p for p in it if p.suffix.lower() in SCAN_EXT and p.is_file()
-                  and not any(part.startswith(".") for part in p.relative_to(root).parts))
+    out = sorted(p for p in it if p.suffix.lower() in SCAN_EXT and p.is_file()
+                 and not any(part.startswith(".") for part in p.relative_to(root).parts))
+    bad = [str(p) for p in out if not safe_arg(str(p))]
+    if bad:
+        raise ValueError(f"这些照片的文件名里有换行，请先改名再扫描：{bad[:3]!r}")
+    return out
 
 
 def _fit(im: Image.Image, edge: int) -> Image.Image:
@@ -119,8 +131,9 @@ def decode(job: dict) -> dict:
             tmp = out.with_name(f"{out.name}.{os.getpid()}.{threading.get_ident()}.tmp")   # concurrent writers
             img.save(tmp, "JPEG", quality=82 if key == "thumb" else 85)
             tmp.replace(out)
+    gray = np.asarray(im.convert("L")) if job.get("gray") else None      # detail-resolution grey for head sharpness
     t2 = time.perf_counter()
-    return {"frame": np.array(frame), "width": w, "height": h, "orientation": orientation, "source": source,
+    return {"frame": np.array(frame), "gray": gray, "width": w, "height": h, "orientation": orientation, "source": source,
             "t_decode": t1 - t0, "t_save": t2 - t1, "pid": os.getpid()}
 
 
@@ -186,6 +199,9 @@ class ExifTool:
         """path -> parsed shooting info ({} for a file exiftool could not read)."""
         if not paths:
             return {}
+        for p in paths:                     # one argument per line on the -@ protocol: a newline would inject options
+            if not safe_arg(p):
+                raise ValueError(f"文件名含换行或不是绝对路径，拒绝交给 exiftool：{p!r}")
         with self.lock:
             raw = self._ask(["-j", "-charset", "filename=utf8", *TAGS, *paths])
         rows = json.loads(raw or b"[]")
