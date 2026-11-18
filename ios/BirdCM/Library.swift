@@ -99,7 +99,7 @@ struct SubjectItem: Equatable {
 }
 struct PhotoItem: Identifiable, Equatable {
     let id: UUID, hash: String, path: String?, missing: Bool
-    let day: String, wall: String, dateSource: String, offset: Int?
+    let day: String, wall: String, dateSource: String, offset: Int?, capture: String?
     let lat: Double?, lon: Double?, region: String?, placeLabel: String?, placeSource: String
     var subjects: [SubjectItem]
     var placeKey: String { Library.placeKey(lat: lat, lon: lon, region: region) }
@@ -160,6 +160,8 @@ final class Library {
      filename TEXT PRIMARY KEY, raw_json BLOB, photo_path TEXT, error TEXT NOT NULL
     );
     """
+    /// §8: the archive holds exactly the five ll_* fact tables (no ll_meta) plus archive_meta / archive_blob.
+    static var coreDDL: String { ddl.replacingOccurrences(of: "CREATE TABLE ll_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);\n", with: "") }
     static let archiveDDL = """
     CREATE TABLE archive_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE TABLE archive_blob(
@@ -343,12 +345,14 @@ final class Library {
             }
         }
     }
-    /// Deterministic legacy subject UUID: SHA-256("legacy subject/<record id>/<index>"), first 16 bytes, v4/variant bits.
-    static func subjectID(_ record: UUID, _ index: Int) -> String {
-        var b = Array(SHA256.hash(data: Data("legacy subject/\(record.uuidString.lowercased())/\(index)".utf8)).prefix(16))
-        b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80
+    /// Shared with the desktop (docs/fixtures/lifelist/README.md): first 16 bytes of SHA-256(text), byte 6 = (b6 & 0x0F) | 0x50, byte 8 = (b8 & 0x3F) | 0x80.
+    static func stableUUID(_ text: String) -> String {
+        var b = Array(SHA256.hash(data: Data(text.utf8)).prefix(16))
+        b[6] = (b[6] & 0x0f) | 0x50; b[8] = (b[8] & 0x3f) | 0x80
         return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15])).uuidString.lowercased()
     }
+    /// Deterministic legacy subject UUID: stable_uuid("legacy subject/<record id>/<index>").
+    static func subjectID(_ record: UUID, _ index: Int) -> String { stableUUID("legacy subject/\(record.uuidString.lowercased())/\(index)") }
 
     /// Identification by whole-file SHA-256: the same bytes update the same logical photo, keeping its edits and fallback date.
     @discardableResult func save(_ value: Record, data: Data? = nil, zone: TimeZone = .current, now: Date = Date()) throws -> Record {
@@ -443,9 +447,10 @@ final class Library {
             WHERE r.canonical=1 AND r.deleted_utc IS NULL ORDER BY r.local_day DESC,coalesce(r.capture_wall,r.fallback_wall) DESC,r.asset_hash,s.ordinal
             """) {
                 let id = row.s(0)!
+                let capture = row.s(6) == "photo" || row.s(6) == "user" ? row.s(5) : nil
                 if index[id] == nil {
                     index[id] = out.count
-                    out.append(PhotoItem(id: UUID(uuidString: id)!, hash: row.s(1)!, path: row.s(2), missing: row.n(3) == 1, day: row.s(4)!, wall: row.s(5)!, dateSource: row.s(6)!, offset: row.n(7),
+                    out.append(PhotoItem(id: UUID(uuidString: id)!, hash: row.s(1)!, path: row.s(2), missing: row.n(3) == 1, day: row.s(4)!, wall: row.s(5)!, dateSource: row.s(6)!, offset: row.n(7), capture: capture,
                                          lat: row.f(8), lon: row.f(9), region: row.s(10), placeLabel: row.s(11), placeSource: row.s(12)!, subjects: []))
                 }
                 guard let sid = row.s(13) else { continue }
@@ -463,8 +468,21 @@ final class Library {
     /// Full compatibility Record: payload overlaid with authoritative subject rows (boxes, cached results, edits).
     func record(_ id: UUID) throws -> Record? {
         try locked {
-            guard let row = try db.rows("SELECT payload_json FROM ll_record WHERE id=?", [id.uuidString.lowercased()]).first, var r = try? JSONDecoder().decode(Record.self, from: Data(row.s(0)!.utf8)) else { return nil }
-            let subjects = try db.rows("SELECT id,x0,y0,x1,y1,crop_json,model_json,correction_state,corrected_key,count_edit,excluded FROM ll_subject WHERE record_id=? AND retired=0 AND needs_match=0 ORDER BY ordinal", [id.uuidString.lowercased()])
+            guard let row = try db.rows("SELECT payload_json,capture_wall,lat,lon,place_label,place_source,region_code,first_identified_utc FROM ll_record WHERE id=?", [id.uuidString.lowercased()]).first else { return nil }
+            let subjects = try db.rows("SELECT id,x0,y0,x1,y1,crop_json,model_json,correction_state,corrected_key,count_edit,excluded,model_level,model_key FROM ll_subject WHERE record_id=? AND retired=0 AND needs_match=0 ORDER BY ordinal", [id.uuidString.lowercased()])
+            var r: Record
+            if let decoded = try? JSONDecoder().decode(Record.self, from: Data(row.s(0)!.utf8)) { r = decoded } else {
+                // A record imported from the desktop keeps its own payload; view it through the authoritative columns.
+                var shooting = Shooting(data: Data()); shooting.takenAt = row.s(1)
+                let place = row.f(2).map { Place(lat: $0, lon: row.f(3)!, label: row.s(4) ?? "", source: row.s(5) ?? "map") }
+                    ?? row.s(6).map { Place(lat: 0, lon: 0, label: row.s(4) ?? $0, source: "region", regionCode: $0) }
+                r = Record(boxes: [], selected: 0, shooting: shooting, place: place)
+                r.date = ISO8601DateFormatter().date(from: String(row.s(7)!.prefix(19)) + "Z") ?? Date()
+                for (i, s) in subjects.enumerated() where s.s(6) != nil {
+                    let level = s.s(11)!, key = s.s(12)
+                    r.results[String(i)] = Identification(top5: key.map { [Candidate(scientific: $0, english: "", chinese: "", p: 0)] } ?? [], level: level == "unclassified" ? "uncertain" : level, name: key, clear: true)
+                }
+            }
             r.boxes = subjects.map { [$0.f(1)!, $0.f(2)!, $0.f(3)!, $0.f(4)!] }
             let crops = subjects.compactMap { $0.s(5).flatMap { try? JSONDecoder().decode([Double].self, from: Data($0.utf8)) } }
             r.displayCrops = crops.count == subjects.count && !crops.isEmpty ? crops : r.displayCrops.flatMap { $0.count == subjects.count ? $0 : nil }
@@ -482,6 +500,18 @@ final class Library {
     }
     func issues() -> [(String, String)] {
         (try? locked { try db.rows("SELECT filename,error FROM ll_legacy_issue ORDER BY filename").map { ($0.s(0)!, $0.s(1)!) } }) ?? []
+    }
+    /// Legacy JSON sidecars whose exact bytes are already inside the verified library (record legacy_json or recovery raw_json).
+    /// Removing them never touches an original photo.
+    func redundantLegacyFiles() -> [URL] {
+        guard (try? query("PRAGMA user_version").first?.n(0)) == 1 else { return [] }
+        return legacyNames().filter { $0.hasSuffix(".json") }.compactMap { name -> URL? in
+            let url = dir.appendingPathComponent(name)
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            let text = String(decoding: data, as: UTF8.self)
+            let kept = (try? query("SELECT 1 FROM ll_record WHERE legacy_json=? UNION ALL SELECT 1 FROM ll_legacy_issue WHERE filename=? AND raw_json=? LIMIT 1", [text, name, data]))?.isEmpty == false
+            return kept ? url : nil
+        }
     }
     func storageBytes() -> Int {
         let fm = FileManager.default
@@ -507,7 +537,8 @@ final class Library {
     }
     func setCount(_ subject: String, _ n: Int?, now: Date = Date()) throws {
         guard n.map({ (1...999998).contains($0) }) ?? true else { throw StoreError(message: "数量须为 1–999998") }
-        try editSubject(subject, "count_edit=?", [n], now: now)
+        // 1 is the automatic estimate; stored as no edit (shared archive convention).
+        try editSubject(subject, "count_edit=?", [n == 1 ? nil : n], now: now)
     }
     func exclude(_ subject: String, _ on: Bool, now: Date = Date()) throws { try editSubject(subject, "excluded=?", [on], now: now) }
     /// wall nil resets to photo metadata / the frozen fallback. Affects the whole logical photo.
@@ -546,20 +577,19 @@ final class Library {
 
     // MARK: portable archive (§8): SQLite file, exact tables, originals once per hash.
     static func expectedSchema() throws -> [String: String] {
-        let m = try SQL(":memory:"); try m.exec(ddl + archiveDDL)
+        let m = try SQL(":memory:"); try m.exec(coreDDL + archiveDDL)
         return Dictionary(uniqueKeysWithValues: try m.rows("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL").map { ($0.s(0)!, $0.s(1)!) })
     }
     func export(to url: URL, now: Date = Date()) throws {
         let fm = FileManager.default
         try? fm.removeItem(at: url)
         do {
-            try SQL(url.path).exec("PRAGMA journal_mode=DELETE;PRAGMA application_id=\(Self.applicationID);PRAGMA user_version=1;" + Self.ddl + Self.archiveDDL)
+            try SQL(url.path).exec("PRAGMA journal_mode=DELETE;PRAGMA application_id=\(Self.applicationID);PRAGMA user_version=1;" + Self.coreDDL + Self.archiveDDL)
             // A separate read connection: one consistent snapshot of the live WAL database, never a file copy.
             let reader = try SQL(file.path)
             try reader.run("ATTACH DATABASE ? AS a", [url.path])
             try reader.exec("BEGIN")
             try reader.exec("""
-            INSERT INTO a.ll_meta SELECT * FROM main.ll_meta;
             INSERT INTO a.ll_asset SELECT hash,byte_count,mime,NULL,width,height,shooting_json,missing FROM main.ll_asset;
             INSERT INTO a.ll_record SELECT * FROM main.ll_record;
             INSERT INTO a.ll_subject SELECT * FROM main.ll_subject;
@@ -658,6 +688,28 @@ final class Library {
             }
         }
     }
+    #if DEBUG
+    /// Synthetic library for performance measurement: n photos × 3 subjects, invented days/points, no original bytes.
+    func seedSynthetic(_ n: Int, species: [String]) throws {
+        try locked {
+            try db.transaction {
+                let stamp = Self.utc(Date()), start = Date(timeIntervalSince1970: 1_700_000_000)
+                for i in 0..<n {
+                    let hash = sha256(Data("synthetic photo \(i)".utf8)), id = Self.stableUUID("synthetic record/\(i)")
+                    let wall = Self.wall(start.addingTimeInterval(Double(i % 900) * 86400 + Double(i % 600) * 60), zone: TimeZone(identifier: "UTC")!).0
+                    let lat = 20 + Double(i % 40) * 0.37, lon = 100 + Double(i % 23) * 0.53
+                    try db.run("INSERT OR IGNORE INTO ll_asset VALUES(?,0,'image/jpeg',NULL,NULL,NULL,'{}',0)", [hash])
+                    try db.run("INSERT INTO ll_record(\(Self.recordColumns)) VALUES(?,?,1,?,?,?,NULL,'ios',NULL,?,0,NULL,'second',?,0,'photo',?,NULL,?,?,'Synthetic','map',NULL,NULL,'{}',1)",
+                               [id, hash, stamp, stamp, stamp, wall, wall, String(wall.prefix(10)), lat, lon])
+                    for k in 0..<3 {
+                        try db.run("INSERT INTO ll_subject(id,record_id,ordinal,x0,y0,x1,y1,model_level,model_key,updated_utc) VALUES(?,?,?,?,0.1,?,0.5,'species',?,?)",
+                                   [Self.stableUUID("synthetic subject/\(i)/\(k)"), id, k, 0.05 + 0.3 * Double(k), 0.3 + 0.3 * Double(k), species[(i * 7 + k * 13) % species.count], stamp])
+                    }
+                }
+            }
+        }
+    }
+    #endif
     /// Raw-fact snapshot for round-trip assertions (paths excluded: they are not facts).
     func snapshot() throws -> [String] {
         try locked {

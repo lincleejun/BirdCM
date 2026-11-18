@@ -217,11 +217,103 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(try fresh.importArchive(archive), 0); XCTAssertEqual(try fresh.snapshot(), before)
         XCTAssertEqual(try lib.importArchive(archive, restore: true), 8); XCTAssertEqual(try lib.snapshot(), before)
         // Corrupt blob, unknown schema object and future version are rejected without touching the library.
-        for damage in ["UPDATE archive_blob SET original=zeroblob(length(original)) WHERE rowid=1", "CREATE TABLE extra(x)", "PRAGMA user_version=2", "CREATE TRIGGER t AFTER INSERT ON ll_meta BEGIN SELECT 1; END"] {
+        for damage in ["UPDATE archive_blob SET original=zeroblob(length(original)) WHERE rowid=1", "CREATE TABLE extra(x)", "PRAGMA user_version=2", "CREATE TRIGGER t AFTER INSERT ON ll_asset BEGIN SELECT 1; END"] {
             let bad = archive.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
             try FileManager.default.copyItem(at: archive, to: bad)
             try SQL(bad.path).exec(damage)
             XCTAssertThrowsError(try fresh.importArchive(bad), damage); XCTAssertEqual(try fresh.snapshot(), before)
         }
+    }
+}
+
+/// Cross-platform contract: docs/fixtures/lifelist (desktop golden files), and the shared archive conventions.
+final class CrossPlatformTests: XCTestCase {
+    let shared = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("docs/fixtures/lifelist")
+    func tmp() -> URL {
+        let u = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: u) }
+        return u
+    }
+    func desktopLibrary() throws -> Library {
+        let lib = try Library(dir: tmp())
+        XCTAssertEqual(try lib.importArchive(shared.appendingPathComponent("fixture-v1.birdcm")), 308)
+        return lib
+    }
+    func testDesktopArchiveGivesExpectedNumbers() throws {
+        struct Scope: Decodable { let name: String; let from: String?; let to: String?; let species, observations, estimated_count, new_species, active_days, photos, pending_subjects, no_bird_photos: Int; let species_keys: [String] }
+        struct Expected: Decodable { let scopes: [Scope]; let first_seen: [String: String] }
+        struct Fixture: Decodable { let expected: Expected }
+        let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: shared.appendingPathComponent("fixture-v1.json")))
+        let lib = try desktopLibrary()
+        let ledger = Ledger(items: try lib.items(), edits: try lib.groupEdits(), known: Catalogue.shared.contains)
+        for e in fixture.expected.scopes {
+            let s = ledger.summary(e.from.map { ($0, e.to!) })
+            XCTAssertEqual([s.species, s.observations, s.estimate, s.newSpecies, s.activeDays, s.photos, s.pending, s.noBird],
+                           [e.species, e.observations, e.estimated_count, e.new_species, e.active_days, e.photos, e.pending_subjects, e.no_bird_photos], e.name)
+            XCTAssertEqual(s.list.map(\.id).sorted(), e.species_keys, e.name)
+        }
+        for (k, v) in fixture.expected.first_seen { XCTAssertEqual(ledger.allTime[k]?.first, v) }
+        let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: shared.appendingPathComponent("fixture-v1.json"))) as! [String: Any]
+        let groups = (raw["expected"] as! [String: Any])["groups"] as! [[Any]]
+        XCTAssertEqual(ledger.observations.count, groups.count)
+        for g in groups {
+            let key = Library.groupKey(g[1] as! String, g[2] as! String, g[3] as! String)
+            let o = try XCTUnwrap(ledger.observations.first { $0.id == key }, key)
+            XCTAssertEqual([o.estimate, o.frames.count], [g[4] as! Int, g[5] as! Int], key)
+        }
+        // Vectors shared with the desktop.
+        let vectors = raw["vectors"] as! [String: Any]
+        for v in vectors["place_key"] as! [[Any]] { XCTAssertEqual(Library.placeKey(lat: v[0] as? Double, lon: v[1] as? Double, region: v[2] as? String), v[3] as? String) }
+    }
+    func testEBirdBytesMatchDesktopGolden() throws {
+        let lib = try desktopLibrary()
+        let ledger = Ledger(items: try lib.items(), edits: try lib.groupEdits(), known: Catalogue.shared.contains)
+        let csv = try EBird.csv(EBird.checklists(ledger, nil, rarity: Catalogue.shared.rarity), fallback: .include, estimates: false)
+        if Data(csv.utf8) != (try Data(contentsOf: shared.appendingPathComponent("ebird-v1.csv"))) { print("EBIRD-OUT\n" + csv) }
+        XCTAssertEqual(Data(csv.utf8), try Data(contentsOf: shared.appendingPathComponent("ebird-v1.csv")))
+        XCTAssertEqual(EBird.clean(" a,\"b\"\n c ", 4000), "a b c"); XCTAssertEqual(EBird.clean("abcdef", 3), "abc")
+        XCTAssertEqual(try EBird.csv(EBird.checklists(ledger, nil, rarity: Catalogue.shared.rarity), fallback: .exclude, estimates: true).split(separator: "\n").count, 5)
+    }
+    func testSharedUUIDAndArchiveConventions() throws {
+        XCTAssertEqual(Library.stableUUID("abc"), "ba7816bf-8f01-5fea-8141-40de5dae2223")
+        let zero = String(repeating: "0", count: 64)
+        XCTAssertEqual(Library.stableUUID("desktop subject/\(zero)/" + [0.1, 0.1, 0.3, 0.3].map { String(format: "%.6f", $0) }.joined(separator: ",")), "8f37fa25-b453-5c52-8061-5ac2f8eb434f")
+        XCTAssertEqual(Library.stableUUID("desktop native record/\(zero)"), "915ada0c-7c17-5a17-b77e-913d2508c95f")
+        // An iOS archive has exactly the desktop's object names, no path authority and the shared header.
+        let lib = try desktopLibrary()
+        var r = Record(boxes: [[0.1, 0.1, 0.5, 0.5]], selected: 0, result: Identification(top5: [Candidate(scientific: "Ardea alba", english: "", chinese: "", p: 0.99)], level: "species", name: "Ardea alba", clear: true), shooting: Shooting(data: Data()), place: nil)
+        r.shooting.takenAt = "2026-03-01T08:00:00"
+        try lib.save(r, data: Data("ios photo".utf8))
+        let out = tmp().appendingPathExtension("birdcm"); try FileManager.default.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try lib.export(to: out)
+        let a = try SQL(out.path, readOnly: true), d = try SQL(shared.appendingPathComponent("fixture-v1.birdcm").path, readOnly: true)
+        let names = "SELECT type||':'||name FROM sqlite_master ORDER BY name"
+        XCTAssertEqual(try a.rows(names).map { $0.s(0)! }, try d.rows(names).map { $0.s(0)! })
+        XCTAssertEqual(try a.rows("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").map { $0.s(0)! }, try d.rows("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").map { $0.s(0)! })
+        XCTAssertEqual(try a.rows("PRAGMA application_id")[0].n(0), 1112101441); XCTAssertEqual(try a.rows("PRAGMA journal_mode")[0].s(0), "delete")
+        XCTAssertEqual(try a.rows("SELECT count(*) FROM ll_asset WHERE relative_path IS NOT NULL")[0].n(0), 0)
+        XCTAssertEqual(try a.rows("SELECT value FROM archive_meta WHERE key='producer'")[0].s(0), "ios")
+        XCTAssertEqual(try a.rows("SELECT count(*) FROM ll_subject WHERE count_edit=1")[0].n(0), 0)
+        XCTAssertEqual(try Library(dir: tmp()).importArchive(out), 309)
+    }
+    /// Synthetic 10,000 photos / 30,000 subjects (no original bytes): timings of the browsing paths, simulator numbers.
+    func testTenThousandPhotoTimings() throws {
+        let dir = tmp()
+        try Library(dir: dir).seedSynthetic(10_000, species: Array(Catalogue.shared.all.prefix(800).map(\.sci)))
+        func time<T>(_ label: String, _ body: () throws -> T) rethrows -> T {
+            let t = Date(); let v = try body(); print(String(format: "PERF %@ %.1f ms", label, Date().timeIntervalSince(t) * 1000)); return v
+        }
+        let lib = try time("open library") { try Library(dir: dir) }
+        let items = try time("items (10k photos, 30k subjects)") { try lib.items() }
+        XCTAssertEqual(items.count, 10_000)
+        let ledger = time("ledger build") { Ledger(items: items, edits: [:], known: Catalogue.shared.contains) }
+        let all = time("summary all") { ledger.summary(nil) }
+        _ = time("summary month") { ledger.summary(Period.month(2024, 3).range) }
+        _ = time("calendar month days") { ledger.days(Period.month(2024, 3).range) }
+        _ = time("photos list filter 'tern'") { items.filter { i in i.subjects.contains { Catalogue.shared.name($0.key).contains("燕鸥") } } }
+        _ = time("catalogue search 'tern'") { Catalogue.shared.search("tern") }
+        _ = time("species page photos") { ledger.photos(of: all.list[0].id) }
+        print("PERF observations \(ledger.observations.count) species \(all.species)")
+        XCTAssertGreaterThan(all.observations, 1000)
     }
 }
