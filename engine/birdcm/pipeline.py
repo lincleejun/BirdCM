@@ -42,7 +42,8 @@ MAX_BOXES = 5            # boxes looked at per photo (strongest first); ponytail
 # Data hashes of earlier releases whose results are the same as now (only display-only inputs changed): a stored
 # fingerprint made with one of these is moved to the current one instead of marking the scan stale.
 # d8d5a4e6f3379b0a: the old Wikidata Chinese-name table was still hashed in (names are joined at read time since IOC 15.2).
-EQUIVALENT_DATA = ("d8d5a4e6f3379b0a",)
+EQUIVALENT_DATA = ("d8d5a4e6f3379b0a",
+                   "44540bd88e9a7f22")   # before regions.csv gained its ISO 3166-2 column (for eBird export; same results)
 # Location keys before the prior's cover was in them (Codex C1): pipeline 4 already read a region's lattice, so a
 # region scan made then has the same results; a point scan too (its neighbourhood). Moved, not marked stale.
 EQUIVALENT_OLD_KEY = True

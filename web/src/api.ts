@@ -46,3 +46,10 @@ export async function upload<T>(url: string, form: FormData): Promise<T> {
   if (!r.ok) return fail(r);
   return r.json();
 }
+
+/** A POST whose answer is text (a file to save), with the same token handling. */
+export async function postText(url: string, body: unknown): Promise<string> {
+  const r = await withToken((tok) => fetch(url, { method: "POST", headers: { "X-BirdCM-Token": tok, "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+  if (!r.ok) return fail(r);
+  return r.text();
+}

@@ -1,0 +1,204 @@
+"""eBird import file (Record Format) from a finished scan.
+
+Source read 2026-11-18: eBird Help Center, "Upload Spreadsheet Data to eBird"
+https://support.ebird.org/en/support/solutions/articles/48000907878-upload-spreadsheet-data-to-ebird
+and "Guide to eBird Protocols" https://support.ebird.org/support/solutions/articles/48000950859 . What they say and
+what this follows:
+- .csv, comma-delimited, NO header row (the first row is an observation), each file at most 1 MB.
+- No quotation marks anywhere and no line breaks (so no CSV quoting either: commas inside text are replaced).
+- Dates month/day/year (12/27/2007); start time 24 h "08:00"; duration in minutes; distance in miles;
+  "All observations reported" Y or N; country exactly 2 letters; state / province 1-3 letters.
+- Count: a number, or X for present but not counted. Latitude / longitude optional, decimal degrees.
+- Common name and scientific name: either or both. eBird matches its own (Clements / eBird) taxonomy; names it does
+  not know are fixed by hand in the import's "Fix Species" step.
+- Protocol: one word (Stationary, Traveling, Historical, Incidental). Incidental lists are never complete.
+- The column order follows the Record Format template. NOT verified against eBird's Data Fields PDF / sample XLS
+  (attachments, not read: downloading them needs the owner's permission). Order used, 19 columns:
+  common name, genus, species, number, species comments, location name, latitude, longitude, date, start time,
+  state/province, country, protocol, number of observers, duration (min), all observations reported (Y/N),
+  distance (miles), area (acres), submission comments.
+
+Checklists: one per calendar day (camera clock) and place. The place is the scan's location; photos with their own GPS
+are grouped by a 0.01 degree cell (about 1 km). A chosen region gives no coordinates (its centre is not where the
+birds were): eBird asks for the location in its "Fix Locations" step.
+Protocol default Incidental, all observations N: photos show what was photographed, not a complete count, and the
+time between the first and last photo is not the birding effort. Stationary can be chosen (duration = that span).
+"""
+from __future__ import annotations
+
+import csv
+import math
+from collections import defaultdict
+from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
+
+from birdcm import geo
+
+DATA = Path(__file__).with_name("data")
+NAMES = DATA / "ebird-names.csv"
+MAX_BYTES = 1_000_000
+PROTOCOLS = ("Incidental", "Stationary")
+
+
+@lru_cache(maxsize=1)
+def clements() -> dict[str, tuple[str, str]]:
+    """scientific (AviList v2026) -> (Clements v2026 English name or "", Cornell Lab species code), from AviList's
+    extended file (tools/build_ebird_names.py)."""
+    with open(NAMES, newline="", encoding="utf-8") as f:
+        return {r["scientific"]: (r["clements_en"], r["ebird_code"]) for r in csv.DictReader(f)}
+
+
+def clean(v) -> str:
+    """One field as eBird accepts it: no quotation marks, no line breaks, no commas (there is no quoting)."""
+    s = "" if v is None else str(v)
+    return " ".join(s.replace('"', "").replace(",", " ").split())
+
+
+@lru_cache(maxsize=1)
+def _codes() -> tuple[dict, dict]:
+    countries = {c["zh"]: c for c in geo.countries()}
+    with open(geo.REGIONS, newline="", encoding="utf-8") as f:
+        regions = {f'{r["country"]} · {r["region"]}': r for r in csv.DictReader(f)}
+    return countries, regions
+
+
+def place_codes(label: str | None) -> tuple[str, str, str]:
+    """A place label ("国家" or "国家 · 州/省") -> (location name in English, state/province code, country code)."""
+    countries, regions = _codes()
+    if not label:
+        return "", "", ""
+    country = countries.get(label.split(" · ")[0].strip())
+    if not country:
+        return "", "", ""
+    reg = regions.get(label.replace(" 附近", "").strip())
+    if reg:
+        return f'{reg["name_en"]} {country["code"]}', reg["iso"].split("-", 1)[-1] if reg.get("iso") else "", country["code"]
+    return country["en"], "", country["code"]
+
+
+def _effective(p: dict) -> dict | None:
+    """The photo's burst-corrected species when confirmed; a rejected photo counts when its own species is confirmed."""
+    r = p.get("result")
+    if not r:
+        return None
+    sp = p.get("species_fix") or r.get("species")
+    return sp if sp and sp.get("level") in ("species", "genus") and sp.get("label") else None
+
+
+def _time(r: dict) -> datetime | None:
+    t = (r.get("exif") or {}).get("taken_at")
+    try:
+        return datetime.fromisoformat(t).replace(tzinfo=None) if t else None
+    except ValueError:
+        return None
+
+
+def plan(photos: list[dict], location) -> dict:
+    """What a scan offers: per species (confirmed, and genus-only), photo count, stars, the largest number of boxes
+    naming it in one frame, eBird name match; and the checklists (day x place) the photos fall into."""
+    names = clements()
+    out: dict[str, dict] = {}
+    for p in photos:
+        sp = _effective(p)
+        if not sp:
+            continue
+        r = p["result"]
+        lab = sp["label"]
+        key = lab["sci"]
+        e = out.setdefault(key, {"sci": key, "level": sp["level"], "zh": lab.get("zh"), "en": lab.get("en"),
+                                 "photos": 0, "stars": 0, "files": [], "max_in_frame": 0, "rare": False, "lookalike": False})
+        e["photos"] += 1
+        e["stars"] += 1 if (p.get("stars") or 0) > 0 else 0
+        e["files"].append(Path(p["path"]).name)
+        e["rare"] |= sp.get("check") == "rare"
+        e["lookalike"] |= bool(sp.get("lookalike"))
+        n = sum(1 for b in r.get("boxes") or [] if b.get("clear") is not False
+                and ((b.get("species") or {}).get("label") or {}).get("sci") == key)
+        e["max_in_frame"] = max(e["max_in_frame"], n or (1 if not r.get("rejected") else 0))
+    for key, e in out.items():
+        cl, code = names.get(key, ("", ""))
+        e["ebird_en"] = cl
+        e["ebird_code"] = code
+        e["name_check"] = ("genus" if e["level"] == "genus" else "not_in_ebird" if not cl
+                           else "differs" if cl != (e["en"] or "") else "")
+    return {"species": sorted(out.values(), key=lambda e: (e["level"] != "species", -e["photos"], e["sci"])),
+            "checklists": checklists(photos, location)}
+
+
+def checklists(photos: list[dict], location, keep: set[str] | None = None) -> list[dict]:
+    """Day x place groups: {key, date, start, minutes, label, lat, lon, state, country, photos: [...]}."""
+    from birdcm.geo import location_point, location_label
+    pt = location_point(location)
+    label = (location.get("label") if isinstance(location, dict) else location) if location else None
+    src = pt[2] if pt else None
+    groups: dict = defaultdict(list)
+    for p in photos:
+        sp = _effective(p)
+        if not sp or (keep is not None and sp["label"]["sci"] not in keep):
+            continue
+        r = p["result"]
+        t = _time(r)
+        if t is None:
+            continue
+        gps = (r.get("exif") or {}).get("gps")
+        if gps:
+            cell = ("gps", round(gps[0], 2), round(gps[1], 2))
+        else:
+            cell = ("scan",)
+        groups[(t.date(), cell)].append((t, p, gps))
+    out = []
+    for (day, cell), items in sorted(groups.items(), key=lambda kv: (kv[0][0], str(kv[0][1]))):
+        times = sorted(t for t, _, _ in items)
+        if cell[0] == "gps":
+            lat = sum(g[0] for _, _, g in items) / len(items)
+            lon = sum(g[1] for _, _, g in items) / len(items)
+            hit = geo.locate(lat, lon)
+            name, state, country = place_codes(hit[1] or hit[0]) if hit else ("", "", "")
+            name = f"{name} {lat:.4f} {lon:.4f}".strip()
+        else:
+            lat = lon = None
+            name, state, country = place_codes(location_label(location) if src == "region" else label)
+            if pt and src != "region":
+                lat, lon = pt[0], pt[1]
+                hit = geo.locate(lat, lon)
+                if hit:
+                    name, state, country = place_codes(hit[1] or hit[0])
+                name = f"{name} {lat:.4f} {lon:.4f}".strip()
+        out.append({"key": f"{day.isoformat()}|{cell}", "date": day.strftime("%m/%d/%Y"), "start": times[0].strftime("%H:%M"),
+                    "minutes": max(1, math.ceil((times[-1] - times[0]).total_seconds() / 60)),
+                    "name": name or "BirdCM location", "lat": lat, "lon": lon, "state": state, "country": country,
+                    "photos": [p for _, p, _ in items]})
+    return out
+
+
+def record_csv(photos: list[dict], location, species: list[str], counts: dict[str, str] | None = None,
+               comments: dict[str, str] | None = None, protocol: str = "Incidental", with_files: bool = False) -> str:
+    """The Record Format file (no header): one row per species per checklist."""
+    if protocol not in PROTOCOLS:
+        raise ValueError(f"protocol 只能是 {' / '.join(PROTOCOLS)}")
+    keep = set(species)
+    names = clements()
+    lines = []
+    for cl in checklists(photos, location, keep):
+        per: dict[str, list[dict]] = defaultdict(list)
+        for p in cl["photos"]:
+            per[_effective(p)["label"]["sci"]].append(p)
+        for sci in sorted(per):
+            genus_only = sci.endswith(" sp.")
+            genus, _, epithet = sci.partition(" ")
+            common = "" if genus_only else names.get(sci, ("", ""))[0] or (_effective(per[sci][0])["label"].get("en") or "")
+            n = (counts or {}).get(sci) or "X"
+            note = (comments or {}).get(sci) or ""
+            if with_files:
+                note = (note + " " if note else "") + "photos: " + " ".join(Path(p["path"]).name for p in per[sci])
+            row = [common, genus, epithet, n, note, cl["name"],
+                   "" if cl["lat"] is None else f"{cl['lat']:.5f}", "" if cl["lon"] is None else f"{cl['lon']:.5f}",
+                   cl["date"], cl["start"], cl["state"], cl["country"], protocol,
+                   "1" if protocol == "Stationary" else "", str(cl["minutes"]) if protocol == "Stationary" else "", "N",
+                   "", "", f"From BirdCM photo review ({len(cl['photos'])} photos); not a complete count"]
+            lines.append(",".join(clean(v) for v in row))
+    text = "\n".join(lines) + ("\n" if lines else "")
+    if len(text.encode("utf-8")) > MAX_BYTES:
+        raise ValueError("文件超过 eBird 的 1 MB 上限：请少选几种或分几次导出")
+    return text

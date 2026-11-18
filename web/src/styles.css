@@ -408,3 +408,16 @@ main.res-main { padding-top: 0; }
 .recent-row { display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line); }
 .recent-row > button:first-child { border-bottom: 0; flex: 1; }
 .recent-row .btn.link { min-height: 0; padding: 2px 4px; font-size: 12px; white-space: nowrap; }
+.export .exp-species { border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 0 0 10px; }
+.export .exp-species legend { font-weight: 700; padding: 0 4px; }
+.exp-sp-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow: auto; columns: 2; column-gap: 18px; }
+.exp-sp-list li { break-inside: avoid; padding: 2px 0; }
+.exp-sp-list small, .eb-table small { color: var(--muted); margin-left: 4px; }
+.exp-summary { margin: 4px 0 10px; }
+.export .ebird { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 6px; }
+.export .ebird select { min-height: 34px; padding: 2px 8px; }
+.eb-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+.eb-table th, .eb-table td { text-align: left; border-bottom: 1px solid var(--line); padding: 5px 4px; vertical-align: top; }
+.eb-table .warn { color: var(--rust); font-size: 12px; }
+.eb-n { width: 56px; min-height: 30px; }
+.eb-note { width: 100%; min-height: 30px; }

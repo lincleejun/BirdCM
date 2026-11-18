@@ -151,6 +151,15 @@ class Identify(BaseModel):
     subject: int | None = None              # only switch the shown bird, no recompute
 
 
+class EbirdBody(BaseModel):
+    species: list[str]
+    counts: dict[str, str] = {}
+    comments: dict[str, str] = {}
+    protocol: str = "Incidental"
+    with_files: bool = False
+    ids: list[int] | None = None              # only these photos (the current filter)
+
+
 class NewScan(BaseModel):
     folder: str
     recursive: bool = False
@@ -412,6 +421,34 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.get("/api/photos/{pid}/preview")
     def preview(pid: int, request: Request):
         return photo_file(pid, 1, request)
+
+    @api.get("/api/scans/{sid}/ebird/plan")
+    def ebird_plan(sid: int):
+        """The species and checklists an eBird export of this scan would hold (the dialog's choices)."""
+        from birdcm import ebird
+        scan = get_scan(sid)
+        pl = ebird.plan(store.snapshot(sid)["photos"], scan["region"])
+        pl["checklists"] = [{k: v for k, v in c.items() if k != "photos"} | {"photos": len(c["photos"])} for c in pl["checklists"]]
+        return pl
+
+    @api.post("/api/scans/{sid}/ebird")
+    def ebird_csv(sid: int, body: EbirdBody):
+        """The eBird Record Format file (text/csv, UTF-8, no header row, no BOM)."""
+        from fastapi.responses import Response
+        from birdcm import ebird
+        scan = get_scan(sid)
+        photos = store.snapshot(sid)["photos"]
+        if body.ids is not None:
+            keep = set(body.ids)
+            photos = [p for p in photos if p["id"] in keep]
+        for v in body.counts.values():
+            if not (v.upper() == "X" or (v.isdigit() and 0 < int(v) < 100000)):
+                raise HTTPException(400, "数量只能是正整数或 X")
+        try:
+            text = ebird.record_csv(photos, scan["region"], body.species, body.counts, body.comments, body.protocol, body.with_files)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return Response(text, media_type="text/csv; charset=utf-8")
 
     @api.get("/api/photos/{pid}")
     def photo_full(pid: int):

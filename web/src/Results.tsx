@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post, put } from "./api";
 const CHIPS = 3;                                   // species chips shown before "+n", so the bar stays one row at 1440 px
+import ExportDialog from "./Export";
 import KeepControl, { KeepButton, keepOf, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, placeText } from "./Location";
 import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks, Verdict } from "./names";
@@ -392,7 +393,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const viewerRef = useRef<HTMLDialogElement>(null);
   const exportRef = useRef<HTMLDialogElement>(null);
   const panelRef = useRef<HTMLElement>(null);
-  const [exportFiltered, setExportFiltered] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);       // the dialog's choices are fresh each time it opens
   const openViewer = () => { if (current && !viewerRef.current?.open) viewerRef.current?.showModal(); };
   const step = (d: number) => {
     const i = view.findIndex((p) => p.id === current?.id);
@@ -488,7 +489,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
           )}
           <div className="res-actions">
             <button className="btn slim" onClick={() => setRescanOpen(true)}>重新扫描</button>
-            <button className="btn slim primary" disabled={!complete} onClick={() => exportRef.current?.showModal()}>导出</button>
+            <button className="btn slim primary" disabled={!complete} onClick={() => { setExportOpen(true); exportRef.current?.showModal(); }}>导出</button>
             <button className="btn slim link" onClick={onBack}>换一批</button>
             {nav}
           </div>
@@ -632,21 +633,12 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
         {current && <Photo row={current} marks={current.result ? marks : null} big show alt={current.file} />}
       </dialog>
 
-      <dialog ref={exportRef} aria-labelledby="e-title" style={{ maxWidth: 560 }}>
+      <dialog ref={exportRef} aria-labelledby="e-title" style={{ maxWidth: 760 }} onClose={() => setExportOpen(false)}>
         <div className="dlg-head"><h3 id="e-title">导出</h3><button className="btn" onClick={() => exportRef.current?.close()}>关闭</button></div>
-        <div className="dlg-body">
-          <label className="row" style={{ marginBottom: 14 }}><input type="checkbox" checked={exportFiltered} onChange={(e) => setExportFiltered(e.target.checked)} /> 只导出当前筛选出的 {view.length} 张</label>
-          <div className="exp-list">
-            <div className="exp-item"><div className="what">表格（CSV）<small>每张照片一行，可用 Excel / Numbers 打开</small></div>
-              <button className="btn primary" onClick={() => save("选片结果.csv", csv((exportFiltered ? view : photos).map(exportRow)), "text/csv")}>导出</button></div>
-            <div className="exp-item"><div className="what">数据（JSON）<small>字段同上，给程序用</small></div>
-              <button className="btn" onClick={() => save("选片结果.json", JSON.stringify((exportFiltered ? view : photos).map(exportRow), null, 2), "application/json")}>导出</button></div>
-            <div className="exp-item later"><div className="what">观鸟清单<small>每个鸟种一行，带数量、日期、地点</small></div><span className="tbd">以后 · 待定</span></div>
-            <div className="exp-item later"><div className="what">写给 Lightroom<small>把星级和鸟种写进旁边的 XMP 文件</small></div><span className="tbd">以后 · 待定</span></div>
-            <div className="exp-item later"><div className="what">网页报告<small>自己看的一页总结</small></div><span className="tbd">以后 · 待定</span></div>
-          </div>
-          <p className="hint" style={{ marginTop: 14 }}>导出的文件存到你选的位置，原片文件夹里不写任何东西。</p>
-        </div>
+        {exportOpen && <ExportDialog scanId={scanId} photos={photos} view={view} onClose={() => exportRef.current?.close()}
+          saveTable={(rows, kind) => kind === "csv" ? save("选片结果.csv", csv(rows.map(exportRow)), "text/csv")
+            : save("选片结果.json", JSON.stringify(rows.map(exportRow), null, 2), "application/json")} />}
+        <p className="hint" style={{ margin: "0 16px 14px" }}>导出的文件存到你选的位置，原片文件夹里不写任何东西。写给 Lightroom 的 XMP 和网页报告以后再做。</p>
       </dialog>
     </section>
   );

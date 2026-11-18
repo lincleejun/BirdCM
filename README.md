@@ -34,6 +34,24 @@ folder that contains either. UI development: `birdcm serve --no-open` plus `cd w
 
 Docs: `docs/design.md` (design), `docs/perf.md` (speed), `docs/eval.md` (accuracy), `docs/deviations.md` (where the code differs), `NOTICE.md` (model licences).
 
+## Export to eBird
+
+Export → choose the birds → "导出 eBird 文件" writes `ebird-record-format.csv` in eBird's **Record Format** (no header
+row, one row per species per checklist; a checklist is one day at one place). Format followed: eBird Help Center,
+"Upload Spreadsheet Data to eBird" (read 2026-11-18). The column order follows eBird's Record Format template; it has
+not been checked against eBird's Data Fields PDF.
+
+To import (nothing is uploaded by BirdCM):
+1. On ebird.org: Submit → Import Data → choose **eBird Record Format** → Import File, pick the CSV.
+2. **Fix Species**: names are AviList v2026 scientific names with the Clements v2026 English name from AviList's own
+   table; the dialog marks the species whose eBird name differs or that eBird does not list. Choose them by hand.
+3. **Fix Locations**: a scan placed by a chosen region (a state or country) carries no coordinates — pick the real
+   site. Photos with GPS (or a map / device point) carry coordinates.
+4. Click **Apply Fixes**, then review the checklists in My eBird.
+
+Checklists are submitted as **Incidental**, "all observations reported: N" (photos show what was photographed, not a
+complete count); counts default to X (present). "Stationary" (duration = first to last photo) can be chosen.
+
 ## Licences
 
 Code: MIT. Models are downloaded, not in this repository, and keep their own licences (`models.toml`):
