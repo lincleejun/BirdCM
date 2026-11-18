@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post, put } from "./api";
-import KeepControl, { keepOf, type KeepSetting } from "./Keep";
+const CHIPS = 3;                                   // species chips shown before "+n", so the bar stays one row at 1440 px
+import KeepControl, { KeepButton, keepOf, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, placeText } from "./Location";
 import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks } from "./names";
 import type { Exif, PhotoResult, PhotoRow, Place, Scan, Snapshot } from "./types";
@@ -233,6 +234,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
   // filters
   const [fs, setFs] = useState("all");
   const [fsp, setFsp] = useState("");
+  const [allChips, setAllChips] = useState(false);
   const [ffly, setFfly] = useState("all");
   const [frar, setFrar] = useState("0");
   const [sort, setSort] = useState("queue");
@@ -412,7 +414,8 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
       {complete && (scan.ratio as { strategy?: string })?.strategy !== "quota" ? (
         <div className="cull" aria-label="这批的结果">
           <div className="cull-keep">
-            <b className="cull-big">留 {keptN} 张 · {starredPct}%</b><small>目标 {keepSet.keep}%</small>
+            <b className="cull-big">留 {keptN} 张 · {starredPct}%</b>
+            <KeepButton value={keepSet} onChange={(v) => put(`/api/scans/${scanId}/ratio`, { ...v }).then(() => load()).catch((e) => setError(String(e.message)))} />
           </div>
           <div className="cull-stars">
             {[3, 2, 1].map((n) => (
@@ -426,12 +429,12 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
           </div>
           <div className="cull-species">
             <b>{species.list.length} 种鸟</b>
-            {notable.map((n) => (
+            {(allChips ? notable : notable.slice(0, CHIPS)).map((n) => (
               <button key={n.sci} type="button" className={`cull-chip rare${fsp === n.sci ? " on" : ""}`} title={n.why} onClick={() => setFsp(fsp === n.sci ? "" : n.sci)}>{n.name}<small>{n.tag}</small></button>
             ))}
-          </div>
-          <div className="cull-ratio">
-            <KeepControl name="keep-res" value={keepSet} onChange={(v) => put(`/api/scans/${scanId}/ratio`, { ...v }).then(() => load()).catch((e) => setError(String(e.message)))} />
+            {notable.length > CHIPS && (
+              <button type="button" className="cull-chip" aria-expanded={allChips} onClick={() => setAllChips(!allChips)}>{allChips ? "收起" : `+${notable.length - CHIPS}`}</button>
+            )}
           </div>
         </div>
       ) : (

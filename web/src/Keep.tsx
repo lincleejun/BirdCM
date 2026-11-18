@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 // 留片比例: one number, the share of eligible photos that get any star (1 + 2 + 3). Which star is decided by quality,
 // not by quotas. Changing it after a scan only re-rates (no re-scan).
 export interface KeepSetting { preset: string; keep: number }
@@ -27,5 +28,38 @@ export default function KeepControl({ value, onChange, name = "keep" }: { value:
           onChange={(e) => onChange({ preset: "custom", keep: Math.max(1, Math.min(100, +e.target.value || 1)) })} /> %</label>
       )}
     </>
+  );
+}
+
+/** The ratio as a compact button ("目标 20% ▾") that opens the five choices; choosing closes it and calls onChange. */
+export function KeepButton({ value, onChange }: { value: KeepSetting; onChange: (v: KeepSetting) => void }) {
+  const [open, setOpen] = useState(false);
+  const [custom, setCustom] = useState(value.keep);
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  const pick = (v: KeepSetting) => { setOpen(false); if (v.keep !== value.keep || v.preset !== value.preset) onChange(v); };
+  return (
+    <span className="keep-pop" ref={box}>
+      <button type="button" className="keep-btn" aria-expanded={open} onClick={() => { setCustom(value.keep); setOpen(!open); }}>目标 {value.keep}% ▾</button>
+      {open && (
+        <div className="keep-menu" role="dialog" aria-label="留片比例">
+          {KEEP_PRESETS.map(([v, t, k]) => (
+            <button key={v} type="button" className={value.preset === v ? "on" : ""} onClick={() => pick({ preset: v, keep: k })}>{t} {k}%</button>
+          ))}
+          <label className={value.preset === "custom" ? "on" : ""}>自定义
+            <input type="number" min={1} max={100} value={custom} onChange={(e) => setCustom(+e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") pick({ preset: "custom", keep: Math.max(1, Math.min(100, Math.round(custom) || 1)) }); }} /> %
+            <button type="button" className="btn" onClick={() => pick({ preset: "custom", keep: Math.max(1, Math.min(100, Math.round(custom) || 1)) })}>好</button>
+          </label>
+          <p className="hint">有星的照片占比上限；改了立刻重算，不用重扫</p>
+        </div>
+      )}
+    </span>
   );
 }
