@@ -389,20 +389,24 @@ final class Library {
                 if issues.contains(name) { continue }
                 let raw = try Data(contentsOf: dir.appendingPathComponent(name))
                 let photo = String(name.dropLast(5)) + ".photo"
+                // Only content problems become recovery items; I/O failures rethrow so user_version stays 0 and the next launch retries.
+                let r: Record
+                do { r = try JSONDecoder().decode(Record.self, from: raw) } catch {
+                    try db.run("INSERT OR REPLACE INTO ll_legacy_issue VALUES(?,?,?,?)", [name, raw, present.contains(photo) ? photo : nil, String(describing: error)]); continue
+                }
+                let id = r.id.uuidString.lowercased()
+                if done.contains(id) { continue }
+                let has = present.contains(photo)
+                let hash = has ? try Models.digest(dir.appendingPathComponent(photo)) : sha256(Data("missing legacy photo/\(id)".utf8))
                 do {
-                    let r = try JSONDecoder().decode(Record.self, from: raw)
-                    let id = r.id.uuidString.lowercased()
-                    if done.contains(id) { continue }
-                    let has = present.contains(photo)
-                    let hash = has ? try Models.digest(dir.appendingPathComponent(photo)) : sha256(Data("missing legacy photo/\(id)".utf8))
                     try db.transaction {
                         try insertAsset(hash, path: has ? photo : nil, missing: !has, shooting: r.shooting, file: has ? dir.appendingPathComponent(photo) : nil)
                         try writeRecord(r, hash: hash, insert: true, legacy: String(decoding: raw, as: UTF8.self), now: r.date, zone: zone)
                         try syncSubjects(r, now: r.date, issue: name)
                     }
                     done.insert(id)
-                } catch {
-                    try db.run("INSERT OR REPLACE INTO ll_legacy_issue VALUES(?,?,?,?)", [name, raw, present.contains(photo) ? photo : nil, String(describing: error)])
+                } catch let e as StoreError where e.message.localizedCaseInsensitiveContains("constraint") {
+                    try db.run("INSERT OR REPLACE INTO ll_legacy_issue VALUES(?,?,?,?)", [name, raw, has ? photo : nil, e.message])
                 }
             }
             try db.transaction {

@@ -187,6 +187,17 @@ final class LibraryTests: XCTestCase {
         // Old JSON sidecars remain as read-only recovery files.
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasSuffix(".json") }.count, 8)
     }
+    /// An unreadable original is an I/O failure, not a corrupt record: migration stops unverified and the next attempt imports it.
+    func testUnreadablePhotoRetriesInsteadOfQuarantining() throws {
+        let dir = tmp(), old = try makeLegacyStore(dir)
+        let photo = dir.appendingPathComponent("\(old[0].id).photo")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: photo.path)
+        let lib = try Library(dir: dir)
+        XCTAssertThrowsError(try lib.migrate(zone: pst)); XCTAssertTrue(try Library(dir: dir).needsMigration)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: photo.path)
+        try lib.migrate(zone: pst)
+        XCTAssertNotNil(try lib.record(old[0].id)); XCTAssertEqual(try lib.query("SELECT count(*) FROM ll_legacy_issue WHERE raw_json IS NOT NULL")[0].n(0), 1)
+    }
     func testPortableArchiveRoundTripAndRejection() throws {
         let dir = tmp(); _ = try makeLegacyStore(dir)
         let lib = try Library(dir: dir); try lib.migrate(zone: pst)

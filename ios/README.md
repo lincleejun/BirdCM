@@ -57,7 +57,7 @@ for device in 'BirdCM 18 Pro' 'BirdCM 15'; do
 
 再次执行需换 resultBundlePath（Xcode 不覆盖现有 xcresult）。测试会生成来源明确的 UI 夹具截图，以及 `testRealInferenceEagle` / `testRealInferenceEgret` 的真实推理截图；这两项没有 `-modelDir`，会加载 App 内模型。每个普通等待最多 10 秒，真实模型加载/识别各最多 45 秒，失败立即结束当前测试。多状态与真实推理拆成独立测试，便于直接定位失败。
 
-如果只需要逻辑测试可用 `-only-testing:BirdCMTests`，只截图用 `-only-testing:BirdCMUITests`。真实模型测试默认使用 App 内资源；可选 `TEST_RUNNER_MODELDIR` / `TEST_RUNNER_GEOMODEL` 覆盖。UI fixtures 是 Debug-only，入口在“更多 → 诊断”，不是首页；多鸟夹具使用 photo-1 的两只鹈鹕，历史过滤测试用 `-historyFixtureCount 8` 一次播种八条。`locationFixture=allowed|denied` 用于确定性测试；另有真正系统权限弹窗流程。普通 pick helper 只等待最终结果，不等待短暂的识别中状态；加载截图使用固定 loading 状态。
+如果只需要逻辑测试可用 `-only-testing:BirdCMTests`，只截图用 `-only-testing:BirdCMUITests`。真实模型测试默认使用 App 内资源；可选 `TEST_RUNNER_MODELDIR` / `TEST_RUNNER_GEOMODEL` 覆盖。UI fixtures 是 Debug-only，入口在“设置（齿轮）→ 诊断”，不是首页；多鸟夹具使用 photo-1 的两只鹈鹕，历史过滤测试用 `-historyFixtureCount 8` 一次播种八条。`locationFixture=allowed|denied` 用于确定性测试；另有真正系统权限弹窗流程。普通 pick helper 只等待最终结果，不等待短暂的识别中状态；加载截图使用固定 loading 状态。
 
 Mac 共享逻辑与脚本检查（不能替代 iOS 测试）：
 
@@ -88,7 +88,7 @@ Python 参考已重新生成：`tools/regenerate_crop_references.py ../BirdCM` �
 
 ## Round 4：鸟图、保存与分享
 
-结果顶部为“鸟 1 / 鸟 2 / … / 原图”的横向分页，带页点及小缩略图；点原图上的框可返回那只鸟。没有鸟时在原图上画框，手动结果成为鸟 1；最多六张鸟图，其余数量标在原图。名称后立即展示本地稀有度、IUCN 与需核对的提示。首页地点有真实按钮，设好后折叠；历史八条起提供搜索排序。
+结果顶部为“鸟 1 / 鸟 2 / … / 原图”的横向分页，带页点及小缩略图；点原图上的框可返回那只鸟。没有鸟时在原图上画框，手动结果成为鸟 1；最多六张鸟图，其余数量标在原图。名称后立即展示本地稀有度、IUCN 与需核对的提示。首页地点有真实按钮，设好后折叠；搜索和排序现在在“记录 → 照片”里始终可见。
 
 展示裁图使用原始文件、EXIF 八方向转正、35% 对称留白和最少新增面积的 1:1 / 4:5 / 3:2；小鸟最多再放宽到 1.5 倍并提示“鸟很小”。模型仍使用独立的桌面补色正方形分类裁剪。完整规则与桌面同源颜色 token 见 [DESIGN.md](DESIGN.md)。
 

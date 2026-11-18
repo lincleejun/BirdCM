@@ -166,6 +166,8 @@ func title(_ r: Identification) -> String {
     }
     func refresh() {
         guard let library, migration == nil else {return}
+        // A cleared/restored library must not leave a tombstoned record open in any tab.
+        if let id=current?.id,(try? library.query("SELECT 1 FROM ll_record WHERE id=? AND deleted_utc IS NULL",[id.uuidString.lowercased()]).isEmpty) ?? false {showing=false;current=nil;photo=nil}
         do { items=try library.items(); ledger=Ledger(items:items,edits:try library.groupEdits(),known:catalogue.contains) } catch { self.error=error.localizedDescription }
     }
     /// One shared commit path for every edit: write, reload the open record, refresh counts. False leaves the editor open.
@@ -399,6 +401,7 @@ extension View {
 
 struct IdentifyView: View {
     @Environment(AppModel.self) var model
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var pick: PhotosPickerItem?
     @State private var place=false
     @State private var map=false
@@ -454,6 +457,7 @@ struct IdentifyView: View {
                 if !model.items.isEmpty {Button("查看全部 \(model.items.count) 张") {model.recordsMode="photos";model.tab = .records}.accessibilityIdentifier("home.allRecords").frame(minHeight:44)}
             }
             if !model.status.isEmpty { Text(model.status).font(.footnote).foregroundStyle(Palette.secondary) }
+            if typeSize.isAccessibilitySize {Text("系统选片无需相册访问授权；仅读取你选择的照片。").font(.caption).foregroundStyle(Palette.secondary).listRowBackground(Color.clear)}
             if let cameraNote {
                 Section {
                     Text(cameraNote).accessibilityIdentifier(cameraDenied ? "camera.denied":"camera.unavailable")
@@ -466,7 +470,8 @@ struct IdentifyView: View {
         .safeAreaInset(edge:.bottom) {
             if model.ready {
                 VStack(spacing:6) {
-                    Text("系统选片无需相册访问授权；仅读取你选择的照片。").font(.caption).foregroundStyle(Palette.secondary).fixedSize(horizontal:false,vertical:true)
+                    // At accessibility sizes the note moves into the list so the fixed bar stays short.
+                    if !typeSize.isAccessibilitySize {Text("系统选片无需相册访问授权；仅读取你选择的照片。").font(.caption).foregroundStyle(Palette.secondary).fixedSize(horizontal:false,vertical:true)}
                     PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current) { Label("从相册选择",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:54) }
                         .accessibilityIdentifier("home.photos").buttonStyle(PrimaryActionStyle()).disabled(model.busy || model.migration != nil)
                     Button("拍照",systemImage:"camera"){takePhoto()}.accessibilityIdentifier("home.camera").frame(maxWidth:.infinity,minHeight:44).buttonStyle(.bordered).disabled(model.busy)
@@ -478,7 +483,7 @@ struct IdentifyView: View {
         .overlay { if model.busy { IdentifyingView() } }
         .sheet(isPresented:$place) {PlacePicker(onChoose:{p in model.chooseHome(p)}).debugAppearance()}
         .sheet(isPresented:$map) {MapPlacePicker(initial:model.homePlace){p in model.chooseHome(p)}}
-        .fullScreenCover(isPresented:$camera) {CameraPicker{data in Task{await model.receive(data)}}.ignoresSafeArea()}
+        .fullScreenCover(isPresented:$camera) {CameraPicker(close:{camera=false}){data in Task{await model.receive(data)}}.ignoresSafeArea()}
         .onChange(of:pick) { Task {
             guard let pick else{return}
             do { if let d=try await pick.loadTransferable(type:Data.self) {await model.receive(d)} }
@@ -490,17 +495,17 @@ struct IdentifyView: View {
 
 /// UIImagePickerController camera; the capture is encoded once with its metadata and goes through the same receive path. Never saved to Photos.
 struct CameraPicker: UIViewControllerRepresentable {
+    let close:()->Void
     let done:(Data)->Void
-    @Environment(\.dismiss) var dismiss
     func makeUIViewController(context:Context) -> UIImagePickerController {let c=UIImagePickerController();c.sourceType = .camera;c.delegate=context.coordinator;return c}
     func updateUIViewController(_ c:UIImagePickerController,context:Context) {}
     func makeCoordinator() -> Coordinator {Coordinator(self)}
     final class Coordinator:NSObject,UIImagePickerControllerDelegate,UINavigationControllerDelegate {
         let parent:CameraPicker
         init(_ p:CameraPicker){parent=p}
-        func imagePickerControllerDidCancel(_ picker:UIImagePickerController) {parent.dismiss()}
+        func imagePickerControllerDidCancel(_ picker:UIImagePickerController) {parent.close()}
         func imagePickerController(_ picker:UIImagePickerController,didFinishPickingMediaWithInfo info:[UIImagePickerController.InfoKey:Any]) {
-            defer{parent.dismiss()}
+            defer{parent.close()}
             guard let image=info[.originalImage] as? UIImage,let cg=image.cgImage else{return}
             let orientation:[UIImage.Orientation:Int]=[.up:1,.upMirrored:2,.down:3,.downMirrored:4,.leftMirrored:5,.right:6,.rightMirrored:7,.left:8]
             var meta=(info[.mediaMetadata] as? [String:Any]) ?? [:]
