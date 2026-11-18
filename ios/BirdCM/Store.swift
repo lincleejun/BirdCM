@@ -16,6 +16,8 @@ struct Record: Codable, Identifiable {
     var place: Place?
     var manual = false
     var results: [String:Identification] = [:]
+    /// Library overlay (subject identity and human edits); never written into the legacy JSON.
+    var subjects: [SubjectEdit]? = nil
     func matches(_ query:String) -> Bool {
         let q=query.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !q.isEmpty else {return true}
@@ -24,7 +26,15 @@ struct Record: Codable, Identifiable {
     }
 }
 
-/// Original selected bytes are retained, so changing birds after reopening uses identical pixels.
+struct SubjectEdit: Codable, Equatable {
+    var id: String
+    var state = "none"
+    var key: String?
+    var count: Int?
+    var excluded = false
+}
+
+/// The pre-library format (one JSON + one `.photo` per identification). Read only by migration; kept for building old-format test stores.
 final class HistoryStore {
     let dir: URL
     init(dir: URL) throws {
