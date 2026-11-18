@@ -33,6 +33,7 @@ from dataclasses import asdict, dataclass, fields
 from datetime import datetime
 
 BURST_GAP = 2.0
+OLD_PRESET_KEEP = {"loose": 30, "std": 25, "strict": 20, "stricter": 10}   # preset -> share of photos with a star (%)
 
 
 @dataclass
@@ -90,6 +91,10 @@ class Config:
         c = cls(**{k: v for k, v in r.items() if k in known})
         if "keep" in r:
             c.keep = float(r["keep"]) / 100
+        elif r.get("strategy") != "quota" and ("p3" in r or "preset" in r):
+            # an older scan's settings ({preset, p3, p2}): the same preset under the new single ratio, not the old quotas
+            c.strategy = "select"
+            c.keep = OLD_PRESET_KEEP.get(r.get("preset"), 25) / 100
         if "p3" in r:
             c.q3 = float(r["p3"]) / 100
         if "p2" in r:

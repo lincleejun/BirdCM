@@ -7,7 +7,8 @@ export const DEFAULT_KEEP: KeepSetting = { preset: "std", keep: 25 };
 export function keepOf(ratio: { preset?: string; keep?: number } | null | undefined): KeepSetting {
   const k = ratio?.keep;
   if (typeof k === "number") return { preset: ratio?.preset ?? "custom", keep: k };
-  return DEFAULT_KEEP;
+  const p = KEEP_PRESETS.find((x) => x[0] === ratio?.preset);      // an older scan's {preset, p3, p2}: same preset, new ratio
+  return p ? { preset: p[0], keep: p[2] } : DEFAULT_KEEP;
 }
 
 export default function KeepControl({ value, onChange, name = "keep" }: { value: KeepSetting; onChange: (v: KeepSetting) => void; name?: string }) {

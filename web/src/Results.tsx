@@ -261,7 +261,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
       if (onlyIds) return onlyIds.ids.has(p.id);
       if (fold && groupOnly === null && (p.burst_rank ?? 1) > 1) return false;
       if (groupOnly !== null) return p.burst_group === groupOnly;
-      if (starsReady && fs !== "all" && p.stars !== +fs) return false;
+      if (starsReady && fs !== "all" && (fs === "drop" ? (p.stars ?? 0) > 0 : p.stars !== +fs)) return false;
       if (!usesResults) return true;
       const r = p.result;
       if (!r || r.rejected) return false;
@@ -336,6 +336,17 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
   const eligibleN = photos.filter((p) => p.result && !p.result.rejected).length;
   const starredPct = eligibleN ? Math.round((100 * photos.filter((p) => (p.stars ?? 0) > 0).length) / eligibleN) : 0;
   const keepSet = keepOf(scan.ratio as { preset?: string; keep?: number });
+  const keptN = photos.filter((p) => (p.stars ?? 0) > 0).length;
+  // notable species: locally 少见 / 罕见 this month, or threatened worldwide (IUCN NT and worse)
+  const notableMap = new Map<string, { sci: string; name: string; tag: string; why: string }>();
+  for (const p of photos) {
+    const r = p.result, l = r?.species?.label;
+    if (!r || r.rejected || r.species?.level !== "species" || !l) continue;
+    const t = r.rarity?.tier, iucn = r.rarity?.iucn;
+    const tags = [t === 1 || t === 0 ? "罕见" : t === 2 ? "少见" : "", iucn && ["NT", "VU", "EN", "CR"].includes(iucn) ? (IUCN_ZH[iucn] ?? iucn) : ""].filter(Boolean);
+    if (tags.length) notableMap.set(l.sci, { sci: l.sci, name: l.zh || l.en || l.sci, tag: tags.join("·"), why: `${l.sci}：${tags.join("，")}` });
+  }
+  const notable = [...notableMap.values()];
   const rare = new Map<string, string>();
   for (const p of photos) {
     const t = p.result?.rarity?.tier, l = p.result?.species?.label;
@@ -382,11 +393,6 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
       {rel.stale && !rel.newer && (
         <p className="stale">这些结果是旧版本算的（模型、地点修正或规则变过） · <button className="btn link" onClick={() => setRescanOpen(true)}>重新扫描</button></p>
       )}
-      {complete && (scan.ratio as { strategy?: string })?.strategy !== "quota" && (
-        <div className="keep-row"><span className="label" style={{ margin: 0 }}>留片比例（有星的照片占比）</span>
-          <KeepControl name="keep-res" value={keepSet} onChange={(v) => put(`/api/scans/${scanId}/ratio`, { ...v }).then(() => load()).catch((e) => setError(String(e.message)))} />
-          <span className="hint">目标 {keepSet.keep}%，实际 {starredPct}%（{eligibleN} 张可评星的照片）· 改了立刻重算，不用重扫</span></div>
-      )}
       {changes && (
         <p className="changes"><button className="btn link" onClick={() => { keepOld(rel.previous!, true); onOpen(rel.previous!); }}>之前的结果</button> · 和上一次扫描比：
           <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.changed), label: "鸟种有变化的" })}>{changes.changed.length} 张鸟种变了</button>，
@@ -403,11 +409,36 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
         {!complete && <progress value={finished} max={c.total || 1} aria-label="扫描进度" />}
       </div>
 
+      {complete && (scan.ratio as { strategy?: string })?.strategy !== "quota" ? (
+        <div className="cull" aria-label="这批的结果">
+          <div className="cull-keep">
+            <b className="cull-big">留 {keptN} 张 · {starredPct}%</b><small>目标 {keepSet.keep}%</small>
+          </div>
+          <div className="cull-stars">
+            {[3, 2, 1].map((n) => (
+              <button key={n} type="button" className={`cull-chip${fs === String(n) ? " on" : ""}`} onClick={() => setFs(fs === String(n) ? "all" : String(n))}>
+                <span className="stars">{"★".repeat(n)}</span> {photos.filter((p) => p.stars === n).length}</button>
+            ))}
+          </div>
+          <div className="cull-drop" title={`0 星 ${photos.filter((p) => p.stars === 0).length} 张（可评星但没选上）· 淘汰 ${rejected} 张（没有清楚的鸟）`}>
+            <button type="button" className={`cull-chip${fs === "drop" ? " on" : ""}`} onClick={() => setFs(fs === "drop" ? "all" : "drop")}>不留 {c.total - keptN} 张</button>
+            <small>0 星 {photos.filter((p) => p.stars === 0).length} · 淘汰 {rejected}</small>
+          </div>
+          <div className="cull-species">
+            <b>{species.list.length} 种鸟</b>
+            {notable.map((n) => (
+              <button key={n.sci} type="button" className={`cull-chip rare${fsp === n.sci ? " on" : ""}`} title={n.why} onClick={() => setFsp(fsp === n.sci ? "" : n.sci)}>{n.name}<small>{n.tag}</small></button>
+            ))}
+          </div>
+          <div className="cull-ratio">
+            <KeepControl name="keep-res" value={keepSet} onChange={(v) => put(`/api/scans/${scanId}/ratio`, { ...v }).then(() => load()).catch((e) => setError(String(e.message)))} />
+          </div>
+        </div>
+      ) : (
       <div className="summary" data-complete={complete}>
         {complete ? (
           <>
             <div><b>{c.total}</b><small>张照片</small></div>
-            <div><b>{starredPct}%</b><small>有星（目标 {keepSet.keep}%）</small></div>
             {[3, 2, 1, 0].map((s) => (
               <div key={s}><b>{starsReady ? photos.filter((p) => p.stars === s).length : "—"}</b>
                 <small className="stars" aria-label={`${s} 星`}>{s ? "★".repeat(s) : "0 星"}{!starsReady && " 待定"}</small></div>
@@ -419,6 +450,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
         <div><b className="rare-name">{rareNames || (complete ? "没有" : "尚未发现")}</b>
           <small title={RARITY_NOTE}>少见和罕见（当地当月的观察记录比例）</small></div>
       </div>
+      )}
 
       <div className="filters" role="group" aria-label="筛选和排序">
         <div className="seg" role="radiogroup" aria-label="星级" aria-disabled={!starsReady}>

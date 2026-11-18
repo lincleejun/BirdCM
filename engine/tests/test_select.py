@@ -86,3 +86,11 @@ def test_species_floor_and_determinism():
     assert o[-1]["stars"] >= 1
     assert run(ps, keep=10) == o
     assert run([photo(0, rejected=True, reject_reason="没有清楚的鸟")])[0]["stars"] == -1
+
+
+def test_old_shaped_settings_migrate_to_select():
+    from birdcm.stars import Config
+    c = Config.from_ratio({"preset": "strict", "p3": 20, "p2": 30})
+    assert c.strategy == "select" and c.keep == 0.20
+    assert Config.from_ratio({"strategy": "quota", "p3": 20, "p2": 30}).strategy == "quota"
+    assert Config.from_ratio(None).strategy == "select" and Config.from_ratio(None).keep == 0.25

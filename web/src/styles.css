@@ -324,3 +324,17 @@ dialog.map-dlg { width: min(860px, 96vw); }
 .stale .btn.link, .changes .btn.link { padding: 0 2px; min-height: 0; text-decoration: underline; }
 .keep-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: -6px 0 14px; }
 .pill.more { cursor: pointer; color: var(--green); border-color: var(--green); }
+.summary[data-complete=true] { grid-template-columns: repeat(8, minmax(60px, 1fr)) minmax(176px, 2.2fr); }
+@media (max-width: 920px) { .summary[data-complete=true] { grid-template-columns: repeat(3, 1fr); } }
+/* The decision bar: what is kept, what is not, which birds matter, and the one setting that changes it */
+.cull { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 12px 14px; margin-bottom: 17px; border-block: 1px solid var(--line); background: var(--surface); }
+.cull-keep { display: flex; align-items: baseline; gap: 8px; }
+.cull-big { font: 700 26px/1.2 var(--serif); }
+.cull small { color: var(--muted); font-size: 12px; }
+.cull-stars, .cull-species { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cull-drop { display: flex; flex-direction: column; gap: 2px; }
+.cull-chip { border: 1px solid var(--line); border-radius: 999px; background: var(--paper); padding: 4px 10px; font: 650 14px/1.3 var(--mono); }
+.cull-chip.on { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.cull-chip.rare { font: 650 13px/1.3 var(--sans); color: var(--rust); border-color: currentColor; }
+.cull-chip.rare small { margin-left: 4px; color: inherit; }
+.cull-ratio { margin-left: auto; }
