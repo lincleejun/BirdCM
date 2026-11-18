@@ -116,7 +116,7 @@ def decode(job: dict) -> dict:
         if job.get(key):
             out = Path(job[key])
             out.parent.mkdir(parents=True, exist_ok=True)
-            tmp = out.with_suffix(".tmp")
+            tmp = out.with_name(f"{out.name}.{os.getpid()}.{threading.get_ident()}.tmp")   # concurrent writers
             img.save(tmp, "JPEG", quality=82 if key == "thumb" else 85)
             tmp.replace(out)
     t2 = time.perf_counter()

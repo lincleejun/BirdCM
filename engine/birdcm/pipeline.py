@@ -86,6 +86,7 @@ class Engine:
         self.exif, self._own_exif = exif or decode.ExifTool(), exif is None
         self.workers, self.det_batch, self.tower_batch, self.mode = workers, det_batch, tower_batch, mode
         self.stats: dict[str, float] = {}
+        self.decode_fn = decode.decode          # a module-level function (spawned workers import it); tests swap it
         self._pool: ProcessPoolExecutor | None = None
 
     def close(self) -> None:
@@ -121,6 +122,8 @@ class Engine:
             while todo or suspects or inflight or ready:
                 if should_stop():
                     return
+                broken = crashed = False
+                stuck: set[int] = set()
                 # submit: normal work keeps 2 x workers in flight; after a pool crash, suspects go one at a time
                 while (suspects and not inflight) or (not suspects and todo and len(inflight) < 2 * self.workers):
                     isolating = bool(suspects)
@@ -132,7 +135,13 @@ class Engine:
                     thumb, preview = image_paths(it["path"], it["size"], it["mtime_ns"])
                     job = {"path": it["path"], "size": it["size"], "mtime_ns": it["mtime_ns"], "thumb": str(thumb),
                            "preview": str(preview), "mode": self.mode}
-                    inflight[pool.submit(decode.decode, job)] = (it, time.monotonic())
+                    try:
+                        fut = pool.submit(self.decode_fn, job)
+                    except BrokenProcessPool:             # a worker died while we were on the GPU
+                        (suspects if isolating else todo).appendleft(it)
+                        broken = True
+                        break
+                    inflight[fut] = (it, time.monotonic())
                     if on_submit:
                         on_submit(it)
                     if suspects:
@@ -141,7 +150,6 @@ class Engine:
                     t = time.perf_counter()
                     done, _ = wait(list(inflight), timeout=0.05 if ready else 0.25, return_when=FIRST_COMPLETED)
                     self._add("wait_decode", time.perf_counter() - t)
-                    crashed = False
                     for f in done:
                         it, _t0 = inflight.pop(f)
                         try:
@@ -159,19 +167,19 @@ class Engine:
                             first_ready = time.monotonic()
                         ready.append((it, d))
                     stuck = {id(inflight[f][0]) for f, (_, t0) in inflight.items() if time.monotonic() - t0 > DECODE_TIMEOUT}
-                    if crashed or stuck:
-                        # A crash with several decodes in flight can't be pinned on one: they all become suspects
-                        # and run again one at a time; a suspect that crashes alone is the bad file.
-                        victims = [it for it, _ in inflight.values()]
-                        inflight.clear()
-                        pool = self._new_pool()
-                        for it in victims:
-                            if id(it) in stuck:
-                                yield it, None, "解码超时（文件可能已损坏）"
-                            elif isolating:
-                                yield it, None, "解码进程崩溃（文件可能已损坏）"
-                            else:
-                                suspects.append(it)
+                if crashed or stuck or broken:
+                    # A crash with several decodes in flight can't be pinned on one: they all become suspects
+                    # and run again one at a time; a suspect that crashes alone is the bad file.
+                    victims = [it for it, _ in inflight.values()]
+                    inflight.clear()
+                    pool = self._new_pool()
+                    for it in victims:
+                        if id(it) in stuck:
+                            yield it, None, "解码超时（文件可能已损坏）"
+                        elif isolating:
+                            yield it, None, "解码进程崩溃（文件可能已损坏）"
+                        else:
+                            suspects.append(it)
                 if ready and (len(ready) >= self.det_batch or not (todo or suspects or inflight)
                               or time.monotonic() - first_ready > GPU_WAIT):
                     batch, ready = ready[:self.det_batch], ready[self.det_batch:]
