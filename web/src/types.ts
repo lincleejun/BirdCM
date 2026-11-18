@@ -9,7 +9,10 @@ export interface Exif {
 }
 export interface Name { sci: string; en: string | null; zh: string | null; p: number }
 export interface Species { level: "species" | "genus" | "uncertain"; label: Name | null; top5: Name[]; geo: boolean }
-export interface Detection { box: Box; score: number }
+export interface Detection {
+  box: Box; score: number; clear: boolean | null; species: Species;
+  eye: Point | null; eye_p: number | null; beak: Point | null; beak_p: number | null; p_fly: number | null;
+}
 export interface Region { name: string | null; source: "photo" | "scan" | null; gps: [number, number] | null }
 export interface Rarity { tier: number; iucn: string | null }
 
@@ -18,9 +21,10 @@ export interface PhotoResult {
   exif: Exif; region: Region; focus: Point | null; boxes: Detection[]; subject: number | null;
   species: Species | null; eye: Point | null; eye_p: number | null; eye_visible: boolean | null;
   beak: Point | null; beak_p: number | null; flying: boolean | null; p_fly: number | null;
-  clear: boolean | null;          // pending
-  sharpness: number | null;       // pending
-  aesthetic: number | null;       // pending
+  clear: boolean | null;          // subject passed the clear-bird gate
+  sharpness: number | null;       // head sharpness (grad ratio), uncalibrated scale: compare within a batch
+  sharpness_region: "eye" | "head" | "box" | null; sharpness_window: Box | null;
+  aesthetic: number | null;       // 0-1, whole photo
   rarity: Rarity | null;          // pending
   rejected: boolean; reject_reason: string | null; pending: string[];
 }

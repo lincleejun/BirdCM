@@ -14,6 +14,8 @@ const starTxt = (s: number) => (s === -1 ? "淘汰" : s === 0 ? "0 星" : "★".
 const starLabel = (s: number | null) => (s === null ? "待定" : s === -1 ? "淘汰" : `${s} 星`);
 const pct = (p: number) => `${Math.round(p * 100)}%`;
 const evText = (ev: number | null) => (ev === null ? "— EV" : `${ev > 0 ? "+" : ""}${+ev.toFixed(1)} EV`);
+const sharpTxt = (v: number | null | undefined) => (v == null ? "—" : v.toFixed(2));
+const REGION: Record<string, string> = { eye: "眼睛周围", head: "头部", box: "整个鸟框" };
 const fmtTime = (t: string | null | undefined) => (t ? t.slice(0, 19).replace("T", " ") : "时间未知");
 
 export function nameOf(r: PhotoResult): string {
@@ -83,10 +85,11 @@ function exportRow(p: PhotoRow) {
     候选: s ? s.top5.map((c) => `${c.zh ?? c.en} · ${c.sci} · ${pct(c.p)}`).join(" / ") : "",
     在飞: r?.flying == null ? "" : r.flying ? "是" : "否", 在飞概率: r?.p_fly ?? "",
     鸟框: r && r.subject != null ? r.boxes[r.subject].box.join(" ") : "", 眼睛位置: r?.eye?.join(" ") ?? "", 对焦点: r?.focus?.join(" ") ?? "",
-    眼睛: r?.eye_visible == null ? "" : r.eye_visible ? "看得见" : "看不见", 眼部清晰度: r?.sharpness ?? "待定", 美学分: r?.aesthetic ?? "待定",
-    稀有度: r?.rarity ? r.rarity.tier : "待定", IUCN: r?.rarity?.iucn ?? "待定", 连拍组: p.burst_group ?? "", 组内排名: p.burst_rank ?? "待定",
+    眼睛: r?.eye_visible == null ? "" : r.eye_visible ? "看得见" : "看不见", 头部清晰度: r?.sharpness ?? "", 清晰度测量处: r?.sharpness_region ?? "",
+    美学分: r?.aesthetic ?? "", 清楚的鸟: r?.clear == null ? "" : r.clear ? "是" : "否",
+    稀有度: r?.rarity ? r.rarity.tier : "待定", IUCN: r?.rarity?.iucn ?? "待定", 连拍组: p.burst_group ?? "", 组内排名: p.burst_rank ?? "", 连拍组张数: p.burst_size ?? "",
     相机: e?.camera ?? "", 镜头: e?.lens ?? "", 焦距毫米: e?.focal_mm ?? "", 光圈: e?.aperture ?? "", 快门秒: e?.shutter ?? "", ISO: e?.iso ?? "",
-    曝光补偿EV: e?.ev ?? "", 对焦模式: e?.focus_mode ?? "", 拍摄时间: e?.taken_at ? fmtTime(e.taken_at) : "",
+    曝光补偿EV: e?.ev ?? "", 对焦模式: e?.focus_mode ?? "", 拍摄时间: e?.taken_at ?? "", 拍摄时间显示: e?.taken_at ? fmtTime(e.taken_at) : "",
     地区: r?.region.source === "photo" ? `GPS ${r.region.gps!.map((v) => v.toFixed(5)).join(", ")}` : r?.region.name ?? "",
     地区来源: r?.region.source === "photo" ? "照片自带" : r?.region.source === "scan" ? "批次设定" : "",
   };
@@ -101,7 +104,12 @@ function save(name: string, text: string, type: string) {
 function csv(rows: ReturnType<typeof exportRow>[]): string {
   if (!rows.length) return "﻿";
   const keys = Object.keys(rows[0]) as (keyof (typeof rows)[0])[];
-  const q = (v: unknown) => { const t = String(v ?? ""); return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const q = (v: unknown) => {
+    // text that a spreadsheet would run as a formula gets a leading apostrophe (numbers stay numbers); JSON keeps the original
+    let t = String(v ?? "");
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(t)) t = "'" + t;
+    return /[",\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
   return "﻿" + [keys.join(","), ...rows.map((o) => keys.map((k) => q(o[k])).join(","))].join("\n");
 }
 
@@ -111,12 +119,17 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   const [photos, setPhotos] = useState<PhotoRow[]>([]);
   const [error, setError] = useState("");
   const index = useRef(new Map<number, number>());
-  const lastN = useRef(0);
-  const pending = useRef<{ rows: Map<number, PhotoRow>; scan: Partial<Scan> | null }>({ rows: new Map(), scan: null });
+  const lastN = useRef(0);          // newest event seen (dedupe)
+  const snapN = useRef(-1);         // cursor of the snapshot on screen: events at or below it are already in it
+  const pending = useRef<{ rows: Map<number, { n: number; row: PhotoRow }>; scan: { n: number; data: Partial<Scan> } | null }>({ rows: new Map(), scan: null });
   const flushTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     const s = await get<Snapshot>(`/api/scans/${scanId}`);
+    if (s.cursor < snapN.current) return s;                   // an older snapshot answered late: keep the newer one
+    snapN.current = s.cursor;
+    pending.current.rows.forEach((v, id) => { if (v.n <= s.cursor) pending.current.rows.delete(id); });
+    if (pending.current.scan && pending.current.scan.n <= s.cursor) pending.current.scan = null;
     index.current = new Map(s.photos.map((p, i) => [p.id, i]));
     lastN.current = Math.max(lastN.current, s.cursor);
     setScan(s.scan);
@@ -131,19 +144,20 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
       flushTimer.current = null;
       const { rows, scan: sc } = pending.current;
       pending.current = { rows: new Map(), scan: null };
-      if (rows.size) setPhotos((old) => { const next = old.slice(); rows.forEach((r, id) => { const i = index.current.get(id); if (i !== undefined) next[i] = { ...next[i], ...r }; }); return next; });
-      if (sc) setScan((old) => (old ? { ...old, ...sc } : old));
+      const live = [...rows.values()].filter((v) => v.n > snapN.current).sort((a, b) => a.n - b.n);
+      if (live.length) setPhotos((old) => { const next = old.slice(); live.forEach(({ row }) => { const i = index.current.get(row.id); if (i !== undefined) next[i] = { ...next[i], ...row }; }); return next; });
+      if (sc && sc.n > snapN.current) setScan((old) => (old ? { ...old, ...sc.data } : old));
     };
     const later = () => { flushTimer.current ??= window.setTimeout(flush, 150); };
     const fresh = (ev: MessageEvent) => { const n = Number(ev.lastEventId); if (n <= lastN.current) return false; lastN.current = n; return true; };
     load().then((s) => {
       if (dead || s.scan.state === "completed") return;
       es = new EventSource(`/api/scans/${scanId}/events?after=${s.cursor}`);
-      es.addEventListener("photo", (ev) => { if (!fresh(ev)) return; const r = JSON.parse(ev.data) as PhotoRow; pending.current.rows.set(r.id, r); later(); });
+      es.addEventListener("photo", (ev) => { if (!fresh(ev)) return; const r = JSON.parse(ev.data) as PhotoRow; pending.current.rows.set(r.id, { n: Number(ev.lastEventId), row: r }); later(); });
       es.addEventListener("scan", (ev) => {
         if (!fresh(ev)) return;
         const d = JSON.parse(ev.data);
-        pending.current.scan = { state: d.state, error: d.error, counts: d.counts };
+        pending.current.scan = { n: Number(ev.lastEventId), data: { state: d.state, error: d.error, counts: d.counts } };
         later();
         if (d.state === "completed") { es?.close(); load(); }
       });
@@ -154,7 +168,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
 
   const phase: Phase = scan?.state === "completed" ? "complete" : scan && ["paused", "failed"].includes(scan.state) ? "paused" : "scanning";
   const complete = phase === "complete";
-  const starsReady = complete && photos.some((p) => p.stars !== null && p.stars >= 0);
+  const starsReady = complete && photos.some((p) => p.stars !== null);   // also true for a batch that is all 淘汰
   const rowState = (p: PhotoRow): RowState => (p.state === "done" ? "ready" : p.state === "failed" ? "failed"
     : p.state === "queued" && phase === "paused" ? "unscanned" : p.state);
 
@@ -194,6 +208,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
       star: (a, b) => (b.stars ?? -2) - (a.stars ?? -2) || a.seq - b.seq,
       species: (a, b) => nameOf(a.result!).localeCompare(nameOf(b.result!), "zh-CN") || a.seq - b.seq,
       fly: (a, b) => (b.result?.p_fly ?? 0) - (a.result?.p_fly ?? 0),
+      eye: (a, b) => (b.result?.sharpness ?? -1) - (a.result?.sharpness ?? -1),
     };
     if (sort === "queue" || sort === "time" || sort === "star") v.sort(cmp[sort]);
     else v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp[sort](a, b) : a.seq - b.seq));
@@ -298,11 +313,11 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
             <option value="species">按鸟种排序</option>
             <option value="fly">在飞的在前</option>
             <option value="rar" disabled>稀有的在前（待定）</option>
-            <option value="eye" disabled>眼部清晰的在前（待定）</option>
+            <option value="eye">头部清晰的在前</option>
           </select>
         </label>
         <label className="inline"><input type="checkbox" checked={showMarks} onChange={(e) => setShowMarks(e.target.checked)} /> 显示标记</label>
-        {!starsReady && <p className="hint">{complete ? "标星规则还在调研，星级待定；淘汰（没有找到鸟）已标出。" : "星级要等全部照片扫完后互相比较才能定。"}</p>}
+        {!starsReady && <p className="hint">星级要等全部照片扫完后互相比较才能定。</p>}
       </div>
 
       <div className="inspection">
@@ -333,7 +348,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
                     {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
                     {r && !r.rejected && r.flying !== null && <span className="pill">{r.flying ? "在飞" : "不在飞"}</span>}
                     {r && <span className="small reason-line" style={{ display: "block" }}>
-                      {complete && p.star_reason ? p.star_reason : r.rejected ? "不参与标星" : r.eye_visible ? "眼睛可见 · 清晰度待定" : "眼睛未找到"}</span>}
+                      {complete && p.star_reason ? p.star_reason : r.rejected ? "不参与标星" : r.eye_visible ? `眼睛可见 · 头部清晰度 ${sharpTxt(r.sharpness)}` : "眼睛未找到"}</span>}
                     {st === "failed" && <span className="small reason-line" style={{ display: "block" }}>{p.error}</span>}
                   </span>
                   <span className="row-settings"><span className="file">{p.file}</span><br />
@@ -416,7 +431,8 @@ function Detail({ p, r, complete }: { p: PhotoRow; r: PhotoResult; complete: boo
       <div>
         <div className="verdict stars">{complete && p.stars !== null ? starTxt(p.stars) : "待定星级"}</div>
         {complete && p.star_reason && <p className="reason">{p.star_reason}</p>}
-        {r.rejected ? <><div className="sp-cn">没有找到鸟</div><p className="hint">检测模型在这张照片里没有找到鸟，标为淘汰。</p></>
+        {r.rejected ? <><div className="sp-cn">{r.reject_reason ?? "没有找到鸟"}</div>
+          <p className="hint">{r.boxes.length ? `检测到 ${r.boxes.length} 个框，但都没有通过"清楚的鸟"判断，标为淘汰。` : "检测模型在这张照片里没有找到鸟，标为淘汰。"}</p></>
           : s ? <>
             <div className="sp-cn">{nameOf(r)}</div>
             {sure && <div className="sp-en">{s.label!.en} · <span className="sp-sci">{s.label!.sci}</span></div>}
@@ -427,11 +443,12 @@ function Detail({ p, r, complete }: { p: PhotoRow; r: PhotoResult; complete: boo
           </> : null}
         <dl className="facts">
           <dt>在飞</dt><dd>{r.flying == null ? "—" : r.flying ? "是" : "否"}{r.p_fly != null && <span className="ref"> · P = {r.p_fly.toFixed(2)}</span>}</dd>
-          <dt>眼睛</dt><dd>{r.eye_visible == null ? "—" : r.eye_visible ? "看得见" : "看不见"}，清晰度 <span className="tbd">待定</span></dd>
-          <dt>美学分</dt><dd><span className="tbd">待定</span> <span className="ref">美学模型还没有发布文件</span></dd>
+          <dt>眼睛</dt><dd>{r.eye_visible == null ? "—" : r.eye_visible ? "看得见" : "看不见"}</dd>
+          <dt>头部清晰度</dt><dd>{sharpTxt(r.sharpness)}{r.sharpness_region && <span className="ref"> · 量在{REGION[r.sharpness_region]}，只在本批内比较（阈值未标定）</span>}</dd>
+          <dt>美学分</dt><dd>{r.aesthetic != null ? r.aesthetic.toFixed(2) : "—"} <span className="ref">仅供参考，不单独用来选片</span></dd>
           <dt>稀有度</dt><dd><span className="tbd">待定</span></dd>
           <dt>受威胁等级</dt><dd><span className="tbd">待定</span></dd>
-          <dt>连拍组</dt><dd>{p.burst_group ? `第 ${p.burst_group} 组，共 ${p.burst_size} 张 · 组内排名待定` : "扫完后分组"}</dd>
+          <dt>连拍组</dt><dd>{p.burst_group ? `第 ${p.burst_group} 组，组内第 ${p.burst_rank} / ${p.burst_size} 张` : "扫完后分组"}</dd>
           <dt>鸟框</dt><dd>{r.boxes.length} 个{r.boxes.length > 1 && r.subject != null ? `，主体按${r.focus ? "对焦点" : "把握"}选取` : ""}</dd>
         </dl>
       </div>

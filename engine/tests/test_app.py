@@ -94,3 +94,27 @@ def test_sse_resume_replays_only_later_events(tmp_path):
     assert [e["kind"] for e in later] == ["photo"] and later[0]["data"]["id"] == pid
     text = sse(later[0])
     assert text.startswith(f"id: {later[0]['n']}\nevent: photo\ndata: ") and text.endswith("\n\n")
+
+
+def test_preflight_refuses_before_writing(tmp_path, monkeypatch):
+    import sqlite3
+
+    from birdcm.app import preflight
+    photos = tmp_path / "photos"
+    data = tmp_path / "elsewhere"
+    data.mkdir(parents=True)
+    photos.mkdir()
+    con = sqlite3.connect(data / "birdcm.db")
+    con.execute("CREATE TABLE scan (folder TEXT)")
+    con.execute("INSERT INTO scan VALUES (?)", (str(photos),))
+    con.commit()
+    con.close()
+    monkeypatch.setenv("BIRDCM_DATA_DIR", str(data))
+    monkeypatch.setenv("BIRDCM_CACHE_DIR", str(photos / "cache"))       # moved into a scanned photo folder
+    before = sorted(p.name for p in photos.rglob("*"))
+    with pytest.raises(ValueError, match="照片文件夹"):
+        preflight()
+    assert sorted(p.name for p in photos.rglob("*")) == before            # nothing created there
+    monkeypatch.setenv("BIRDCM_DATA_DIR", str(tmp_path / "nothing-yet"))
+    preflight()                                                           # no database: nothing to check, nothing made
+    assert not (tmp_path / "nothing-yet").exists()
