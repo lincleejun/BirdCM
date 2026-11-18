@@ -248,7 +248,7 @@ def serve(port_: int | None, log: bool = True) -> int:
         h = port_holder(port_)
         alt = next((p for p in range(port_ + 1, port_ + 50) if port_free(p)), None)
         who = f"{h['command']}（pid {h['pid']}）" if h else "另一个程序"
-        return fail(4, error="port_busy", port=port_, holder=h, suggest=alt, message=f"端口 {port_} 被 {who} 占用")
+        return fail(4, error="port_busy", port=port_, holder=h, suggest=alt, message=f"端口 {port_} 被 {who}占用")
     from birdcm import app
     try:
         app.preflight()
@@ -270,8 +270,7 @@ def serve(port_: int | None, log: bool = True) -> int:
     guarded, _api = app.create_app(port_)
     # a short graceful window: an open event stream (a browser tab) must not hold a stop hostage
     uvicorn.run(guarded, host="127.0.0.1", port=port_, log_level="warning", timeout_graceful_shutdown=3)
-    print(f"{time.strftime('%F %T')} 观羽引擎已停止", flush=True)
-    return 0
+    return 0                                     # (after a SIGTERM uvicorn re-raises it once shut down: no return)
 
 
 # ---- cache and data ---------------------------------------------------------------------------------------------------

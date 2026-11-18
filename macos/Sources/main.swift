@@ -39,10 +39,17 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
     static let shared = Engine()
     enum State: Equatable { case stopped, starting, running(Int), stopping, failed(String) }
 
-    @Published var state: State = .stopped
-    @Published var suggestPort: Int?                 // the configured port is busy: offer this one
+    @Published var state: State = .stopped { didSet { snapshot() } }
+    @Published var suggestPort: Int? { didSet { snapshot() } }   // the configured port is busy: offer this one
     @Published var foreign: EngineInfo?             // an engine from another copy of the app holds the lock
-    @Published var models: ModelsStatus?
+    @Published var models: ModelsStatus? { didSet { snapshot() } }
+
+    /// Testing: the menu's status lines as text (BIRDCM_SNAPSHOT=dir), since a menu cannot be captured.
+    private func snapshot() {
+        guard let dir = ProcessInfo.processInfo.environment["BIRDCM_SNAPSHOT"] else { return }
+        let text = [statusLine, modelsLine] + (suggestPort.map { ["改用端口 \($0) 启动"] } ?? [])
+        try? text.joined(separator: "\n").write(toFile: "\(dir)/menu.txt", atomically: true, encoding: .utf8)
+    }
     @Published var usage: Usage?
     @Published var paths: Paths?
     @Published var fetching: (file: String, done: Int64, total: Int64)?
@@ -258,7 +265,11 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
     static var open: [String: NSWindow] = [:]
     static func show<V: View>(_ id: String, _ title: String, _ view: V) {
         let w = open[id] ?? {
-            let w = NSWindow(contentViewController: NSHostingController(rootView: view))
+            let hc = NSHostingController(rootView: view)
+            hc.sizingOptions = []             // else wrapped Text sends AppKit into a constraint-update loop (crash)
+            let w = NSWindow(contentViewController: hc)
+            w.setContentSize(hc.view.fittingSize)
+            w.styleMask.remove(.resizable)
             w.title = title
             w.isReleasedWhenClosed = false
             w.center()
@@ -267,6 +278,14 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
         }()
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
+        if let dir = ProcessInfo.processInfo.environment["BIRDCM_SNAPSHOT"] {    // testing: what the window shows, as PNG
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                let r = ImageRenderer(content: view.background(Color(nsColor: .windowBackgroundColor)))
+                r.scale = 2
+                guard let img = r.cgImage else { return }
+                try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/\(id).png"))
+            }
+        }
     }
     static func close(_ id: String) { open[id]?.close() }
 }
@@ -296,7 +315,7 @@ struct WelcomeView: View {
                     Task { await e.adoptOrStart(open: true) }
                 }.keyboardShortcut(.defaultAction)
             }
-        }.padding(24).frame(width: 520)
+        }.fixedSize(horizontal: false, vertical: true).padding(24).frame(width: 520, height: 360, alignment: .top)
     }
 }
 
