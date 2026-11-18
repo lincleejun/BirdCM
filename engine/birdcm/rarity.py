@@ -79,9 +79,7 @@ class Rarity:
 
     def lookup(self, sci: str, lat: float | None, lon: float | None, label: str | None, month: int | None) -> dict:
         """{tier: 0-4 | None, label, iucn, region}; tier None with label 数据不足 / 未知 / 时间未知."""
-        if lat is None and not label:
-            return {"tier": None, "label": "数据不足", "iucn": None, "region": None}
-        key = region_key(lat, lon, label) if lat is not None else region_key(0.0, 0.0, label)
+        key = None if lat is None and not label else region_key(lat, lon, label) if lat is not None else region_key(0.0, 0.0, label)
         code = self.code(key)
         with self.lock:
             sp = self.db.execute("SELECT id, iucn FROM species WHERE scientific = ?", (sci,)).fetchone()

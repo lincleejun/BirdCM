@@ -334,7 +334,7 @@ def rarity_for(table, species: dict | None, r: dict) -> dict | None:
     """Rarity of a confirmed species at the photo's place (the prior's point, else the scan's region label) and month."""
     if table is None or not species or species.get("level") != "species" or not species.get("label"):
         return None
-    pr = r["region"].get("prior") or {}
+    pr = r["region"].get("prior") or {}               # no place: still the IUCN category, rarity 数据不足
     label = r["region"].get("name") if pr.get("source") in (None, "region") else None
     taken = r["exif"].get("taken_at") or ""
     month = int(taken[5:7]) if len(taken) >= 7 and taken[5:7].isdigit() else None
