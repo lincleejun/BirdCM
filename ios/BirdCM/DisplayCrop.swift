@@ -145,6 +145,13 @@ struct CropSource {
 
 /// Apple foreground instances, chosen by greatest intersection with the bird box.
 enum BirdMask {
+    /// Debug fixture only: a deterministic ellipse in the box, labelled as a fixture in the UI.
+    static func ellipse(width:Int,height:Int,box:[Double]) -> CGImage? {
+        guard let ctx=CGContext(data:nil,width:width,height:height,bitsPerComponent:8,bytesPerRow:width,space:CGColorSpaceCreateDeviceGray(),bitmapInfo:0) else{return nil}
+        ctx.setFillColor(gray:1,alpha:1)
+        ctx.fillEllipse(in:CGRect(x:box[0]*Double(width),y:(1-box[3])*Double(height),width:(box[2]-box[0])*Double(width),height:(box[3]-box[1])*Double(height)))
+        return ctx.makeImage()
+    }
     static func acceptable(covered:Int,total:Int,overlap:Int) -> Bool {total>0 && overlap>0 && Double(covered)/Double(total)<0.95 && Double(covered)/Double(total)>0.005}
     static func make(image:CGImage,box:[Double]) throws -> CGImage? {
         let handler=VNImageRequestHandler(cgImage:image)

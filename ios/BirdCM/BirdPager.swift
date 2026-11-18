@@ -16,18 +16,17 @@ struct BirdShare: Transferable {
 }
 
 struct CropThumbnail:View {
-    var url:URL?
-    let record:Record
-    var index:Int=0
-    var original=false
+    let url:URL?, id:UUID, boxes:[[Double]], crops:[[Double]]?, index:Int, original:Bool
+    init(url:URL?,id:UUID,boxes:[[Double]],crops:[[Double]]?,index:Int=0,original:Bool=false) {self.url=url;self.id=id;self.boxes=boxes;self.crops=crops;self.index=index;self.original=original}
+    init(url:URL?,record:Record,index:Int=0,original:Bool=false) {self.init(url:url,id:record.id,boxes:record.boxes,crops:record.displayCrops,index:index,original:original)}
     @State private var image:CGImage?
     var body:some View {
         Group {if let image {Image(decorative:image,scale:1).resizable().scaledToFill()} else {Rectangle().fill(Palette.paper)}}
-            .clipped().task(id:"\(record.id)-\(index)-\(original)-\(record.boxes)") {
+            .clipped().task(id:"\(id)-\(index)-\(original)-\(boxes)") {
                 guard let url else{return}
                 let value=await Task.detached {() -> CGImage? in
                     guard let source=CropSource(url) else{return nil}
-                    let window=original || !record.boxes.indices.contains(index) ? [0.0,0,1,1] : record.displayCrops?[safe:index] ?? source.crop(record.boxes[index]).normalized(in:source.size)
+                    let window=original || !boxes.indices.contains(index) ? [0.0,0,1,1] : crops?[safe:index] ?? source.crop(boxes[index]).normalized(in:source.size)
                     return source.image(window:window,edge:120)
                 }.value
                 if !Task.isCancelled {image=value}
@@ -54,7 +53,7 @@ struct BirdPager:View {
                 }
                 if let image=model.preview {
                     VStack(spacing:4) {
-                        PhotoView(image:image,record:record,marks:marks,drawing:drawing,onSelect:{i in if i<count {page=i}},onDraw:{box in drawing=false;Task{await model.analyze(index:0,box:box,manual:true,newBox:true,place:record.place);page=0}})
+                        PhotoView(image:image,record:record,marks:marks,drawing:drawing,onSelect:{i in if i<count {page=i}},onDraw:{box in drawing=false;let i=record.boxes.isEmpty ? 0:record.selected;Task{await model.analyze(index:i,box:box,manual:true,newBox:true,place:record.place);page=i}})
                             .aspectRatio(image.size,contentMode:.fit).accessibilityIdentifier("result.photo")
                         if record.boxes.count>count {Text("还有 \(record.boxes.count-count) 只").font(.caption).foregroundStyle(.white)}
                     }.background(.black).tag(count)
@@ -64,7 +63,7 @@ struct BirdPager:View {
             ScrollView(.horizontal) {
                 HStack(spacing:12) {ForEach(0...count,id:\.self) {i in
                     Button {page=i} label:{VStack(spacing:3) {
-                        CropThumbnail(url:model.store?.image(record),record:record,index:i,original:i==count)
+                        CropThumbnail(url:model.url(record.id),record:record,index:i,original:i==count)
                             .frame(width:48,height:38).clipShape(RoundedRectangle(cornerRadius:8))
                         Text(i==count ? "原图":"鸟 \(i+1)").font(.caption.bold())
                     }.padding(4).background(page==i ? Palette.green.opacity(0.15):.clear,in:RoundedRectangle(cornerRadius:12))}
@@ -80,6 +79,7 @@ struct BirdPager:View {
 
 struct BirdCropPage:View {
     @Environment(AppModel.self) var model
+    @Environment(\.dynamicTypeSize) private var typeSize
     let record:Record
     let index:Int
     let active:Bool
@@ -88,28 +88,43 @@ struct BirdCropPage:View {
     @State private var mask:CGImage?
     @State private var lifted:CGImage?
     @State private var removeBackground=false
-    @State private var maskUnavailable=false
+    /// idle / success / fixture / none / unsupported — a fixture or fallback is never shown as real Vision success.
+    @State private var maskState="idle"
+    @State private var retried=false
     @State private var working=false
     @State private var saving=false
     @State private var saved=false
-    var source:CropSource? {model.store.map{CropSource($0.image(record))} ?? nil}
+    var source:CropSource? {model.url(record.id).flatMap{CropSource($0)}}
     var window:[Double]? {source.map{record.displayCrops?[safe:index] ?? $0.crop(record.boxes[index]).normalized(in:$0.size)}}
-    var species:String {(record.results[String(index)] ?? (record.selected==index ? record.result:nil)).map(title) ?? "鸟 \(index+1)"}
+    /// Saved/shared captions use the effective (corrected) name.
+    var species:String {model.effective(record,index).name}
     var body:some View {
-        VStack(spacing:4) {
-            if active,let image,let source,let window {
-                PhotoView(image:UIImage(cgImage:removeBackground ? lifted ?? image:image),record:CropCoordinates(window:window).record(record,index:index),marks:marks,drawing:false,neutral:true,onSelect:{_ in},onDraw:{_ in})
-                    .aspectRatio(CGSize(width:image.width,height:image.height),contentMode:.fit).frame(maxHeight:180).accessibilityIdentifier("result.crop.\(index)")
-                if source.crop(record.boxes[index]).tiny {Text("鸟很小").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.tiny")}
-                HStack {
-                    if !maskUnavailable {
-                        Toggle("去背景",isOn:$removeBackground).toggleStyle(.button).disabled(working).accessibilityIdentifier("result.background")
-                    } else {Text("未找到合适的轮廓").font(.caption).accessibilityIdentifier("result.noMask")}
-                    if working {ProgressView()}
-                    Button(saved ? "已保存":"保存到相册",systemImage:"square.and.arrow.down") {Task{await save(source:source,window:window)}}.disabled(saving).accessibilityIdentifier("result.save")
-                    ShareLink(item:BirdShare(source:source,window:window,name:species,mask:removeBackground ? mask:nil),preview:SharePreview(species,image:Image(decorative:image,scale:1))) {Label("分享",systemImage:"square.and.arrow.up")}.accessibilityIdentifier("result.share")
-                }.font(.caption).buttonStyle(.bordered).padding(.bottom,25)
-            } else {ProgressView().frame(maxWidth:.infinity,maxHeight:.infinity)}
+        ScrollView(.vertical,showsIndicators:false) {
+            VStack(spacing:6) {
+                if active,let image,let source,let window {
+                    PhotoView(image:UIImage(cgImage:removeBackground ? lifted ?? image:image),record:CropCoordinates(window:window).record(record,index:index),marks:marks,drawing:false,neutral:true,onSelect:{_ in},onDraw:{_ in})
+                        .aspectRatio(CGSize(width:image.width,height:image.height),contentMode:.fit).frame(maxHeight:typeSize.isAccessibilitySize ? 300:180).accessibilityIdentifier("result.crop.\(index)")
+                    if source.crop(record.boxes[index]).tiny {Text("鸟很小").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.tiny")}
+                    let controls=Group {
+                        if maskState != "none" && maskState != "unsupported" {
+                            Toggle("去背景",isOn:$removeBackground).toggleStyle(.button).disabled(working).accessibilityIdentifier("result.background")
+                        }
+                        if working {ProgressView()}
+                        Button(saved ? "已保存":"保存到相册",systemImage:"square.and.arrow.down") {Task{await save(source:source,window:window)}}.disabled(saving).accessibilityIdentifier("result.save")
+                        ShareLink(item:BirdShare(source:source,window:window,name:species,mask:removeBackground ? mask:nil),preview:SharePreview(species,image:Image(decorative:image,scale:1))) {Label("分享",systemImage:"square.and.arrow.up")}.accessibilityIdentifier("result.share")
+                    }.buttonStyle(.bordered).frame(minHeight:44)
+                    ViewThatFits(in:.horizontal) {HStack{controls};VStack{controls}}.font(.caption)
+                    switch maskState {
+                    case "none":
+                        Text("未找到合适的轮廓。矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.noMask")
+                        if !retried {Button("再试一次去背景"){retried=true;maskState="idle";removeBackground=true}.font(.caption).frame(minHeight:44).accessibilityIdentifier("result.maskRetry")}
+                    case "unsupported": Text("此设备不支持去背景（模拟器不运行 Apple Vision 前景分割）。矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.maskUnsupported")
+                    case "fixture": Text("测试夹具蒙版，不是 Apple Vision 结果").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.maskFixture")
+                    case "success": Text("轮廓来自 Apple Vision，细腿、羽缘可能被切掉，请核对。").font(.caption2).foregroundStyle(Palette.secondary).multilineTextAlignment(.center)
+                    default: EmptyView()
+                    }
+                } else {ProgressView().frame(maxWidth:.infinity,minHeight:160)}
+            }.padding(.horizontal,8).padding(.bottom,28)
         }.background(Palette.paper)
             .task(id:"\(record.id)-\(index)-\(active)") {
                 guard active,let source,let window else {image=nil;lifted=nil;mask=nil;removeBackground=false;return}
@@ -122,12 +137,30 @@ struct BirdCropPage:View {
         guard let image,let source,let window else{return}
         working=true;defer{working=false}
         let box=CropCoordinates(window:window).box(record.boxes[index])
-        let output=await Task.detached {() -> (CGImage,CGImage)? in
-            guard let mask=try? BirdMask.make(image:image,box:box),let lifted=source.image(window:window,edge:1200,mask:mask) else{return nil}
-            return (mask,lifted)
+        var injected:String?
+        #if DEBUG
+        injected=UserDefaults.standard.string(forKey:"maskFixture")
+        #endif
+        #if targetEnvironment(simulator)
+        if injected == nil {injected="unsupported"}
+        #endif
+        if let injected {
+            if injected=="success",let m=BirdMask.ellipse(width:image.width,height:image.height,box:box),let l=source.image(window:window,edge:1200,mask:m) {mask=m;lifted=l;maskState="fixture"}
+            else {removeBackground=false;maskState=injected=="unsupported" ? "unsupported":"none"}
+            return
+        }
+        let output=await Task.detached {() -> Result<(CGImage,CGImage)?,Error> in
+            do {
+                guard let mask=try BirdMask.make(image:image,box:box),let lifted=source.image(window:window,edge:1200,mask:mask) else{return .success(nil)}
+                return .success((mask,lifted))
+            } catch {return .failure(error)}
         }.value
         guard !Task.isCancelled else{return}
-        if let output {mask=output.0;lifted=output.1} else {removeBackground=false;maskUnavailable=true}
+        switch output {
+        case .success(let v?): mask=v.0;lifted=v.1;maskState="success"
+        case .success(nil): removeBackground=false;maskState="none"
+        case .failure: removeBackground=false;maskState="unsupported"
+        }
     }
     func save(source:CropSource,window:[Double]) async {
         saving=true;defer{saving=false}
