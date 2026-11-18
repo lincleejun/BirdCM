@@ -95,3 +95,11 @@ Python 参考已重新生成：`tools/regenerate_crop_references.py ../BirdCM` �
 每只鸟可按需打开 Apple Vision 去背景；失败隐藏开关，矩形图一直可用。去背景可能剪掉细腿和羽缘，请核对。点保存才请求添加照片权限；JPEG / 透明 PNG 都用源裁图尺寸，保留原照片拍摄日期、GPS，写物种 caption。分享使用 ShareLink 异步生成源尺寸文件；原图页没有保存/分享动作。
 
 历史只存原始文件与 JSON 中的裁图矩形，缩略图按鸟 1 重新生成，不增加永久大图。区域先由 ImageIO 延迟 provider 裁下，再按方向渲染；原图缩略图用 ImageIO thumbnail API。测试包括 48 MP 合成 JPEG、八方向像素、坐标往返、重复框、历史与保存元数据，测试结果及未运行项目见 [VALIDATION.md](VALIDATION.md)。本轮改动保持未提交，清单见 [ROUND4_FILES.txt](ROUND4_FILES.txt)。
+
+## 记录库与四个标签页（`docs/design-lifelist.md` 第 1–3 步）
+
+历史改存 `Application Support/History/library.sqlite`（系统 SQLite3，无新依赖），原图仍是文件：旧 `<UUID>.photo` 原地不动，新原图写 `assets/<sha256>.photo`。首次启动新版本时在后台把旧 `*.json` 逐条迁入并核对（记录数 + 待修复数 = 文件数、`integrity_check`），完成前显示“正在整理旧记录”、不能改记录；旧 JSON 一律保留，读不了的原样存进 `ll_legacy_issue` 并在“设置 → 备份与恢复”列出。同一字节的照片只算一张（旧的重复记录作为别名保留）。
+
+识别 / 记录 / 统计 / 探索 四个标签页各有自己的导航；设置是每个首页右上角的齿轮。结果页可“更正鸟种”（离线搜索全部 11,172 种）、改数量、排除主体、改日期和地点；名称、GBIF 稀有度、IUCN 都在显示时按当前资源查。统计口径：同一鸟种 × 同一天 × 同一地点格 = 一次观察，估计数量取单张最大值。备份是一个 `.birdcm` SQLite 文件（含原图），通过“文件”导出 / 导入，合并或替换。
+
+Debug 启动参数：`-legacyFixture N`（启动前写一个旧格式历史，测迁移）、`-maskFixture success|none|unsupported`、`-cameraFixture YES`、`-historyFixtureCount N`（不同字节、日期、鸟种）。与规格的出入见 `docs/deviations.md` 第 43 条起。

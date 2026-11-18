@@ -40,7 +40,7 @@ struct DiagnosticsView: View {
         #if DEBUG
         Section("验收夹具 · 仅 Debug") {
             if UserDefaults.standard.string(forKey:"fixtureImage") != nil {
-                Button("载入 CC0 验收照片") {dismiss();Task{await model.pickFixture()}}.accessibilityIdentifier("diagnostics.fixture")
+                Button("载入 CC0 验收照片") {dismiss();model.settings=false;Task{await model.pickFixture()}}.accessibilityIdentifier("diagnostics.fixture")
             }
         }
         #endif

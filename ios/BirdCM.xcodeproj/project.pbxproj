@@ -10,9 +10,11 @@
 		002A5BCB61E66B6F597F8046 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = B39535F38A0EE6F535D65138 /* NOTICE.md */; };
 		01B8A5B33EB0B27CA9B1C798 /* DisplayCrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */; };
 		05F9F7DD0B7AFB16A33E9B03 /* PhotoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8171929D21E7139FA08AF9 /* PhotoView.swift */; };
+		15546CD4D65177012FF3971F /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6605517F489279F1009821D1 /* Settings.swift */; };
 		1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */; };
 		219F6C9B1226AC94AA191468 /* Place.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33AB76EF2ADB0CA492710D4A /* Place.swift */; };
 		2A828C1B4B1B72E430198DBA /* clear.json in Resources */ = {isa = PBXBuildFile; fileRef = F388947B5CEEA82620053E9B /* clear.json */; };
+		2E0EB25027086D0E70E11A7A /* LibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B835A1050E34974A411DD /* LibraryTests.swift */; };
 		2EDD95AB996DF54A5D203BA1 /* zh-names.json in Resources */ = {isa = PBXBuildFile; fileRef = 20D8D66AF2EC535FFE72EE59 /* zh-names.json */; };
 		3DFE8B3E5A4DE25D7CEAB691 /* region-grid.json in Resources */ = {isa = PBXBuildFile; fileRef = 5A6DCD5461A89C056E7DC1FB /* region-grid.json */; };
 		3EF7B5458D56604B318E839F /* boundaries.json in Resources */ = {isa = PBXBuildFile; fileRef = 28FFB8922A99A3057BEDFEC9 /* boundaries.json */; };
@@ -21,6 +23,7 @@
 		48A3DB107D7508B725F231C3 /* clear-training-photos.csv in Resources */ = {isa = PBXBuildFile; fileRef = BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */; };
 		4AE835BD873625AE826C0984 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */; };
 		4D3A0085C128E671C59E9CE3 /* Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */; };
+		52C02BC4B5CC59F2DBC86330 /* Records.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BD3BF22BB3F1AF7E920435 /* Records.swift */; };
 		5884EBDF66602F9226603C85 /* BirdPager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29FC5D8A8FA3896A6DF55FD1 /* BirdPager.swift */; };
 		5C513C60DD11A76149B503AC /* avilist-birdnet-geo3.json in Resources */ = {isa = PBXBuildFile; fileRef = 6613809CF4E907E63588615B /* avilist-birdnet-geo3.json */; };
 		6BEEC576DBB6E08C0C197812 /* Models in Resources */ = {isa = PBXBuildFile; fileRef = 9333FC17867E9236B15D2411 /* Models */; };
@@ -28,11 +31,13 @@
 		6FA29A78786B99C6B9D4CA9B /* Confirm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1D2B2A7FD7945E0008A5D9 /* Confirm.swift */; };
 		6FC871F322521BAF2703D17A /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10C1720395468417D71FB48 /* Store.swift */; };
 		7024122ADBB1933352C7B20F /* Flows.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0CF7E248E2F161C963C6FE2 /* Flows.swift */; };
+		74B6224118FFCFA12AD9BCDF /* Ledger.swift in Sources */ = {isa = PBXBuildFile; fileRef = E23C9CA7E9EBF3F47CC033A2 /* Ledger.swift */; };
 		75ED900F3DBBA33F45CFE3F3 /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = DB2F58A4B3E992DA5D3423A1 /* Fixtures */; };
 		79BC1621027D5CA4C9B93431 /* Rarity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C064BA2F801B919462B1F37A /* Rarity.swift */; };
 		79E8CB8D110339CD3F41844C /* Pixels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141B9603148CE498F6E8E80F /* Pixels.swift */; };
 		7F0D5FE2F4D44840B52C6B44 /* geo-graph.json in Resources */ = {isa = PBXBuildFile; fileRef = 1EA75BE835A9655F80493366 /* geo-graph.json */; };
 		882EADCA15A93565BEEBF7D7 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ECB21C7959391EEFA7F91E4 /* App.swift */; };
+		8A482CF3CFA462D4E4BD830A /* Library.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D7DD89DAFCEA3EDEE2505E /* Library.swift */; };
 		8B4B9C1583288BFD30E1F955 /* countries.json in Resources */ = {isa = PBXBuildFile; fileRef = 5D252954BF27BD52A11F848B /* countries.json */; };
 		8BACE772E9F00BCD63CA14EF /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = DB2F58A4B3E992DA5D3423A1 /* Fixtures */; };
 		94CFDE3C28EFF1BE3BAA7FB7 /* Engine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2DD46E893FADFFFFADB08A /* Engine.swift */; };
@@ -44,6 +49,7 @@
 		E7657A47BD69A3AFD48CF814 /* DisplayCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */; };
 		F87B6A3F0197E0A46960A68B /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931CDAA415795FBEA2C6BAEE /* AboutView.swift */; };
 		F94FC0B9917A5CB44B008CB7 /* regions.json in Resources */ = {isa = PBXBuildFile; fileRef = 141CE94CEBAFCE6C069382E5 /* regions.json */; };
+		FE92CFE9F908780B7E494990 /* Editors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B10BE62A6B849B9592A5B4 /* Editors.swift */; };
 		FFB9D837C6DFC404F0E5F73C /* GeoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A403EFA257B3C771DFF3C /* GeoTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -66,6 +72,7 @@
 
 /* Begin PBXFileReference section */
 		0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		09BD3BF22BB3F1AF7E920435 /* Records.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Records.swift; sourceTree = "<group>"; };
 		0D8171929D21E7139FA08AF9 /* PhotoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoView.swift; sourceTree = "<group>"; };
 		0F2DD46E893FADFFFFADB08A /* Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Engine.swift; sourceTree = "<group>"; };
 		141B9603148CE498F6E8E80F /* Pixels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pixels.swift; sourceTree = "<group>"; };
@@ -84,11 +91,14 @@
 		5E173523A2A0C66AEEDC6C66 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		5ECB21C7959391EEFA7F91E4 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		62919E5E424B4D097133A6E5 /* BirdCMUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BirdCMUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6605517F489279F1009821D1 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		6613809CF4E907E63588615B /* avilist-birdnet-geo3.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "avilist-birdnet-geo3.json"; sourceTree = "<group>"; };
+		7A1B835A1050E34974A411DD /* LibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryTests.swift; sourceTree = "<group>"; };
 		82CDA918FD5F9D910F73E852 /* ResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultView.swift; sourceTree = "<group>"; };
 		836047A50C479738D28DD920 /* BirdCM.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BirdCM.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayCrop.swift; sourceTree = "<group>"; };
 		92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoNetwork.swift; sourceTree = "<group>"; };
+		92B10BE62A6B849B9592A5B4 /* Editors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editors.swift; sourceTree = "<group>"; };
 		931CDAA415795FBEA2C6BAEE /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		9333FC17867E9236B15D2411 /* Models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Models; sourceTree = SOURCE_ROOT; };
 		96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
@@ -99,7 +109,9 @@
 		B39535F38A0EE6F535D65138 /* NOTICE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = NOTICE.md; sourceTree = "<group>"; };
 		BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */ = {isa = PBXFileReference; path = "clear-training-photos.csv"; sourceTree = "<group>"; };
 		C064BA2F801B919462B1F37A /* Rarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rarity.swift; sourceTree = "<group>"; };
+		C8D7DD89DAFCEA3EDEE2505E /* Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library.swift; sourceTree = "<group>"; };
 		DB2F58A4B3E992DA5D3423A1 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Fixtures; path = Tests/Fixtures; sourceTree = SOURCE_ROOT; };
+		E23C9CA7E9EBF3F47CC033A2 /* Ledger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ledger.swift; sourceTree = "<group>"; };
 		F388947B5CEEA82620053E9B /* clear.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = clear.json; sourceTree = "<group>"; };
 		F39911F570E6DA1264A3A0C3 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		F52A403EFA257B3C771DFF3C /* GeoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoTests.swift; sourceTree = "<group>"; };
@@ -164,6 +176,7 @@
 			children = (
 				FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */,
 				F52A403EFA257B3C771DFF3C /* GeoTests.swift */,
+				7A1B835A1050E34974A411DD /* LibraryTests.swift */,
 				344DA05F98C2FC721F554253 /* LogicTests.swift */,
 				A4668201A11936E9A1AF6313 /* PipelineTests.swift */,
 			);
@@ -179,15 +192,20 @@
 				4E1D2B2A7FD7945E0008A5D9 /* Confirm.swift */,
 				96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */,
 				85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */,
+				92B10BE62A6B849B9592A5B4 /* Editors.swift */,
 				0F2DD46E893FADFFFFADB08A /* Engine.swift */,
 				51DFFBE6B207DECEEA343EA0 /* Geo.swift */,
 				92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */,
+				E23C9CA7E9EBF3F47CC033A2 /* Ledger.swift */,
+				C8D7DD89DAFCEA3EDEE2505E /* Library.swift */,
 				0D8171929D21E7139FA08AF9 /* PhotoView.swift */,
 				141B9603148CE498F6E8E80F /* Pixels.swift */,
 				33AB76EF2ADB0CA492710D4A /* Place.swift */,
 				F5D329C1F374D5F15D27B885 /* Preview.swift */,
 				C064BA2F801B919462B1F37A /* Rarity.swift */,
+				09BD3BF22BB3F1AF7E920435 /* Records.swift */,
 				82CDA918FD5F9D910F73E852 /* ResultView.swift */,
+				6605517F489279F1009821D1 /* Settings.swift */,
 				A10C1720395468417D71FB48 /* Store.swift */,
 			);
 			path = BirdCM;
@@ -393,15 +411,20 @@
 				6FA29A78786B99C6B9D4CA9B /* Confirm.swift in Sources */,
 				4D3A0085C128E671C59E9CE3 /* Diagnostics.swift in Sources */,
 				01B8A5B33EB0B27CA9B1C798 /* DisplayCrop.swift in Sources */,
+				FE92CFE9F908780B7E494990 /* Editors.swift in Sources */,
 				94CFDE3C28EFF1BE3BAA7FB7 /* Engine.swift in Sources */,
 				C16F865DA367A307655882DF /* Geo.swift in Sources */,
 				1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */,
+				74B6224118FFCFA12AD9BCDF /* Ledger.swift in Sources */,
+				8A482CF3CFA462D4E4BD830A /* Library.swift in Sources */,
 				05F9F7DD0B7AFB16A33E9B03 /* PhotoView.swift in Sources */,
 				79E8CB8D110339CD3F41844C /* Pixels.swift in Sources */,
 				219F6C9B1226AC94AA191468 /* Place.swift in Sources */,
 				6E1226DC86BB39731230074A /* Preview.swift in Sources */,
 				79BC1621027D5CA4C9B93431 /* Rarity.swift in Sources */,
+				52C02BC4B5CC59F2DBC86330 /* Records.swift in Sources */,
 				ABD2528274041DD945C9663D /* ResultView.swift in Sources */,
+				15546CD4D65177012FF3971F /* Settings.swift in Sources */,
 				6FC871F322521BAF2703D17A /* Store.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -420,6 +443,7 @@
 			files = (
 				E7657A47BD69A3AFD48CF814 /* DisplayCropTests.swift in Sources */,
 				FFB9D837C6DFC404F0E5F73C /* GeoTests.swift in Sources */,
+				2E0EB25027086D0E70E11A7A /* LibraryTests.swift in Sources */,
 				448BEEC9B2253191DCEE8565 /* LogicTests.swift in Sources */,
 				9725D7A4088B49D6A47176DD /* PipelineTests.swift in Sources */,
 			);
@@ -546,11 +570,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				BIRDCM_BUNDLE_IUCN = 1;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "观羽";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "拍一张鸟的照片来识别；照片只保存在观羽的本机记录里，不会自动存入相册。";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "照片没有 GPS 时，用当前地点修正鸟种；拒绝仍可识别。";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "将你选择的鸟图保存到相册，仅在点击保存时请求。";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -607,11 +632,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				BIRDCM_BUNDLE_IUCN = 1;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "观羽";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "拍一张鸟的照片来识别；照片只保存在观羽的本机记录里，不会自动存入相册。";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "照片没有 GPS 时，用当前地点修正鸟种；拒绝仍可识别。";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "将你选择的鸟图保存到相册，仅在点击保存时请求。";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -21,7 +21,8 @@ struct CropThumbnail:View {
     init(url:URL?,record:Record,index:Int=0,original:Bool=false) {self.init(url:url,id:record.id,boxes:record.boxes,crops:record.displayCrops,index:index,original:original)}
     @State private var image:CGImage?
     var body:some View {
-        Group {if let image {Image(decorative:image,scale:1).resizable().scaledToFill()} else {Rectangle().fill(Palette.paper)}}
+        // Fill whatever frame the caller proposes, then clip to it (not to the image's own fill size).
+        Rectangle().fill(Palette.paper).overlay {if let image {Image(decorative:image,scale:1).resizable().scaledToFill()}}
             .clipped().task(id:"\(id)-\(index)-\(original)-\(boxes)") {
                 guard let url else{return}
                 let value=await Task.detached {() -> CGImage? in
@@ -59,7 +60,7 @@ struct BirdPager:View {
                     }.background(.black).tag(count)
                 }
             }.tabViewStyle(.page(indexDisplayMode:.always)).indexViewStyle(.page(backgroundDisplayMode:.always))
-                .frame(height:typeSize.isAccessibilitySize ? 560:280).background(Palette.paper).accessibilityIdentifier("result.pager")
+                .frame(height:typeSize.isAccessibilitySize ? 560:320).background(Palette.paper).accessibilityIdentifier("result.pager")
             ScrollView(.horizontal) {
                 HStack(spacing:12) {ForEach(0...count,id:\.self) {i in
                     Button {page=i} label:{VStack(spacing:3) {
@@ -99,11 +100,11 @@ struct BirdCropPage:View {
     /// Saved/shared captions use the effective (corrected) name.
     var species:String {model.effective(record,index).name}
     var body:some View {
-        ScrollView(.vertical,showsIndicators:false) {
-            VStack(spacing:6) {
+        // No inner vertical scroll: it would capture drags meant for the result page. The pager height fits this content at every type size.
+        VStack(spacing:6) {
                 if active,let image,let source,let window {
                     PhotoView(image:UIImage(cgImage:removeBackground ? lifted ?? image:image),record:CropCoordinates(window:window).record(record,index:index),marks:marks,drawing:false,neutral:true,onSelect:{_ in},onDraw:{_ in})
-                        .aspectRatio(CGSize(width:image.width,height:image.height),contentMode:.fit).frame(maxHeight:typeSize.isAccessibilitySize ? 300:180).accessibilityIdentifier("result.crop.\(index)")
+                        .aspectRatio(CGSize(width:image.width,height:image.height),contentMode:.fit).frame(maxHeight:typeSize.isAccessibilitySize ? 300:170).accessibilityIdentifier("result.crop.\(index)")
                     if source.crop(record.boxes[index]).tiny {Text("鸟很小").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.tiny")}
                     let controls=Group {
                         if maskState != "none" && maskState != "unsupported" {
@@ -116,16 +117,17 @@ struct BirdCropPage:View {
                     ViewThatFits(in:.horizontal) {HStack{controls};VStack{controls}}.font(.caption)
                     switch maskState {
                     case "none":
-                        Text("未找到合适的轮廓。矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.noMask")
-                        if !retried {Button("再试一次去背景"){retried=true;maskState="idle";removeBackground=true}.font(.caption).frame(minHeight:44).accessibilityIdentifier("result.maskRetry")}
+                        let note=Text("未找到合适的轮廓，矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.noMask")
+                        let retry=Button("再试一次"){retried=true;maskState="idle";removeBackground=true}.font(.caption).frame(minHeight:44).accessibilityIdentifier("result.maskRetry")
+                        if retried {note} else {ViewThatFits(in:.horizontal) {HStack{note;retry};VStack(spacing:0){note;retry}}}
                     case "unsupported": Text("此设备不支持去背景（模拟器不运行 Apple Vision 前景分割）。矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.maskUnsupported")
                     case "fixture": Text("测试夹具蒙版，不是 Apple Vision 结果").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.maskFixture")
                     case "success": Text("轮廓来自 Apple Vision，细腿、羽缘可能被切掉，请核对。").font(.caption2).foregroundStyle(Palette.secondary).multilineTextAlignment(.center)
                     default: EmptyView()
                     }
                 } else {ProgressView().frame(maxWidth:.infinity,minHeight:160)}
-            }.padding(.horizontal,8).padding(.bottom,28)
-        }.background(Palette.paper)
+            }.padding(.horizontal,8).padding(.bottom,40)   // clear of the page dots
+            .frame(maxHeight:.infinity,alignment:.top).background(Palette.paper)
             .task(id:"\(record.id)-\(index)-\(active)") {
                 guard active,let source,let window else {image=nil;lifted=nil;mask=nil;removeBackground=false;return}
                 let decoded=await Task.detached {source.image(window:window,edge:1200)}.value

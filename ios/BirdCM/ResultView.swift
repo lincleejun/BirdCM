@@ -65,6 +65,7 @@ struct ResultView: View {
                     }.fixedSize(horizontal:false,vertical:true).padding(20)
                 }.padding(.bottom,24)
             }
+            .accessibilityIdentifier("result.scroll")
             .background(Palette.surface)
             .navigationTitle("识别结果").navigationBarTitleDisplayMode(.inline)
             .toolbar {ToolbarItem(placement:.topBarTrailing){Menu {
@@ -84,9 +85,9 @@ struct ResultView: View {
                 Button("删除",role:.destructive){model.delete(r.id)}.accessibilityIdentifier("result.confirmDelete")
                 Button("取消",role:.cancel){}
             } message:{Text("从观羽的记录与统计中移除这张照片；相册或文件里的原图不受影响。")}
-            .sheet(isPresented:$place){PlacePicker()}
-            .sheet(isPresented:$correcting){CorrectionSheet(record:r,index:r.selected)}
-            .sheet(isPresented:$counting){CountSheet(record:r,index:r.selected)}
+            .sheet(isPresented:$place){PlacePicker().debugAppearance()}
+            .sheet(isPresented:$correcting){CorrectionSheet(record:r,index:r.selected).debugAppearance()}
+            .sheet(isPresented:$counting){CountSheet(record:r,index:r.selected).debugAppearance()}
             .sheet(isPresented:$dating){if let item {DateSheet(item:item)}}
             .sheet(item:$candidate){c in
                 NavigationStack{ScrollView{VStack(alignment:.leading,spacing:16){
@@ -159,7 +160,7 @@ struct ResultView: View {
                 Button("更正鸟种",systemImage:"pencil"){correcting=true}.accessibilityIdentifier("result.correctSpecies")
                 Button(e.count.map{"数量 \($0)（已改）"} ?? "数量 1",systemImage:"number"){counting=true}.accessibilityIdentifier("result.count")
                 Button(e.excluded ? "恢复这个主体":"不是鸟 · 排除",systemImage:e.excluded ? "arrow.uturn.backward":"xmark.circle"){if let s=e.subject {model.edit{try $0.exclude(s,!e.excluded)}}}.accessibilityIdentifier("result.exclude")
-            }.buttonStyle(.bordered).frame(minHeight:44)
+            }.buttonStyle(.bordered).controlSize(.large)
             ViewThatFits(in:.horizontal) {HStack{actions};VStack(alignment:.leading){actions}}.font(.subheadline).disabled(e.subject == nil || model.busy)
             VStack(alignment:.leading,spacing:8) {
                 Text("\(r.place?.label ?? "没有地点") · \(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline)
