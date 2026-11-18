@@ -118,11 +118,13 @@ def test_move_keeps_app_files_when_they_share_the_data_dir(tmp_path, monkeypatch
 
 
 def fake_manifest(tmp_path, monkeypatch, blobs: dict[str, bytes]):
-    """Three files: 'a' present on disk, 'b' downloadable, 'c' not released (its URL answers 404)."""
+    """'a' present on disk, 'b' downloadable, 'c' not released (its URL answers 404), 'd' marked released = false and
+    optional in the manifest (never asked for, even though its URL would answer)."""
     rows = []
     for name, data in blobs.items():
         rows.append(f'[[file]]\nname = "{name}"\nrole = "{name}"\nurl = "https://example.invalid/{name}"\n'
-                    f'sha256 = "{hashlib.sha256(data).hexdigest()}"\nbytes = {len(data)}\n')
+                    f'sha256 = "{hashlib.sha256(data).hexdigest()}"\nbytes = {len(data)}\n' +
+                    ('optional = true\nreleased = false\n' if name == "d.bin" else ""))
     m = tmp_path / "models.toml"
     m.write_text("\n".join(rows))
     monkeypatch.setattr(models, "MANIFEST", m)
@@ -141,16 +143,16 @@ class FakeOpener:
 
 
 def test_models_status_and_fetch(home, monkeypatch):
-    blobs = {"a.bin": b"a" * 10, "b.bin": b"b" * (3 << 20), "c.bin": b"c" * 7}
+    blobs = {"a.bin": b"a" * 10, "b.bin": b"b" * (3 << 20), "c.bin": b"c" * 7, "d.bin": b"d"}
     fake_manifest(home, monkeypatch, blobs)
     put(home / "cache" / "models" / "a.bin", 0).write_bytes(blobs["a.bin"])
-    opener = FakeOpener(blobs, released={"a.bin", "b.bin"})
+    opener = FakeOpener(blobs, released={"a.bin", "b.bin", "d.bin"})
 
     st = admin.models_status(opener=opener)
     states = {f["name"]: f["state"] for f in st["files"]}
-    assert states == {"a.bin": "present", "b.bin": "missing", "c.bin": "not_released"}
+    assert states == {"a.bin": "present", "b.bin": "missing", "c.bin": "not_released", "d.bin": "not_released"}
     assert st["download_bytes"] == 3 << 20 and st["present_bytes"] == 10 and not st["ready"]
-    assert st["not_released"] == ["c.bin"]
+    assert st["not_released"] == ["c.bin", "d.bin"]
 
     lines = []
     assert admin.models_fetch(lines.append, opener=opener) == 0                 # not released is not a failure
@@ -158,6 +160,7 @@ def test_models_status_and_fetch(home, monkeypatch):
     for o in lines:
         by.setdefault(o.get("file"), []).append(o)
     assert by["b.bin"][-1]["state"] == "present" and by["c.bin"][-1]["state"] == "not_released"
+    assert by["d.bin"] == [{"file": "d.bin", "state": "not_released"}]                # no request made
     assert lines[-1] == {"finished": True, "failed": 0}
     assert not list((home / "cache" / "models").glob("*.part"))
     assert admin.models_status(opener=opener)["missing"] == []

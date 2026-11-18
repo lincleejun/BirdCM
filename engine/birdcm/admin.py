@@ -371,12 +371,18 @@ def models_status(remote: bool = True, opener=None) -> dict:
     files = []
     for e in models.manifest()["file"]:
         p = models.locate(e)
-        state = "present" if p else (remote_state(e["url"], opener) if remote else "unknown")
-        state = {"released": "missing", "unknown": "missing"}.get(state, state)
+        if p:
+            state = "present"
+        elif not e.get("released", True):                     # the manifest says so: no network needed
+            state = "not_released"
+        else:                                                 # the manifest may be older than the release page
+            state = remote_state(e["url"], opener) if remote else "unknown"
+            state = {"released": "missing", "unknown": "missing"}.get(state, state)
         files.append({"name": e["name"], "role": e["role"], "bytes": e["bytes"], "state": state,
+                      "optional": bool(e.get("optional")), "effect": models.OPTIONAL_EFFECT.get(e["role"], ""),
                       "path": str(p) if p else None, "downloaded": bool(p and p.parent == own), "license": e.get("license")})
     by = lambda s: [f for f in files if f["state"] == s]  # noqa: E731
-    return {"files": files, "ready": not by("missing") and not by("not_released"),
+    return {"files": files, "ready": not any(f["state"] != "present" and not f["optional"] for f in files),
             "present_bytes": sum(f["bytes"] for f in by("present")),
             "download_bytes": sum(f["bytes"] for f in by("missing")),
             "missing": [f["name"] for f in by("missing")], "not_released": [f["name"] for f in by("not_released")],
@@ -395,6 +401,9 @@ def models_fetch(emit=lambda o: print(json.dumps(o, ensure_ascii=False), flush=T
         name = e["name"]
         if models.locate(e):
             emit({"file": name, "state": "present"})
+            continue
+        if not e.get("released", True):
+            emit({"file": name, "state": "not_released"})
             continue
         part = dest / (name + ".part")
         try:
