@@ -20,35 +20,22 @@ from birdcm import geo
 
 TIER_ZH = {0: "无记录", 1: "罕见", 2: "少见", 3: "不常见", 4: "常见"}
 SHOW_IUCN = os.environ.get("BIRDCM_IUCN", "1") != "0"
-NEAR_DIVISION = 6.0        # degrees: a point farther than this from every division's point is matched to countries only
 
 
 def region_key(lat: float, lon: float, label: str | None = None) -> tuple[str, str | None] | None:
-    """The one place -> table mapping: (ISO 3166-1 alpha-2 country, division English name or None).
-    A region label picked from our list maps exactly; a point goes to the nearest division point of our table, else the
-    nearest country point. ponytail: nearest representative point, not point-in-polygon; wrong near borders. Swap for
-    boundaries (Natural Earth admin-1) when the global table arrives."""
-    if label:
-        country, _, name = label.partition(" · ")
-        c = next((c for c in geo.countries() if c["zh"] == country.strip()), None)
-        if c:
-            sub = _division_en(c["zh"], name.strip()) if name else None
-            return c["code"], sub
-    best, d = None, NEAR_DIVISION ** 2
-    for cz, _zh, en, la, lo in _divisions():
-        x = (la - lat) ** 2 + (((lo - lon + 180) % 360 - 180) * _cos(lat)) ** 2
-        if x < d:
-            best, d = (cz, en), x
-    if best:
-        code = next(c["code"] for c in geo.countries() if c["zh"] == best[0])
-        return code, best[1]
-    c = min(geo.countries(), key=lambda c: (c["lat"] - lat) ** 2 + (((c["lon"] - lon + 180) % 360 - 180) * _cos(lat)) ** 2)
-    return c["code"], None
-
-
-def _cos(lat: float) -> float:
-    import math
-    return max(0.1, math.cos(math.radians(lat)))
+    """The one place -> table mapping: (ISO 3166-1 alpha-2 country, division English name or None). A region label
+    picked from our list maps exactly; a point goes to the country / division whose outline holds it (Natural Earth,
+    geo.locate); a point in no outline (open sea) -> None, which reads as 数据不足."""
+    if not label:
+        hit = geo.locate(lat, lon)
+        if not hit:
+            return None
+        label = hit[1] or hit[0]
+    country, _, name = label.partition(" · ")
+    c = next((c for c in geo.countries() if c["zh"] == country.strip()), None)
+    if not c:
+        return None
+    return c["code"], _division_en(c["zh"], name.strip()) if name else None
 
 
 @lru_cache(maxsize=1)

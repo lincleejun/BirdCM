@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from birdcm import config, decode, geo, models, stars
-from birdcm.pipeline import EQUIVALENT_DATA, fingerprint, image_paths
+from birdcm.pipeline import EQUIVALENT_DATA, EQUIVALENT_OLD_KEY, fingerprint, image_paths
 from birdcm.queue import Scheduler
 from birdcm.store import Store
 
@@ -308,7 +308,8 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         if scan.get("fp") and scan["fp"] != want:
             with contextlib.suppress(Exception):
                 digest = getattr(sched.engine, "model_digest", None)
-                if scan["fp"] in [fingerprint(scan["region"], digest, data=d) for d in EQUIVALENT_DATA]:
+                if scan["fp"] in [fingerprint(scan["region"], digest, data=d, old_key=k)
+                                  for d in (None, *EQUIVALENT_DATA) for k in (False, EQUIVALENT_OLD_KEY)]:
                     store.move_fp(scan["id"], scan["fp"], want)      # same results, only a display-only input changed
                     scan["fp"] = want
         return scan.get("fp") not in (None, want) and scan.get("state") == "completed"
@@ -355,8 +356,10 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             stars.validate(body)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
-        store.set_ratio(sid, body)
-        sched.rerate(sid)
+        try:
+            sched.set_ratio(sid, body)                     # computed first, stored with its stars only on success
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(400, f"这个设置算不出星级：{type(e).__name__}: {e}") from None
         return {"ok": True}
 
     def photo_file(pid: int, which: int) -> FileResponse:

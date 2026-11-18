@@ -345,6 +345,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const starredPct = eligibleN ? Math.round((100 * photos.filter((p) => (p.stars ?? 0) > 0).length) / eligibleN) : 0;
   const keepSet = keepOf(scan.ratio as { preset?: string; keep?: number });
   const keptN = photos.filter((p) => (p.stars ?? 0) > 0).length;
+  const floorN = photos.filter((p) => (p.stars ?? 0) > 0 && p.quality?.parts?.floor).length;
   // notable species: locally 少见 / 罕见 this month, or threatened worldwide (IUCN NT and worse)
   const notableMap = new Map<string, { sci: string; name: string; tag: string; why: string }>();
   for (const p of photos) {
@@ -436,6 +437,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
           <div className="cull-keep">
             <b className="cull-big">留 {keptN} 张 · {starredPct}%</b>
             <KeepButton value={keepSet} onChange={(v) => put(`/api/scans/${scanId}/ratio`, { ...v }).then(() => load()).catch((e) => setError(String(e.message)))} />
+            {floorN > 0 && <small title="每个确认的鸟种至少留最好的一张（质量太差的不留）；这些可能让总数超过目标比例">含 {floorN} 张每种保底</small>}
           </div>
           <div className="cull-stars">
             {[3, 2, 1].map((n) => (
@@ -635,7 +637,7 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
                     这张自己最像 {named({ ...r!.species_own, label: r!.species_own.top5[0], level: "species" }).title} <i>{r!.species_own.top5[0]?.sci}</i>（{pct(r!.species_own.top5[0]?.p ?? 0)}），按连拍组改成它</p>
                 )}
                 <p className="conf-line">{r!.species_own ? (sp.label?.p != null ? `这张自己给它 ${pct(sp.label.p)}` : "这张自己的前五里没有它")
-                  : `${sure ? "把握" : "最高候选"} ${pct((sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p) ?? 0)}`} <span className="ref">· {sp.geo ? "已按拍摄地点和季节修正" : "没有位置，只凭图像"}</span></p>
+                  : `${sure ? "把握" : "最高候选"} ${pct((sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p) ?? 0)}`} <span className="ref">· {!sp.geo ? "没有位置，只凭图像" : sp.prior?.unknown ? "地区模型里没有这个鸟种，没按地点修正" : "已按拍摄地点和季节修正"}</span></p>
                 <h4 className="panel-h">{r!.species_own ? "这张自己的前 5 个候选" : "前 5 个候选"}</h4>
                 <Candidates sp={sp} />
               </>

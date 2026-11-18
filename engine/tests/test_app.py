@@ -258,3 +258,15 @@ def test_equivalent_old_fingerprint_moves_instead_of_going_stale(tmp_path):
     sid = store.create_scan(str(tmp_path), False, None, {}, old, [])
     store.move_fp(sid, old, new)
     assert [s["fp"] for s in store.scans() if s["id"] == sid] == [new]
+
+
+def test_bad_star_settings_are_refused_and_nothing_changes(env):
+    """Codex S2: {"size_full": 0} used to return 200, store the setting and crash the re-rating."""
+    c, api, tmp = env
+    h = {**OK, "X-BirdCM-Token": "tok"}
+    (tmp / "shoot").mkdir()
+    sid = c.post("/api/scans", json={"folder": str(tmp / "shoot"), "ratio": {"keep": 20}}, headers=h).json()["id"]
+    before = c.get(f"/api/scans/{sid}", headers=OK).json()["scan"]["ratio"]
+    for bad in ({"size_full": 0}, {"d_burst": -1}, {"eye3": 2}):
+        assert c.put(f"/api/scans/{sid}/ratio", json=bad, headers=h).status_code == 400
+    assert c.get(f"/api/scans/{sid}", headers=OK).json()["scan"]["ratio"] == before

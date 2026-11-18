@@ -22,12 +22,14 @@ from pathlib import Path
 
 from PIL import Image
 
+import numpy as np
+
 from birdcm import config, confirm, decode, geo, geometry, models
 from birdcm.rarity import Rarity
 from birdcm.result import PhotoResult
 from birdcm.sharpness import head_sharpness
 
-PIPELINE_VERSION = 4            # bump when any step's output changes: old results stop being reused
+PIPELINE_VERSION = 5            # bump when any step's output changes: old results stop being reused
 SETTINGS = {"frame": decode.FRAME, "embedded_min": decode.EMBEDDED_MIN, "min_crop": geometry.MIN_CROP,
             "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR, "max_boxes": 5}
 DECODE_TIMEOUT = 120.0          # seconds one decode may run before its pool is killed and the file isolated
@@ -40,9 +42,12 @@ MAX_BOXES = 5            # boxes looked at per photo (strongest first); ponytail
 # fingerprint made with one of these is moved to the current one instead of marking the scan stale.
 # d8d5a4e6f3379b0a: the old Wikidata Chinese-name table was still hashed in (names are joined at read time since IOC 15.2).
 EQUIVALENT_DATA = ("d8d5a4e6f3379b0a",)
+# Location keys before the prior's cover was in them (Codex C1): pipeline 4 already read a region's lattice, so a
+# region scan made then has the same results; a point scan too (its neighbourhood). Moved, not marked stale.
+EQUIVALENT_OLD_KEY = True
 
 
-def fingerprint(region, model_digest: str | None = None, data: str | None = None) -> str:
+def fingerprint(region, model_digest: str | None = None, data: str | None = None, old_key: bool = False) -> str:
     """Models (role -> sha256), bundled data (regions; Chinese names are joined at read time, names.py, so not here),
     pipeline version, settings and the effective region: a
     stored result is reused only when this and the file's (size, mtime) match. An Engine passes the digest of the
@@ -50,14 +55,14 @@ def fingerprint(region, model_digest: str | None = None, data: str | None = None
     from birdcm import detect, tower
     cfg = {**SETTINGS, "det": [detect.FLOOR, detect.SECOND, detect.SECOND_TOP],
            "level": [tower.SPECIES_P, tower.SPECIES_MARGIN, tower.GENUS_P]}
-    data = data or hashlib.sha256(b"".join(f.read_bytes() for f in (geo.REGIONS, geo.COUNTRIES, geo.INDEX, geo.GRID_FILE))).hexdigest()[:16]
+    data = data or hashlib.sha256(b"".join(f.read_bytes() for f in (geo.REGIONS, geo.COUNTRIES, geo.INDEX, geo.GRID_FILE, geo.BOUNDARIES))).hexdigest()[:16]
     from birdcm import rarity
     cfg["iucn"] = rarity.SHOW_IUCN
     cfg["geo_grid"] = geo.GRID
     cfg["geo_floor"] = geo.FLOOR
     from birdcm import confirm
-    cfg["confirm"] = [confirm.EPS, confirm.TAU, geo.NEAR, geo.WEEKS]
-    s = json.dumps([model_digest or models.digest(), data, PIPELINE_VERSION, cfg, geo.fingerprint_key(region)], sort_keys=True)
+    cfg["confirm"] = [confirm.EPS, confirm.TAU, geo.NEAR, geo.WEEKS, geo.UNKNOWN_PRIOR, geo.NEAR_EDGE]
+    s = json.dumps([model_digest or models.digest(), data, PIPELINE_VERSION, cfg, geo.fingerprint_key(region, old_key)], sort_keys=True)
     return hashlib.sha256(s.encode()).hexdigest()[:16]
 
 
@@ -293,7 +298,7 @@ class Engine:
             _, boxes, _, first, where = x
             for k in range(first, first + len(boxes)):
                 if not isinstance(looks[k], Exception):
-                    confirm.decide(looks[k], where and where["p_geo"], where and where["typical"])
+                    confirm.decide(looks[k], where and where["wide"], where and where["typical"])
         self._sync()
         self._add("tower", time.perf_counter() - t)
         t = time.perf_counter()
@@ -342,8 +347,13 @@ class Engine:
         lat, lon, src = pl
         label = geo.location_label(region) if src == "region" else None
         wide, typical = self.geo.spread(lat, lon, exif.get("taken_at"), src, label)
+        um = getattr(self.geo, "unmapped", None)
+        post, wide_k, typ_k = wide, wide, typical
+        if um is not None and um.any():                    # unknown prior: neutral-ish in the posterior, NaN for the rule
+            post = np.where(um, geo.UNKNOWN_PRIOR, wide)
+            wide_k, typ_k = np.where(um, np.nan, wide), np.where(um, np.nan, typical)
         return {"lat": round(lat, 5), "lon": round(lon, 5), "source": src, "week": geo.week_of(exif.get("taken_at")),
-                "p_geo": wide, "typical": typical}
+                "p_geo": post, "wide": wide_k, "typical": typ_k}
 
     def _sync(self) -> None:
         import torch

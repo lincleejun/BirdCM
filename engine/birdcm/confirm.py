@@ -26,13 +26,16 @@ def decide(look: dict, wide, typical) -> dict:
     if ids is None or wide is None:
         return look
     i = ids[0]
+    if wide[i] != wide[i]:                          # NaN: the geo model does not list this species (prior unknown)
+        look["prior"] = {"unknown": True}
+        return look
     look["prior"] = {"max": round(float(wide[i]), 4), "median": round(float(typical[i]), 4)}
     if wide[i] >= EPS:
         if look["level"] == "species" and typical[i] < TAU:
             look["check"] = "rare"
         return look
     gen = look["top5"][0]["sci"].split(" ")[0]
-    local = next((c for c, j in zip(look["top5"][1:], ids[1:]) if c["sci"].split(" ")[0] == gen and wide[j] >= TAU), None)
+    local = next((c for c, j in zip(look["top5"][1:], ids[1:]) if c["sci"].split(" ")[0] == gen and wide[j] >= TAU), None)  # NaN: no
     look["override"] = {"why": "range", "visual": look["top5"][0], "local": local}
     if look["level"] == "species":
         g = look["genus"]

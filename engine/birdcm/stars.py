@@ -130,6 +130,25 @@ def validate(ratio: dict) -> dict:
         elif isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
             raise ValueError(f"{k} 要是数字")
     c = Config.from_ratio(ratio)
+    unit = ("keep", "eye3", "burst3", "species3", "aes3", "q3_min", "q2_min", "q_floor", "species_min_p", "eye_vis_min",
+            "outside_forgive_pct", "size3", "weak_size", "alike", "margin3", "burst_share", "fly_boost", "rare_boost",
+            "fly_bonus", "head_focus_bonus", "outside_focus_malus", "exposure_malus", "min_det")
+    for k in unit:
+        if not 0 <= getattr(c, k) <= 1:
+            raise ValueError(f"{k} 要在 0–1 之间")
+    for k in ("size_full", "d_species", "d_burst"):
+        if not 0 < getattr(c, k) <= 1:
+            raise ValueError(f"{k} 要大于 0、不超过 1")
+    for f in fields(Config):
+        if f.name.startswith("w_") and getattr(c, f.name) < 0:
+            raise ValueError(f"{f.name} 不能为负")
+    if not any(getattr(c, f.name) > 0 for f in fields(Config) if f.name.startswith("w_") and f.name not in ("w_sharp", "w_aes")):
+        raise ValueError("至少要有一个权重大于 0")
+    for k in ("min_sharp", "min_sharp3", "min_aes"):
+        if getattr(c, k) is not None and getattr(c, k) < 0:
+            raise ValueError(f"{k} 不能为负")
+    if not float(c.burst_cap).is_integer() or not 0 <= c.burst_gap <= 3600:
+        raise ValueError("连拍上限要是整数，连拍间隔在 0–3600 秒")
     if not 0 <= c.keep <= 1:
         raise ValueError("留片比例在 0–100%")
     if not (0 <= c.q3 <= 1 and 0 <= c.q2 <= 1 and c.q3 + c.q2 <= 1 + 1e-9):
@@ -213,14 +232,19 @@ def _name(res: dict, fix: dict | None = None) -> str:
     return lab.get("zh") or lab.get("en") or lab.get("sci") or "未定种"
 
 
+SUPPORT_P = 0.05     # a frame's own probability for a species at least this: it votes for it in the burst
+
+
 def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
     """One burst's (id, PhotoResult) of the photos that were not rejected -> id: corrected species, for the frames that
     disagree with a species held by a strict majority of the burst.
 
-    A frame supports species s when s is its own confirmed species, or when s is among its own five candidates.
-    Candidates are the confirmed species of the burst; the winner has the most support, then the larger summed
-    probability, then the name (deterministic). With support > half the frames, every frame not already confirmed
-    as it (another species, genus level, 不确定) takes it; its own result stays in the PhotoResult."""
+    A frame supports species s when s is its own confirmed species, or when its own probability for s is at least
+    SUPPORT_P (a name merely present in the top five at ~0 % is no vote). Candidates are the confirmed species of the
+    burst; the winner has the most support, then the larger summed probability of its supporters, then the name.
+    With support > half the frames, the frames that support it but are not confirmed (genus level, 不确定) take it.
+    A frame confirmed as another species keeps its own: a burst can hold two birds. Its own result stays in the
+    PhotoResult."""
     named = [(i, r["species"]) for i, r in frames if r.get("species")]
     if len(named) < 2:
         return {}
@@ -230,10 +254,12 @@ def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
 
     def p_of(sp: dict, sci: str) -> float | None:
         return next((c["p"] for c in sp.get("top5", []) if c["sci"] == sci), None)
+    def supports(sp: dict, s: str) -> bool:
+        return (sp["level"] == "species" and sp["label"]["sci"] == s) or (p_of(sp, s) or 0.0) >= SUPPORT_P
     score = {}
     for s in cands:
-        support = sum(1 for _, sp in named if (sp["level"] == "species" and sp["label"]["sci"] == s) or p_of(sp, s) is not None)
-        score[s] = (support, sum(p_of(sp, s) or 0.0 for _, sp in named))
+        sup = [sp for _, sp in named if supports(sp, s)]
+        score[s] = (len(sup), sum(p_of(sp, s) or 0.0 for sp in sup))
     best = min(cands, key=lambda s: (-score[s][0], -score[s][1], s))
     if score[best][0] * 2 <= len(named):
         return {}
@@ -241,7 +267,7 @@ def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
     label = src["label"]
     out = {}
     for i, sp in named:
-        if sp["level"] == "species" and sp["label"]["sci"] == best:
+        if sp["level"] == "species" or not supports(sp, best):        # confirmed (as it or as another bird), or no evidence
             continue
         p = p_of(sp, best)
         out[i] = {"level": "species", "label": {**label, "p": round(p, 4) if p is not None else None}, "top5": sp.get("top5", []),
@@ -459,7 +485,10 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
     for sp, ids in by_pool.items():                               # every confirmed species: at least its best photo
         if sp.startswith("genus:") or sp == "未确认" or picked & set(ids):
             continue
-        best = max(ids, key=lambda i: (q[i], -seq[i]))
+        ok = [i for i in ids if not weak(i)]                       # a weak photo is not starred even to keep its species
+        if not ok:
+            continue
+        best = max(ok, key=lambda i: (q[i], -seq[i]))
         picked.add(best)
         floor.add(best)
     med = {sp: sorted(q[i] for i in ids if i in picked) for sp, ids in by_pool.items()}
@@ -508,6 +537,8 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         if not short and q[i] < med.get(pools[i], 0) + c.margin3 and len([j for j in by_pool[pools[i]] if j in picked]) > 1:
             short.append(f"和其他{name}差不多")
         lead = "飞版，" if flying else ""
+        if i in floor:                                             # the summary counts these: they can exceed the ratio
+            out[i]["q_parts"] = {**(out[i].get("q_parts") or {}), "floor": 1}
         if not short:
             out[i].update(stars=3, star_reason=f"{lead}各方面都很好（综合 {q[i]:.2f}）")
         elif q[i] >= c.q2_min and ((x.get("eye_p") or 0) >= 0.5 or flying):

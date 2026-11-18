@@ -201,10 +201,24 @@ def test_ratio_change_rerates_only(store):
     s = Scheduler(store, FakeEngine)
     s.run_until_idle()
     n = store.snapshot(sid)["cursor"]
-    store.set_ratio(sid, {"p3": 10, "p2": 20})
-    s.rerate(sid)
+    s.set_ratio(sid, {"p3": 10, "p2": 20})
     assert [e["kind"] for e in store.events_after(sid, n)] == ["stars"]
-    assert store.state(sid) == "completed"
+    assert store.state(sid) == "completed" and store.scan(sid)["ratio"] == {"p3": 10, "p2": 20}
+
+
+def test_stale_rating_cannot_overwrite_newer_settings(store):
+    """Codex I2: a computation made with old settings finishes after a newer settings change: it must not be stored."""
+    from birdcm import stars
+    sid = mk(store, 3)
+    s = Scheduler(store, FakeEngine)
+    s.run_until_idle()
+    old = store.scan(sid)["ratio"]
+    stale = stars.rate(store.rows_for_rating(sid), old)                   # computed with the old settings ...
+    s.set_ratio(sid, {"keep": 10})                                         # ... a newer change lands first
+    after = {p["id"]: p["star_reason"] for p in store.snapshot(sid)["photos"]}
+    assert store.write_rating(sid, stale, complete=False, ratio=old) is False
+    assert {p["id"]: p["star_reason"] for p in store.snapshot(sid)["photos"]} == after
+    assert store.scan(sid)["ratio"] == {"keep": 10}
 
 
 def test_stop_between_last_batch_and_finalizing(store):

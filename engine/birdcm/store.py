@@ -298,9 +298,20 @@ class Store:
     def rows_for_rating(self, scan_id: int) -> list[dict]:
         return [photo_row(r) for r in self._db().execute(f"SELECT {PHOTO_COLS} FROM photo WHERE scan_id = ? ORDER BY seq", (scan_id,))]
 
-    def write_rating(self, scan_id: int, fields: dict[int, dict], complete: bool) -> None:
-        """Per-scan fields (stars, reason, burst) for every photo, then one `stars` event (+ completed), atomically."""
+    def write_rating(self, scan_id: int, fields: dict[int, dict], complete: bool, ratio: dict | None = None,
+                     set_ratio: bool = False) -> bool:
+        """Per-scan fields (stars, reason, burst) for every photo, then one `stars` event (+ completed), atomically.
+        ratio: the settings these stars were computed with. set_ratio=True stores it with them (a settings change);
+        otherwise the write is refused (False) when the scan's settings are no longer these (changed meanwhile):
+        settings and stars are always one consistent pair."""
         def go(db):
+            if ratio is not None:
+                if set_ratio:
+                    db.execute("UPDATE scan SET ratio = ? WHERE id = ?", (json.dumps(ratio), scan_id))
+                else:
+                    cur = db.execute("SELECT ratio FROM scan WHERE id = ?", (scan_id,)).fetchone()
+                    if cur is None or json.loads(cur[0]) != ratio:
+                        return False
             for pid, f in fields.items():
                 fix = f.get("species_fix")
                 qual = {"q": f["q"], "parts": f.get("q_parts")} if f.get("q") is not None else None
@@ -311,7 +322,8 @@ class Store:
             self._event(db, scan_id, "stars", {})
             if complete and db.execute("UPDATE scan SET state='completed', error=NULL WHERE id=? AND state='finalizing'", (scan_id,)).rowcount:
                 self._scan_event(db, scan_id)
-        self._write(go)
+            return True
+        return self._write(go)
 
     # ---- events and recovery ------------------------------------------------------------------------------------
 

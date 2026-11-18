@@ -12,8 +12,8 @@
 - week: BirdNET's 48-week calendar from the capture date; no date -> the whole year (max over the 48 weeks, what the
   birdnet package does for week=None).
 - species the geo model does not list (744 of 11,172; data/avilist-birdnet-geo3.csv, from gardener's AviList map):
-  p_geo = 0, so they keep only FLOOR x their visual score (gardener's "zero" policy for birds). A lumped row takes the
-  largest of its labels.
+  their prior is UNKNOWN (Geo.unmapped). The posterior gives them UNKNOWN_PRIOR ("might be here, not common") instead
+  of 0, and the range rule never vetoes or flags them (confirm.py). A lumped row takes the largest of its labels.
 - uncertainty (2026-11-17): the prior is the MAX over where and when the photo could be. A chosen country / division:
   every point of its lattice (data/region-grid.csv, tools/build_region_grid.py, Natural Earth); a point (GPS, map,
   device): the point and its neighbours NEAR degrees away; the week and WEEKS either side (no date: all 48). A region's
@@ -29,6 +29,7 @@ from pathlib import Path
 import numpy as np
 
 FLOOR = 0.02
+UNKNOWN_PRIOR = 0.05      # the prior used in the posterior for a species the geo model does not list
 DATA = Path(__file__).with_name("data")
 REGIONS = DATA / "regions.csv"
 COUNTRIES = DATA / "countries.csv"
@@ -46,6 +47,59 @@ def region_grid() -> dict[str, tuple[tuple[float, float], ...]]:
         for r in csv.DictReader(f):
             out.setdefault(r["place"], []).append((float(r["lat"]), float(r["lon"])))
     return {k: tuple(v) for k, v in out.items()}
+
+
+BOUNDARIES = DATA / "boundaries.json"
+NEAR_EDGE = 0.15          # degrees: a point just off a simplified coast still belongs to the nearest outline
+
+
+@lru_cache(maxsize=1)
+def _outlines() -> list[tuple[str, float, tuple, list[np.ndarray]]]:
+    """(place label, area, bbox, rings as (n, 2) lon/lat arrays), smallest first so an enclave wins over its host."""
+    import json
+    out = []
+    for key, rs in json.loads(BOUNDARIES.read_text(encoding="utf-8")).items():
+        arrs = [np.array(r, float).reshape(-1, 2) for r in rs]
+        allp = np.concatenate(arrs)
+        bbox = (allp[:, 0].min(), allp[:, 1].min(), allp[:, 0].max(), allp[:, 1].max())
+        area = sum(abs(np.dot(a[:, 0], np.roll(a[:, 1], 1)) - np.dot(a[:, 1], np.roll(a[:, 0], 1))) / 2 for a in arrs)
+        out.append((key, area, bbox, arrs))
+    return sorted(out, key=lambda x: x[1])
+
+
+def _inside(x: float, y: float, ring: np.ndarray) -> bool:
+    xs, ys = ring[:, 0], ring[:, 1]
+    x2, y2 = np.roll(xs, -1), np.roll(ys, -1)
+    cross = (ys > y) != (y2 > y)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        xi = xs + (y - ys) * (x2 - xs) / (y2 - ys)
+    return bool(np.count_nonzero(cross & (x < xi)) % 2)
+
+
+def locate(lat: float, lon: float) -> tuple[str, str | None] | None:
+    """(country label, division label or None) whose outline holds the point (Natural Earth, data/boundaries.json);
+    a point just off a coast (within NEAR_EDGE of an outline's vertex) takes the nearest; else None (unknown)."""
+    hits = {}
+    near = None
+    for key, _, (x0, y0, x1, y1), rings in _outlines():
+        kind = "div" if " · " in key else "country"
+        if kind in hits:
+            continue
+        if x0 - NEAR_EDGE <= lon <= x1 + NEAR_EDGE and y0 - NEAR_EDGE <= lat <= y1 + NEAR_EDGE:
+            if x0 <= lon <= x1 and y0 <= lat <= y1 and any(_inside(lon, lat, r) for r in rings):
+                hits[kind] = key
+                continue
+            d = min(float(((r - (lon, lat)) ** 2).sum(axis=1).min()) for r in rings) ** 0.5
+            if d <= NEAR_EDGE and (near is None or d < near[0]):
+                near = (d, key)
+    if "div" in hits:
+        return hits["div"].split(" · ")[0], hits["div"]
+    if "country" in hits:
+        return hits["country"], None
+    if near:
+        k = near[1]
+        return (k.split(" · ")[0], k) if " · " in k else (k, None)
+    return None
 
 
 def cover(lat: float, lon: float, source: str, label: str | None = None) -> tuple[tuple[float, float], ...]:
@@ -157,10 +211,17 @@ def place(gps: list[float] | None, location=None) -> tuple[float, float, str] | 
     return location_point(location)
 
 
-def fingerprint_key(location) -> list | None:
-    """What of a scan's location changes results: its snapped point (the label and source do not)."""
+def fingerprint_key(location, old: bool = False) -> list | None:
+    """What of a scan's location changes results: its snapped point and the cover the prior is read over (a region's
+    lattice, or the point's neighbourhood). old=True: the key before the cover was added (equivalence check only)."""
     pt = location_point(location)
-    return list(snap(pt[0], pt[1])) if pt else None
+    if not pt:
+        return None
+    lat, lon, src = pt
+    if old:
+        return list(snap(lat, lon))
+    label = location_label(location) if src == "region" else None
+    return [*snap(lat, lon), f"region:{label}" if label and label in region_grid() else "point"]
 
 
 def posterior(p_visual: np.ndarray, p_geo: np.ndarray | None) -> np.ndarray:
@@ -184,6 +245,7 @@ class Geo:
         self.index = np.full((len(rows), width), -1, np.int64)
         for i, r in enumerate(rows):
             self.index[i, :len(r)] = r
+        self.unmapped = (self.index < 0).all(axis=1)       # no BirdNET label: the prior is unknown, not "absent"
 
     @lru_cache(maxsize=256)  # noqa: B019 - one instance per engine; a batch is mostly one place and week
     def _probs(self, points: tuple, weeks: tuple) -> np.ndarray:

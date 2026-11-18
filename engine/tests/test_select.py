@@ -106,3 +106,16 @@ def test_long_burst_may_take_more_than_a_short_one():
     assert n_long >= 3 and n_long > sum(1 for x in o[20:22] if (x["stars"] or 0) > 0)
     flat = run(long + short + rest, keep=25, burst_share=0, w_burst=0)
     assert sum(1 for x in flat[:20] if (x["stars"] or 0) > 0) < n_long
+
+
+def test_species_floor_respects_the_weak_floor():
+    """Codex E2: 20 weak photos of 20 species at 10 %: not 20/20 starred."""
+    weak = [photo(60.0 * i, sp=f"S{i} x", sharp=1.0, aes=0.01, eye=0.01, area=0.00001) for i in range(20)]
+    o = run(weak, keep=10)
+    assert sum(1 for x in o if (x["stars"] or 0) > 0) <= 2
+
+
+def test_floor_photos_are_marked_for_the_summary():
+    ps = [photo(10.0 * i, sp="Big x", sharp=3.0, aes=0.7) for i in range(40)] + [photo(9000.0, sp="Lone y", sharp=1.5, aes=0.5)]
+    o = run(ps, keep=10)
+    assert o[40]["stars"] > 0 and o[40]["q_parts"].get("floor") == 1

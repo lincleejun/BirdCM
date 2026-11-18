@@ -110,7 +110,8 @@ def test_validate_star_settings():
     from birdcm.stars import validate
     assert validate({"preset": "std", "p3": 30, "p2": 30, "burst_cap": 3, "min_sharp": None, "per_species": False})
     for bad in ({"p3": "x"}, {"p3": 80, "p2": 30}, {"burst_cap": -1}, {"nope": 1}, {"per_species": 1},
-                {"w_sharp": float("nan")}, {"min_aes": True}):
+                {"w_sharp": float("nan")}, {"min_aes": True},
+                {"size_full": 0}, {"d_burst": -0.1}, {"eye3": 2}, {"w_eye": -1}, {"keep": 150}, {"d_species": 0}):
         with pytest.raises(ValueError):
             validate(bad)
 
@@ -125,21 +126,39 @@ def burst(*species, t0=0.0):
 
 
 def test_consensus_majority_corrects_the_odd_frame():
-    rs = burst(sp("Pyrocephalus rubinus", 0.91), sp("Pyrocephalus rubinus", 0.95),
-               sp("Xenopsaris albinucha", 0.81, top=[("Pyrocephalus rubinus", 0.1)]))
+    rs = burst(sp("Pyrocephalus rubinus", 0.97), sp("Pyrocephalus rubinus", 0.95),
+               sp("Xenopsaris albinucha", 0.81, level="uncertain", top=[("Pyrocephalus rubinus", 0.1)]))
     o = run(rs)
     assert o[0]["species_fix"] is None and o[1]["species_fix"] is None
     fix = o[2]["species_fix"]
     assert fix["label"]["sci"] == "Pyrocephalus rubinus" and fix["label"]["p"] == 0.1 and fix["consensus"]["support"] == 3
-    assert rs[2]["species"]["label"]["sci"] == "Xenopsaris albinucha"           # the frame's own result is kept
+    assert rs[2]["species"]["top5"][0]["sci"] == "Xenopsaris albinucha"         # the frame's own result is kept
 
 
-def test_consensus_genus_and_uncertain_frames_adopt_it():
-    o = run(burst(sp("A b", 0.97), sp("A b", 0.96), sp("A b", 0.98), sp("A sp.", 0.95, level="genus"), sp("Z z", 0.4, level="uncertain")))
-    assert o[3]["species_fix"]["label"]["sci"] == "A b" and o[4]["species_fix"]["label"]["sci"] == "A b"   # 3 of 5
-    assert o[4]["species_fix"]["label"]["p"] is None                           # not among its own candidates
+def test_consensus_genus_and_uncertain_frames_adopt_it_only_with_evidence():
+    o = run(burst(sp("A b", 0.97), sp("A b", 0.96), sp("A b", 0.98), sp("A sp.", 0.95, level="genus", top=[("A b", 0.3)]),
+                  sp("Z z", 0.4, level="uncertain")))
+    assert o[3]["species_fix"]["label"]["sci"] == "A b"                        # 4 of 5 support it
+    assert o[4]["species_fix"] is None                                         # A b is not among its own candidates
     o = run(burst(sp("A b", 0.97), sp("A b", 0.96), sp("A sp.", 0.95, level="genus"), sp("Z z", 0.4, level="uncertain")))
     assert all(x["species_fix"] is None for x in o)                            # 2 of 4 is not a majority
+
+
+def test_consensus_zero_probability_is_no_vote():
+    """Codex E1: one frame A, two frames B that list A at 0 %: B keeps its majority, nothing is overturned."""
+    o = run(burst(sp("A a", 0.97), sp("B b", 0.97, top=[("A a", 0.0)]), sp("B b", 0.96, top=[("A a", 0.0)])))
+    assert o[1]["species_fix"] is None and o[2]["species_fix"] is None
+    assert o[0]["species_fix"] is None                                         # a confirmed other bird is not overwritten
+
+
+def test_consensus_keeps_a_confirmed_other_bird():
+    """Owner's DSC05095-97: a Hooded Merganser (confirmed 0.9965, Surf Scoter 0.3 %) and a Surf Scoter in one burst;
+    the merganser frame must not become a scoter, the unconfirmed frame goes with its own best (the merganser)."""
+    o = run(burst(sp("Lophodytes cucullatus", 0.6757, level="uncertain", top=[("Melanitta perspicillata", 0.3182)]),
+                  sp("Lophodytes cucullatus", 0.9965, top=[("Melanitta perspicillata", 0.0031)]),
+                  sp("Melanitta perspicillata", 1.0)))
+    assert o[1]["species_fix"] is None and o[2]["species_fix"] is None
+    assert o[0]["species_fix"]["label"]["sci"] == "Lophodytes cucullatus"
 
 
 def test_consensus_needs_a_strict_majority():
@@ -150,13 +169,13 @@ def test_consensus_needs_a_strict_majority():
 
 
 def test_consensus_tie_broken_by_summed_probability():
-    o = run(burst(sp("A b", 0.97, top=[("C d", 0.02)]), sp("C d", 0.99, top=[("A b", 0.005)]), sp("Q q", 0.3, level="uncertain")))
-    assert o[0]["species_fix"]["label"]["sci"] == "C d"                         # both have support 2; C d sums 1.01 > 0.975
-    assert o[1]["species_fix"] is None and o[2]["species_fix"]["label"]["sci"] == "C d"    # 不确定 adopts the majority
+    o = run(burst(sp("A b", 0.97), sp("C d", 0.99), sp("Q q", 0.3, level="uncertain", top=[("A b", 0.3), ("C d", 0.35)])))
+    assert o[0]["species_fix"] is None and o[1]["species_fix"] is None         # confirmed frames keep their bird
+    assert o[2]["species_fix"]["label"]["sci"] == "C d"                         # support 2 each; C d sums 1.34 > 1.27
 
 
 def test_consensus_skips_rejected_and_single_frames_and_feeds_quotas():
-    rs = burst(sp("A b", 0.97), sp("A b", 0.96), sp("C d", 0.97))
+    rs = burst(sp("A b", 0.97), sp("A b", 0.96), sp("C d", 0.5, level="uncertain", top=[("A b", 0.4)]))
     rs.append(res(1.5, 1, 0.5, rejected=True, reject_reason="没有清楚的鸟", species=None))
     rs.append(res(500.0, 1, 0.5, species=sp("C d", 0.97)))                    # its own burst: unchanged
     o = run(rs)

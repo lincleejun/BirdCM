@@ -4,6 +4,8 @@ the location prior can be read over the whole region instead of at its represent
 Input: Natural Earth 1:50m cultural vectors v5.1.1 (public domain, https://www.naturalearthdata.com/about/terms-of-use/),
   ne_50m_admin_0_countries.shp and ne_50m_admin_1_states_provinces.shp.
 Run:  uv run --with pyshp --with shapely python tools/build_region_grid.py NE_DIR birdcm/data/region-grid.csv
+It also writes birdcm/data/boundaries.json beside it: the same countries and divisions as simplified outlines
+(0.02 degree tolerance, outer rings only), for "which country / division is this point in" (geo.locate).
 Each region gets a lattice inside its polygon, spacing sqrt(area / 48) clamped to 0.25-3 degrees (so 10-60 points),
 plus its representative point from our list; a region Natural Earth does not have (or too small to hold a lattice
 point) keeps only its representative point.
@@ -18,6 +20,13 @@ from shapely.geometry import Point, shape
 
 ALIAS = {"Nei Mongol": "Inner Mongol", "Ningxia Hui": "Ningxia", "Xinjiang Uygur": "Xinjiang"}   # our name -> Natural Earth's
 DATA = Path(__file__).resolve().parents[1] / "birdcm" / "data"
+
+
+def rings(geom):
+    """Outer rings of the simplified outline as flat [lon, lat, lon, lat, ...] lists (3 decimals)."""
+    g = geom.simplify(0.02, preserve_topology=True)
+    polys = getattr(g, "geoms", [g])
+    return [[round(v, 3) for xy in p.exterior.coords for v in xy] for p in polys if not p.is_empty]
 
 
 def lattice(geom, rep):
@@ -67,6 +76,17 @@ def main(ne: str, out: str) -> None:
             pts = lattice(g, rep) if g else [rep]
             missing += [] if g else [r["name_en"]]
             rows += [(f'{r["country"]} · {r["region"]}', la, lo) for la, lo in pts]
+    import json
+    outlines = {}
+    for c in cs:
+        if c["code"] in countries:
+            outlines[c["zh"]] = rings(countries[c["code"]])
+    with open(DATA / "regions.csv", newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            g = divisions.get((code_of[r["country"]], ALIAS.get(r["name_en"], r["name_en"])))
+            if g is not None:
+                outlines[f'{r["country"]} · {r["region"]}'] = rings(g)
+    (Path(out).parent / "boundaries.json").write_text(json.dumps(outlines, ensure_ascii=False, separators=(",", ":")))
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["place", "lat", "lon"])

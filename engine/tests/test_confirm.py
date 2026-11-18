@@ -31,6 +31,12 @@ def test_not_expected_anywhere_is_not_confirmed_and_says_why_without_reordering(
     assert lk["override"]["visual"]["sci"] == "Haliaeetus albicilla" and lk["override"]["local"]["sci"] == "Haliaeetus leucocephalus"
 
 
+def test_unmapped_species_is_prior_unknown_not_absent():
+    """Codex C2: a species the geo model does not list (NaN) is not vetoed as "not here"."""
+    lk = confirm.decide(look(["Anas laysanensis", "Anas platyrhynchos"], [0.97, 0.02]), np.array([np.nan, 0.6]), np.array([np.nan, 0.5]))
+    assert lk["level"] == "species" and lk["prior"] == {"unknown": True} and "override" not in lk and "check" not in lk
+
+
 try:
     _P = models.paths()
 except FileNotFoundError:

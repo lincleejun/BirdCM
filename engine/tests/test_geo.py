@@ -38,9 +38,18 @@ def test_snap_and_fingerprint_key():
     assert geo.snap(0, 180) == (0, -180.0) and geo.snap(0, -180) == (0, -180.0)  # antimeridian wraps
     assert geo.snap(90, 10)[0] == 90 and geo.snap(-90, 10)[0] == -90             # poles stay on the map
     a = geo.fingerprint_key({"lat": 36.6, "lon": -121.9, "label": "A"})
-    assert a == geo.fingerprint_key({"lat": 36.601, "lon": -121.899, "label": "B", "source": "device"}) == [36.6, -121.9]
+    assert a == geo.fingerprint_key({"lat": 36.601, "lon": -121.899, "label": "B", "source": "device"}) == [36.6, -121.9, "point"]
     assert geo.fingerprint_key(None) is None
-    assert geo.fingerprint_key("美国 · 加利福尼亚州") == list(geo.snap(*geo.region_point("美国 · 加利福尼亚州")))
+    assert geo.fingerprint_key("美国 · 加利福尼亚州") == [*geo.snap(*geo.region_point("美国 · 加利福尼亚州")), "region:美国 · 加利福尼亚州"]
+
+
+def test_region_and_point_at_the_same_centre_do_not_share_a_fingerprint():
+    """Codex C1: the state picked as a region and a map pin at its centre read different priors."""
+    from birdcm.pipeline import fingerprint
+    reg = {"label": "美国 · 加利福尼亚州", "lat": 37.2, "lon": -119.5, "source": "region"}
+    pin = {"label": "美国 · 加利福尼亚州", "lat": 37.2, "lon": -119.5, "source": "map"}
+    assert fingerprint(reg, "m") != fingerprint(pin, "m")
+    assert fingerprint(reg, "m") == fingerprint({**reg, "label": "美国 · 加利福尼亚州"}, "m")
 
 
 def test_catalogue_is_global():
@@ -64,3 +73,13 @@ def test_posterior_formula_and_fallbacks():
     want = pv * (geo.FLOOR + pg)
     assert post == pytest.approx(want / want.sum()) and post.argmax() == 1 and post[0] > 0
     assert geo.posterior(np.zeros(3), pg).sum() == 0                            # nothing to renormalise: left alone
+
+
+def test_points_near_borders_land_in_the_right_place():
+    """Codex C9: the nearest representative point put these in the wrong country / state."""
+    from birdcm.rarity import region_key
+    assert region_key(49.28, -123.12) == ("CA", "British Columbia")          # Vancouver (was US / Washington)
+    assert region_key(32.53, -117.02)[0] == "MX"                              # Tijuana (was US / Arizona)
+    assert region_key(42.89, -78.88) == ("US", "New York")                    # Buffalo (was US / Pennsylvania)
+    assert region_key(33.70, -118.06) == ("US", "California")                 # a pier just off the simplified coast
+    assert region_key(20.0, -150.0) is None                                   # open sea: unknown, not the nearest land

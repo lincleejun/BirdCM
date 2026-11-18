@@ -119,14 +119,16 @@ class Scheduler:
         if not self.store.set_state(sid, "finalizing", when=("queued", "running", "finalizing")):
             self.store.set_state(sid, "paused", when=("stopping",))
             return
-        scan = self.store.scan(sid)
-        try:
-            rating = stars.rate(self.store.rows_for_rating(sid), scan["ratio"], rarity=self._rarity())
-        except Exception as e:  # noqa: BLE001
-            traceback.print_exc()
-            self.store.set_state(sid, "failed", error=f"标星出错：{type(e).__name__}: {e}"[:500])
-            return
-        self.store.write_rating(sid, rating, complete=True)
+        for _ in range(5):                                         # the settings may change while we compute: redo
+            scan = self.store.scan(sid)
+            try:
+                rating = stars.rate(self.store.rows_for_rating(sid), scan["ratio"], rarity=self._rarity())
+            except Exception as e:  # noqa: BLE001
+                traceback.print_exc()
+                self.store.set_state(sid, "failed", error=f"标星出错：{type(e).__name__}: {e}"[:500])
+                return
+            if self.store.write_rating(sid, rating, complete=True, ratio=scan["ratio"]):
+                return
 
     def _rarity(self):
         """The rarity table for burst-corrected frames (they take the majority species' rarity); None when absent."""
@@ -139,11 +141,12 @@ class Scheduler:
                 self._rarity_table = None
         return self._rarity_table
 
-    def rerate(self, sid: int) -> None:
-        """Ratio changed on a completed scan: stars only, no rescan."""
+    def set_ratio(self, sid: int, ratio: dict) -> None:
+        """New star settings. A completed scan is re-rated first and the settings are stored together with their stars
+        (ValueError / any rating error: nothing changes); otherwise only stored, finalize uses them."""
         scan = self.store.scan(sid)
         if scan and scan["state"] == "completed":
-            try:
-                self.store.write_rating(sid, stars.rate(self.store.rows_for_rating(sid), scan["ratio"], rarity=self._rarity()), complete=False)
-            except Exception:  # noqa: BLE001 - keep the previous stars
-                traceback.print_exc()
+            rating = stars.rate(self.store.rows_for_rating(sid), ratio, rarity=self._rarity())
+            self.store.write_rating(sid, rating, complete=False, ratio=ratio, set_ratio=True)
+        else:
+            self.store.set_ratio(sid, ratio)
