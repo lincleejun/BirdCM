@@ -69,8 +69,23 @@ def score(rows: list[dict]) -> dict:
     return out
 
 
+def region_label(lat: float, lon: float) -> str | None:
+    """The place-list label ("国家 · 州/省" or "国家") of the division or country around a point."""
+    from birdcm import geo, rarity
+    key = rarity.region_key(lat, lon)
+    if not key:
+        return None
+    c = next((c for c in geo.countries() if c["code"] == key[0]), None)
+    if not c:
+        return None
+    sub = next((zh for cz, zh, en, *_ in rarity._divisions() if cz == c["zh"] and en == key[1]), None) if key[1] else None
+    return f'{c["zh"]} · {sub}' if sub else c["zh"]
+
+
 def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit: int | None = None,
-        out: str | None = None, workers: int = 4, prior: bool = True) -> dict:
+        out: str | None = None, workers: int = 4, prior: bool = True, place: str = "point") -> dict:
+    """place: "point" = each photo's own coordinates (as gardener's eval); "region" = the division / country that
+    contains them, as when a person picks a region instead of a point (the prior is read over the region's lattice)."""
     from birdcm import config
     from birdcm.pipeline import Engine
     config.check_own_dirs(photos)                      # thumbnails go to the cache dir: never inside the photos
@@ -87,13 +102,19 @@ def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit
         it = {"id": i, "path": str(p), "size": st.st_size, "mtime_ns": st.st_mtime_ns}
         if prior and r.get("lat") and r.get("lon"):                  # the list's own place and date, as gardener's eval
             it.update(gps=[float(r["lat"]), float(r["lon"])], taken_at=r.get("taken_at") or None)
+            if place == "region":
+                it.update(gps=None, no_gps=True, label=region_label(float(r["lat"]), float(r["lon"])))
         items.append(it)
     e = Engine(workers=workers)
     t0 = time.perf_counter()
     got = {}
     try:
-        for it, res, err in e.run(items):
-            got[it["id"]] = (res, err)
+        groups: dict = {}
+        for it in items:
+            groups.setdefault(it.get("label"), []).append(it)
+        for label, its in groups.items():
+            for it, res, err in e.run(its, {"label": label, "source": "region"} if label else None):
+                got[it["id"]] = (res, err)
     finally:
         e.close()
     rows = [{"kind": r["kind"], "truth": r["scientific"], "path": r["path"],

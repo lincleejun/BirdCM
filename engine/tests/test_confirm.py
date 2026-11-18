@@ -57,6 +57,12 @@ def test_california_november_real_prior():
     lk["_ids"] = [i, sci.index("Tyrannus couchii")]
     out = confirm.decide(lk, wide, typical)
     assert out["level"] == "species" and out["check"] == "rare"
+    # a point on the coast (the Bay Area): the geo model expects it there in November, so confirmed without the flag
+    wide, typical = g.spread(37.32, -122.02, "2026-11-14T10:00:00", "device")
+    lk = look(["Tyrannus melancholicus", "Tyrannus couchii"], [1.0, 0.0])
+    lk["_ids"] = [i, sci.index("Tyrannus couchii")]
+    out = confirm.decide(lk, wide, typical)
+    assert out["level"] == "species" and "check" not in out
 
 
 def test_lightroom_variants_pair_with_their_raw(tmp_path):

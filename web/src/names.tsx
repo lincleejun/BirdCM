@@ -15,7 +15,7 @@ export function named(sp: Species | null | undefined): Named {
     return { title, sub: l.zh ? l.en ?? "" : "", sci: l.sci, uncertain: false };
   }
   if (sp.level === "genus" && l) return { title: `${genusOf(l.sci)} 属`, sub: "只认到属", sci: genusOf(l.sci), uncertain: true };
-  const t = sp.top5[0];
+  const t = sp.override?.local ?? sp.top5[0];          // the first name was ruled out here: offer the local congener
   return { title: "不确定", sub: t ? `最高候选 ${t.zh ? t.zh + " " : ""}${t.en ?? ""}` : "", sci: t ? t.sci : "", uncertain: true };
 }
 

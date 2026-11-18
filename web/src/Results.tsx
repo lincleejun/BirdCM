@@ -419,6 +419,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
         </div>
         {!complete && <progress className="bar-progress" value={finished} max={c.total || 1} aria-label="扫描进度" />}
       </header>
+      {scan.state === "failed" && <p className="warn-strip stale" role="alert">扫描出错停下了：{scan.error ?? "原因未知"}</p>}
       {rel.newer ? (
         <p className="warn-strip" role="status">
           {rel.newer.state === "completed" ? "这个文件夹已经重新扫描完了" : `这个文件夹正在重新扫描（已完成 ${rel.newer.counts.done + rel.newer.counts.failed} / ${rel.newer.counts.total}）`}

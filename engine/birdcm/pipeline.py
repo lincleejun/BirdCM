@@ -276,6 +276,8 @@ class Engine:
                 exif = {}
             if it.get("gps") is not None or it.get("taken_at"):          # the evaluation list's own place and date
                 exif = {**exif, "gps": it.get("gps") or exif.get("gps"), "taken_at": it.get("taken_at") or exif.get("taken_at")}
+            if it.get("no_gps"):                                            # evaluation: use the region, not the photo's GPS
+                exif = {**exif, "gps": None}
             boxes = boxes[:MAX_BOXES]
             fh, fw = d["frame"].shape[:2]
             rects = [geometry.crop_rect(b, fw, fh) for _, b in boxes]

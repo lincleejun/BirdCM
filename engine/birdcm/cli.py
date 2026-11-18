@@ -26,6 +26,8 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--limit", type=int)
     ev.add_argument("--out", help="write the report and per-photo rows as JSON")
     ev.add_argument("--no-prior", action="store_true", help="image only: ignore the list's coordinates and dates")
+    ev.add_argument("--place", choices=("point", "region"), default="point",
+                    help="region: use the division / country around each photo instead of its coordinates")
     v = sub.add_parser("serve", help="start the local web app")
     v.add_argument("--port", type=int, default=8765)
     v.add_argument("--no-open", action="store_true", help="do not open the browser")
@@ -52,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if a.cmd == "eval":
         from birdcm import evaluate
-        print(json.dumps(evaluate.run(a.groundtruth, a.photos, tuple(a.kinds.split(",")), a.limit, a.out, prior=not a.no_prior), ensure_ascii=False, indent=1))
+        print(json.dumps(evaluate.run(a.groundtruth, a.photos, tuple(a.kinds.split(",")), a.limit, a.out, prior=not a.no_prior, place=a.place), ensure_ascii=False, indent=1))
         return 0
 
     from birdcm import app
