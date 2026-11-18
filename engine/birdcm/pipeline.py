@@ -14,6 +14,7 @@ import multiprocessing as mp
 import os
 import time
 from collections import deque
+from itertools import islice
 from collections.abc import Callable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, ThreadPoolExecutor, wait
 from concurrent.futures.process import BrokenProcessPool
@@ -74,14 +75,15 @@ def split_on_oom(fn: Callable[[list], list], xs: list) -> list:
 
 class Engine:
     def __init__(self, workers: int = 4, det_batch: int = 8, tower_batch: int = 32, device: str | None = None,
-                 mode: str = "embedded", det_half: bool = False) -> None:
+                 mode: str = "embedded", det_half: bool = True,
+                 exif: decode.ExifTool | None = None) -> None:
         from birdcm.detect import Detector
         from birdcm.tower import Tower
         p = models.paths()
         self.device = device or pick_device()
-        self.detector = Detector(str(p["detector:owlv2-int8"]), self.device, half=det_half)
+        self.detector = Detector(str(p["detector:owlv2-int8"]), self.device, half=det_half and self.device != "cpu")
         self.tower = Tower(str(p["tower"]), str(p["names"]), str(p["parts"]), str(p["flight"]), self.device)
-        self.exif = decode.ExifTool()
+        self.exif, self._own_exif = exif or decode.ExifTool(), exif is None
         self.workers, self.det_batch, self.tower_batch, self.mode = workers, det_batch, tower_batch, mode
         self.stats: dict[str, float] = {}
         self._pool: ProcessPoolExecutor | None = None
@@ -90,7 +92,8 @@ class Engine:
         if self._pool:
             self._pool.shutdown(cancel_futures=True)
             self._pool = None
-        self.exif.close()
+        if self._own_exif:
+            self.exif.close()
 
     def _new_pool(self) -> ProcessPoolExecutor:
         if self._pool:
@@ -103,8 +106,8 @@ class Engine:
     def _add(self, key: str, dt: float) -> None:
         self.stats[key] = self.stats.get(key, 0.0) + dt
 
-    def run(self, items: list[dict], region: str | None = None, should_stop: Callable[[], bool] = lambda: False
-            ) -> Iterator[tuple[dict, PhotoResult | None, str | None]]:
+    def run(self, items: list[dict], region: str | None = None, should_stop: Callable[[], bool] = lambda: False,
+            on_submit: Callable[[dict], None] | None = None) -> Iterator[tuple[dict, PhotoResult | None, str | None]]:
         """items: {id, path, size, mtime_ns}. Yields (item, result, None) or (item, None, error) per photo, in
         completion order. Stops early (see module doc) when should_stop() turns true."""
         pool = self._pool or self._new_pool()
@@ -123,13 +126,15 @@ class Engine:
                     isolating = bool(suspects)
                     it = (suspects or todo).popleft()
                     if it["path"] not in exif_futs:
-                        chunk = [it["path"], *[t["path"] for t in list(todo)[:EXIF_CHUNK - 1] if t["path"] not in exif_futs]]
+                        chunk = [it["path"], *[t["path"] for t in islice(todo, EXIF_CHUNK - 1) if t["path"] not in exif_futs]]
                         fut = exif_exec.submit(self._read_exif, chunk)
                         exif_futs.update({c: fut for c in chunk})
                     thumb, preview = image_paths(it["path"], it["size"], it["mtime_ns"])
                     job = {"path": it["path"], "size": it["size"], "mtime_ns": it["mtime_ns"], "thumb": str(thumb),
                            "preview": str(preview), "mode": self.mode}
                     inflight[pool.submit(decode.decode, job)] = (it, time.monotonic())
+                    if on_submit:
+                        on_submit(it)
                     if suspects:
                         break
                 if inflight:
