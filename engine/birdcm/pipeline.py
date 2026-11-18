@@ -380,9 +380,10 @@ def rarity_for(table, species: dict | None, r: dict) -> dict | None:
         return None
     if table is None:                                  # the rarity table is not installed
         return {"tier": None, "label": "数据不足", "iucn": None, "region": None}
-    pr = r["region"].get("prior") or {}               # no place: still the IUCN category, rarity 数据不足
-    label = r["region"].get("name") if pr.get("source") in (None, "region") else None
-    taken = r["exif"].get("taken_at") or ""
+    reg = r.get("region") or {}
+    pr = reg.get("prior") or {}                       # no place: still the IUCN category, rarity 数据不足
+    label = reg.get("name") if pr.get("source") in (None, "region") else None
+    taken = (r.get("exif") or {}).get("taken_at") or ""
     month = int(taken[5:7]) if len(taken) >= 7 and taken[5:7].isdigit() else None
     return table.lookup(species["label"]["sci"], pr.get("lat"), pr.get("lon"), label, month)
 
