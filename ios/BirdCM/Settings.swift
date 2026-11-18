@@ -98,10 +98,10 @@ struct BackupView: View {
             FolderBackupSection()
             let issues = model.library?.issues() ?? []
             if !issues.isEmpty {
-                Section("待修复的旧记录 · \(issues.count)") {
+                Section {
                     Text("这些旧文件无法读取，已原样保存在记录库里，也随备份导出；修复前不计入统计。").font(.footnote)
                     ForEach(issues, id: \.0) { Text($0.0).font(.caption.monospaced()); Text($0.1).font(.caption2).foregroundStyle(Palette.secondary) }
-                }
+                } header: { Text("待修复的旧记录 · \(issues.count)").accessibilityIdentifier("backup.issues") }
             }
         }
         .navigationTitle("备份与恢复")

@@ -15,6 +15,7 @@ struct ResultView: View {
     @State private var counting=false
     @State private var dating=false
     @State private var deleting=false
+    @State private var candidatesOpen:Bool?    // nil = the rule; never remembered across results
     @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         if let r=model.current, id == nil || r.id == id {
@@ -106,6 +107,7 @@ struct ResultView: View {
                 self.pick=nil
             } }
             .overlay {if model.busy{IdentifyingView()}}
+            .onChange(of:"\(r.id)-\(r.selected)") {candidatesOpen=nil}
         } else if let id {
             ProgressView().onAppear{model.open(id,push:false)}
         }
@@ -177,18 +179,26 @@ struct ResultView: View {
             Divider()
             Text("按 GBIF 观测记录的当地当月份额分级；记录数不是实际种群数量。覆盖不足的地区显示数据不足。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.facts")
             Divider()
+            // Owner rule: collapsed when the answer is settled (species, genus or a correction); open only for 不确定.
+            let shown:Set<String>=e.state=="species" ? [e.key ?? ""] : e.state=="none" && result.level=="species" ? [result.top5.first?.scientific ?? ""] : []
+            let others=Array(result.top5.enumerated()).filter{!shown.contains($0.element.scientific)}
+            let open=candidatesOpen ?? (e.state=="uncertain" || (e.state=="none" && result.level=="uncertain"))
             VStack(alignment:.leading,spacing:4) {
-                Text(e.state=="none" ? "其他可能":"模型原判断：\(title(result))").accessibilityIdentifier("result.candidates").font(.headline).padding(.bottom,8)
-                ForEach(Array(result.top5.enumerated()),id:\.offset){i,c in
-                    if result.level != "species" || i>0 || e.state != "none" {
+                Button {candidatesOpen = !open} label:{HStack{
+                    VStack(alignment:.leading,spacing:2) {
+                        Text(e.state=="none" ? "其他可能":"模型原判断：\(title(result))").font(.headline)
+                        if !open {Text("\(others.count) 个候选 · 其余最高 \((others.map(\.element.p).max() ?? 0).formatted(.percent.precision(.fractionLength(0))))").font(.subheadline).foregroundStyle(Palette.secondary).monospacedDigit()}
+                    }
+                    Spacer();Image(systemName:open ? "chevron.up":"chevron.down").font(.caption)
+                }.frame(minHeight:44).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityIdentifier("result.candidates.toggle").accessibilityHint(open ? "收起候选":"展开候选").padding(.bottom,open ? 8:0)
+                if open {ForEach(others,id:\.offset){i,c in
                         Button {candidate=CandidateSheet(value:c)} label:{HStack{
                             VStack(alignment:.leading,spacing:4){Text(model.catalogue.name(c.scientific));Text(c.scientific).font(.caption).italic().foregroundStyle(Palette.secondary);ProgressView(value:c.p).tint(Palette.green)}
                             Spacer();Text(c.p.formatted(.percent.precision(.fractionLength(1)))).font(.subheadline).monospacedDigit();Image(systemName:"chevron.right").font(.caption)
                         }.frame(minHeight:48)}.accessibilityIdentifier("result.candidate.\(i)").buttonStyle(.plain)
                         Divider()
-                    }
-                }
-            }
+                }}
+            }.accessibilityElement(children:.contain).accessibilityIdentifier("result.candidates")
         }
     }
 }

@@ -84,7 +84,7 @@ final class Flows:XCTestCase {
             XCTAssertTrue(day.waitForExistence(timeout:5));reveal(day.identifier).tap();outcome("obs.row.Haliaeetus leucocephalus.2026-11-14");try shot("calendar-day"+mode);back()
             element("stats.period").buttons["本年"].tap();reveal("calendar.month.11");try shot("calendar-year"+mode)
             element("calendar.month.11").tap();outcome("stats.range")
-            reveal("stats.map").tap();outcome("map.noPlace");sleep(2);try shot("map"+mode);back()
+            reveal("stats.map").tap();_=reveal("map.noPlace");sleep(2);try shot("map"+mode);back()
             reveal("stats.observationList").tap();let row=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'obs.row.'")).firstMatch
             XCTAssertTrue(row.waitForExistence(timeout:5));row.tap();outcome("obs.count");try shot("observation-editor"+mode)
             let field=element("obs.count");field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"5");element("obs.save").tap()
@@ -198,12 +198,23 @@ final class Flows:XCTestCase {
             XCTAssertTrue(element("result.crop.1").waitForExistence(timeout:5))
         }
         reveal("result.marks").tap();try shot(state+"-no-marks")
+        // Candidates are collapsed for a settled answer and open for 不确定 (owner rule); capture both states.
+        let toggle=reveal("result.candidates.toggle")
+        if element("result.candidate.1").exists {try shot(state+"-candidates-open");toggle.tap();try shot(state+"-candidates-collapsed");toggle.tap()}
+        else {try shot(state+"-candidates-collapsed");toggle.tap();try shot(state+"-candidates-open")}
+        XCTAssertEqual(element("result.candidate.1").exists,true)
         // Candidate details open and dismiss twice with a stable sheet state.
         for n in 0..<2 {reveal("result.candidate.1").tap();outcome("candidate.details");if n==0 {try shot(state+"-candidate")};element("candidate.done").tap()}
     }
     func testResultNormal() throws {try resultState("normal")}
     func testResultSeveralBirds() throws {try resultState("multiple")}
-    func testResultUncertain() throws {try resultState("uncertain")}
+    func testResultUncertain() throws {
+        launch("uncertain");pick();XCTAssertTrue(reveal("result.candidate.1").exists,"不确定 opens the candidates by default")
+        try resultState("uncertain")
+    }
+    func testResultNormalCandidatesCollapsed() throws {
+        launch();pick();_=reveal("result.candidates.toggle");XCTAssertFalse(element("result.candidate.1").exists);XCTAssertTrue(element("result.candidates.toggle").label.contains("个候选"))
+    }
     func testResultGenus() throws {try resultState("genus")}
     /// Geo-prior warning (model `rare`) and GBIF tier (bundled table, US-CA in November) are independent facts.
     func testResultRare() throws {
@@ -327,13 +338,14 @@ final class Flows:XCTestCase {
     func testMigrationFromOldStore() throws {
         launch(extra:["-legacyFixture","3"]);tab("tab.records","记录");outcome("records.species.Haliaeetus leucocephalus");try shot("migrated-species")
         segment("照片");XCTAssertEqual(rows.count,3)
-        element("home.more").tap();element("settings.backup").tap();XCTAssertTrue(app.staticTexts["待修复的旧记录 · 1"].waitForExistence(timeout:5) || app.staticTexts["待修复的旧记录 · 1".uppercased()].exists);try shot("migration-recovery")
+        element("home.more").tap();element("settings.backup").tap();XCTAssertTrue(reveal("backup.issues").label.contains("1"));try shot("migration-recovery")
     }
     func testBackupExportPreviewMerge() throws {
         launch(extra:["-historyFixtureCount","3"]);pick();back()
         element("home.more").tap();try shot("settings");element("settings.backup").tap();try shot("backup")
-        element("backup.selfTest").tap();XCTAssertTrue(element("backup.merge").waitForExistence(timeout:20));try shot("backup-preview")
-        element("backup.merge").tap()
+        reveal("backup.selfTest").tap();let merge=element("backup.merge")
+        for _ in 0..<20 where !(merge.exists && merge.isHittable) {app.swipeUp()};try shot("backup-preview")
+        merge.tap();for _ in 0..<8 {app.swipeDown()}
         expectation(for:NSPredicate(format:"label CONTAINS '新增 0'"),evaluatedWith:element("backup.message"));waitForExpectations(timeout:20)
     }
     /// Every tab root, species page, pending list, correction sheet and settings.
