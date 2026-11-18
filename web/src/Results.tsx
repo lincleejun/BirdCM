@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post, put } from "./api";
 const CHIPS = 3;                                   // species chips shown before "+n", so the bar stays one row at 1440 px
@@ -145,7 +146,10 @@ function keepOld(id: number, set = false): boolean {
 
 interface Related { newer: { id: number; state: Scan["state"]; counts: Scan["counts"] } | null; previous: number | null; stale: boolean }
 
-export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId: number; onBack: () => void; onOpen: (id: number) => void; catalogue: Country[] }) {
+export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav }: {
+  scanId: number; onBack: () => void; onOpen: (id: number) => void; catalogue: Country[]; brand: ReactNode; nav: ReactNode }) {
+  const [changesOff, setChangesOff] = useState(() => { try { return localStorage.getItem(`birdcm.changesOff.${scanId}`) === "1"; } catch { return false; } });
+  const [changesOpen, setChangesOpen] = useState(false);
   const [scan, setScan] = useState<Scan | null>(null);
   const [raw, setPhotos] = useState<PhotoRow[]>([]);
   // what the page shows: a burst's majority species replaces a frame's own (kept as species_own) when stars.py says so
@@ -357,11 +361,13 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
     if (t != null && t > 0 && t <= 2 && l && !p.result!.rejected) rare.set(l.sci, `${l.zh || l.en || l.sci}（${p.result!.rarity!.label}）`);
   }
   const rareNames = [...rare.values()].join("、");
-  const copy = complete ? `已完成 · ${c.total} 张${c.failed ? `（${c.failed} 张失败）` : ""}`
-    : `${phase === "paused" ? (scan.state === "failed" ? "出错已停" : "已停止") : scan.state === "stopping" ? "正在停止" : scan.state === "finalizing" ? "正在汇总" : "扫描中"} · 已完成 ${finished} / ${c.total}`;
   const stepText = complete ? "" : scan.state === "failed" ? ` · ${scan.error ?? ""}` : phase === "paused" ? " · 等待继续"
     : scan.state === "stopping" ? " · 这一批做完就停" : scan.state === "queued" ? " · 等前一个扫描完成" : scan.state === "finalizing" ? " · 分连拍组" : " · 找鸟、认种、看眼睛和姿态";
-  const date = photos.find((p) => p.result?.exif.taken_at)?.result?.exif.taken_at;
+  const days = photos.map((p) => p.result?.exif.taken_at?.slice(0, 10)).filter(Boolean).sort() as string[];
+  const dateRange = days.length ? (days[0] === days[days.length - 1] ? days[0] : `${days[0]} – ${days[days.length - 1].slice(5)}`) : "";
+  const folderName = scan.folder.split("/").filter(Boolean).pop() ?? scan.folder;
+  const state = complete ? `${c.total} 张${c.failed ? `（${c.failed} 张失败）` : ""}`
+    : `${phase === "paused" ? (scan.state === "failed" ? "出错已停" : "已停止") : scan.state === "stopping" ? "正在停止" : scan.state === "finalizing" ? "正在汇总" : scan.state === "queued" ? "排队中" : "扫描中"} ${finished} / ${c.total}`;
 
   const key = (p: PhotoRow) => { const r = p.result, sp = r?.species; return !r || r.rejected || !sp ? "x" : `${sp.level}:${sp.label?.sci ?? ""}`; };
   const changes = complete && prevRows ? (() => {
@@ -379,40 +385,51 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
 
   return (
     <section id="s-res" data-phase={phase} aria-labelledby="h-res">
-      {rel.newer && (
-        <div className="banner" role="status">
+      <header className="masthead resbar">
+        <div className="masthead-inner">
+          {brand}
+          <p className="scan-id" title={`${scan.folder}${scan.recursive ? "（包含子文件夹）" : ""}${stepText}`}>
+            <button type="button" className="scan-folder" title={`${scan.folder} · 点一下复制路径`} onClick={() => navigator.clipboard?.writeText(scan.folder).catch(() => {})}>{folderName}</button>
+            <span className="scan-meta"> · {placeText(scan.region)}{dateRange ? ` · ${dateRange}` : ""} · </span>
+            <span id="scan-copy" role="status">{state}</span>
+          </p>
+          {!complete && scan.state !== "finalizing" && scan.state !== "queued" && (
+            <button type="button" className="btn slim" onClick={act} disabled={scan.state === "stopping"}>{phase === "paused" ? "继续" : "停止"}</button>
+          )}
+          {changes && !changesOff && (
+            <span className="keep-pop">
+              <span className="changes-chip"><button type="button" aria-expanded={changesOpen} onClick={() => setChangesOpen(!changesOpen)}>较上次：{changes.changed.length} 张鸟种变了 ▾</button>
+                <button type="button" aria-label="不再显示和上次的比较" onClick={() => { setChangesOff(true); try { localStorage.setItem(`birdcm.changesOff.${scanId}`, "1"); } catch { /* not remembered */ } }}>×</button></span>
+              {changesOpen && (
+                <div className="keep-menu changes-menu" role="dialog" aria-label="和上一次扫描比">
+                  <button type="button" onClick={() => { setChangesOpen(false); setOnlyIds({ ids: new Set(changes.changed), label: "鸟种有变化的" }); }}>{changes.changed.length} 张鸟种变了</button>
+                  <button type="button" onClick={() => { setChangesOpen(false); setOnlyIds({ ids: new Set(changes.vague), label: "变成不确定 / 只到属的" }); }}>其中 {changes.vague.length} 张变成不确定或只到属</button>
+                  <button type="button" onClick={() => { setChangesOpen(false); setOnlyIds({ ids: new Set(changes.fixed), label: "按连拍组修正的" }); }}>{changes.fixed.length} 张按连拍组修正</button>
+                  <button type="button" onClick={() => { keepOld(rel.previous!, true); onOpen(rel.previous!); }}>打开之前的结果</button>
+                </div>
+              )}
+            </span>
+          )}
+          <div className="res-actions">
+            <button className="btn slim" onClick={() => setRescanOpen(true)}>重新扫描</button>
+            <button className="btn slim primary" disabled={!complete} onClick={() => exportRef.current?.showModal()}>导出</button>
+            <button className="btn slim link" onClick={onBack}>换一批</button>
+            {nav}
+          </div>
+        </div>
+        {!complete && <progress className="bar-progress" value={finished} max={c.total || 1} aria-label="扫描进度" />}
+      </header>
+      {rel.newer ? (
+        <p className="warn-strip" role="status">
           {rel.newer.state === "completed" ? "这个文件夹已经重新扫描完了" : `这个文件夹正在重新扫描（已完成 ${rel.newer.counts.done + rel.newer.counts.failed} / ${rel.newer.counts.total}）`}
           {" · "}<button className="btn link" onClick={() => onOpen(rel.newer!.id)}>查看新结果</button>
           {!keepOld(scanId) && <span className="hint">（几秒钟没有操作就会自动切过去）</span>}
-        </div>
-      )}
-      <div className="topbar">
-        <div><h2 id="h-res" tabIndex={-1}>审片结果</h2>
-          <span className="sub">{placeText(scan.region)}{date ? ` · ${date.slice(0, 10)}` : ""}{scan.recursive ? " · 包含子文件夹" : ""} · {scan.folder}</span></div>
-        <div className="row"><button className="btn link" onClick={onBack}>换一批</button>
-          <button className="btn" onClick={() => setRescanOpen(true)}>重新扫描</button>
-          <button className="btn primary" disabled={!complete} onClick={() => exportRef.current?.showModal()}>导出</button></div>
-      </div>
-
-      {rel.stale && !rel.newer && (
-        <p className="stale">这些结果是旧版本算的（模型、地点修正或规则变过） · <button className="btn link" onClick={() => setRescanOpen(true)}>重新扫描</button></p>
-      )}
-      {changes && (
-        <p className="changes"><button className="btn link" onClick={() => { keepOld(rel.previous!, true); onOpen(rel.previous!); }}>之前的结果</button> · 和上一次扫描比：
-          <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.changed), label: "鸟种有变化的" })}>{changes.changed.length} 张鸟种变了</button>，
-          其中 <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.vague), label: "变成不确定 / 只到属的" })}>{changes.vague.length} 张变成不确定或只到属</button>；
-          <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.fixed), label: "按连拍组修正的" })}>{changes.fixed.length} 张按连拍组修正</button>
         </p>
+      ) : rel.stale && (
+        <p className="warn-strip stale">这些结果是旧版本算的（模型、地点修正或规则变过） · <button className="btn link" onClick={() => setRescanOpen(true)}>重新扫描</button></p>
       )}
+      <h2 id="h-res" tabIndex={-1} className="sr-only">审片结果</h2>
       {rescanOpen && <Rescan scan={scan} catalogue={catalogue} onClose={() => setRescanOpen(false)} onStarted={(id) => { setRescanOpen(false); onOpen(id); }} />}
-      <div className="scan-status">
-        <p><span id="scan-copy" role="status">{copy}</span><span>{stepText}</span></p>
-        {!complete && scan.state !== "finalizing" && (
-          <button type="button" className="btn" onClick={act} disabled={scan.state === "stopping"}>{phase === "paused" ? "继续" : "停止"}</button>
-        )}
-        {!complete && <progress value={finished} max={c.total || 1} aria-label="扫描进度" />}
-      </div>
-
       {complete && (scan.ratio as { strategy?: string })?.strategy !== "quota" ? (
         <div className="cull" aria-label="这批的结果">
           <div className="cull-keep">

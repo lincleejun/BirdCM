@@ -116,19 +116,26 @@ function App() {
     history.replaceState(null, "", v === "single" ? "?view=single" : scanId ? `?scan=${scanId}` : location.pathname);
     setView(v);
   };
+  const nav = (
+    <nav className="views" aria-label="视图">
+      <button aria-current={view === "batch"} onClick={() => switchTo("batch")}>批量选片</button>
+      <button aria-current={view === "single"} onClick={() => switchTo("single")}>认一张</button>
+    </nav>
+  );
+  const results = view === "batch" && scanId;
   return (
     <>
-      <header className="masthead">
-        <div className="masthead-inner">
-          <div className="brand"><span className="emblem" aria-hidden="true"></span><h1>观羽</h1><small>桌面审片</small></div>
-          <nav className="views" aria-label="视图">
-            <button aria-current={view === "batch"} onClick={() => switchTo("batch")}>批量选片</button>
-            <button aria-current={view === "single"} onClick={() => switchTo("single")}>认一张</button>
-          </nav>
-        </div>
-      </header>
-      <main>{view === "single" ? <Singles catalogue={catalogue} />
-        : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} onOpen={open} catalogue={catalogue} /> : <Setup onOpen={open} catalogue={catalogue} />}</main>
+      {!results && (
+        <header className="masthead">
+          <div className="masthead-inner">
+            <div className="brand"><span className="emblem" aria-hidden="true"></span><h1>观羽</h1><small>桌面审片</small></div>
+            {nav}
+          </div>
+        </header>
+      )}
+      <main className={results ? "res-main" : undefined}>{view === "single" ? <Singles catalogue={catalogue} />
+        : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} onOpen={open} catalogue={catalogue} nav={nav}
+          brand={<div className="brand"><span className="emblem" aria-hidden="true"></span><h1>观羽</h1></div>} /> : <Setup onOpen={open} catalogue={catalogue} />}</main>
     </>
   );
 }
