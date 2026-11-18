@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from birdcm import config, decode, models
+from birdcm import config, decode, models, stars
 from birdcm.pipeline import fingerprint, image_paths
 from birdcm.queue import Scheduler
 from birdcm.store import Store
@@ -212,6 +212,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         folder = folder.resolve()
         try:
             config.check_own_dirs(folder)
+            stars.validate(body.ratio)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         try:
@@ -271,6 +272,10 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.put("/api/scans/{sid}/ratio")
     def ratio(sid: int, body: dict):
         get_scan(sid)
+        try:
+            stars.validate(body)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
         store.set_ratio(sid, body)
         sched.rerate(sid)
         return {"ok": True}
@@ -329,6 +334,12 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
 
     @api.post("/api/singles")
     async def upload(request: Request):
+        try:
+            declared = int(request.headers.get("content-length", ""))
+        except ValueError:
+            raise HTTPException(411, "需要 Content-Length") from None
+        if declared > MAX_UPLOAD + (1 << 16):           # before the form is parsed (and spooled to a temp file)
+            raise HTTPException(413, f"照片超过 {MAX_UPLOAD >> 20} MB")
         form = await request.form(max_files=1, max_fields=4)
         f = form.get("file")
         if f is None or not hasattr(f, "read"):

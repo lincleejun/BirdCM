@@ -101,3 +101,14 @@ def test_bursts_by_gap_camera_and_subseconds():
 
 def test_percentiles():
     assert percentiles([3, 1, 1, 2]) == [1.0, 1 / 6, 1 / 6, 2 / 3]
+
+
+def test_validate_star_settings():
+    import pytest
+
+    from birdcm.stars import validate
+    assert validate({"preset": "std", "p3": 30, "p2": 30, "burst_cap": 3, "min_sharp": None, "per_species": False})
+    for bad in ({"p3": "x"}, {"p3": 80, "p2": 30}, {"burst_cap": -1}, {"nope": 1}, {"per_species": 1},
+                {"w_sharp": float("nan")}, {"min_aes": True}):
+        with pytest.raises(ValueError):
+            validate(bad)

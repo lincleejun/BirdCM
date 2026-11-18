@@ -238,3 +238,42 @@ def test_engine_fingerprint_mismatch_recomputes_everything(store):
     assert {r["fp"] for r in rows} == {"new"} and all("stale" not in r["result"] for r in rows)
     again = mk(store, 3, fp="new")                                                # reuse only under the engine's fp
     assert all(p["reused"] for p in store.snapshot(again)["photos"])
+
+
+def test_bad_stored_star_settings_fail_that_scan_only(store):
+    bad = store.create_scan("/p", False, None, {"p3": "x"}, "fp1", files(2))          # bypassing the API's check
+    good = mk(store, 2)
+    s = Scheduler(store, FakeEngine)
+    s.run_until_idle()
+    assert store.state(bad) == "failed" and "标星出错" in store.scan(bad)["error"]
+    assert store.state(good) == "completed"
+
+
+def test_stop_between_next_scan_and_running(store):
+    sid = mk(store, 4)
+    s = Scheduler(store, FakeEngine)
+    s.run_once()                                                                       # starts: some photos done
+    store.set_state(sid, "running")
+    real = store.next_scan
+
+    def stop_after_read():
+        scan = real()
+        store.stop(scan["id"])                                                         # running -> stopping, after the read
+        return scan
+    store.next_scan = stop_after_read
+    s.run_once()
+    store.next_scan = real
+    assert store.state(sid) == "paused"                                                # not stuck in stopping
+
+
+def test_singles_go_first_at_batch_boundaries(store):
+    sid = mk(store, 6)
+    order = []
+    eng = FakeEngine(on_batch=lambda done: order.append(f"batch@{done}"))
+    s = Scheduler(store, lambda: eng)
+    f = s.submit(lambda e: order.append("single") or "ok")
+    s.run_once()
+    assert f.result(timeout=1) == "ok" and order[0] == "single" and store.state(sid) == "completed"
+    g = s.submit(lambda e: 1 / 0)
+    s.drain()
+    assert isinstance(g.exception(timeout=1), ZeroDivisionError)

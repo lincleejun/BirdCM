@@ -56,7 +56,9 @@ def score(rows: list[dict]) -> dict:
 
 def run(groundtruth: str, photos: str, kinds: tuple[str, ...] = ("bird",), limit: int | None = None,
         out: str | None = None, workers: int = 4) -> dict:
+    from birdcm import config
     from birdcm.pipeline import Engine
+    config.check_own_dirs(photos)                      # thumbnails go to the cache dir: never inside the photos
     with open(groundtruth, newline="") as f:
         gt = [r for r in csv.DictReader(f) if r["kind"] in kinds][:limit]
     base = Path(photos)

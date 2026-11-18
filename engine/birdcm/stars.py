@@ -69,6 +69,33 @@ class Config:
         return c
 
 
+def validate(ratio: dict) -> dict:
+    """The scan's star settings as given by a client, checked: ValueError on an unknown key, a wrong type or a value out of
+    range (a bad setting must be refused at the API, not discovered by the scheduler)."""
+    if not isinstance(ratio, dict):
+        raise ValueError("星级设置要是一个对象")
+    known = {f.name: f for f in fields(Config)} | {"p3": None, "p2": None, "preset": None}
+    for k, v in ratio.items():
+        if k not in known:
+            raise ValueError(f"不认识的星级设置：{k}")
+        if k == "preset":
+            if not isinstance(v, str):
+                raise ValueError("preset 要是文字")
+        elif k == "per_species":
+            if not isinstance(v, bool):
+                raise ValueError("per_species 要是 true / false")
+        elif v is None and k.startswith("min_"):
+            continue
+        elif isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise ValueError(f"{k} 要是数字")
+    c = Config.from_ratio(ratio)
+    if not (0 <= c.q3 <= 1 and 0 <= c.q2 <= 1 and c.q3 + c.q2 <= 1 + 1e-9):
+        raise ValueError("三星、两星比例各在 0–100%，合计不超过 100%")
+    if c.w_sharp < 0 or c.w_aes < 0 or c.burst_cap < 0 or c.burst_gap < 0 or not 0 <= c.species_min_p <= 1:
+        raise ValueError("权重、连拍上限、连拍间隔不能为负，鸟种把握在 0–1")
+    return ratio
+
+
 def defaults() -> dict:
     return asdict(Config())
 

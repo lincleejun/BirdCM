@@ -1,5 +1,6 @@
 """Security checks (Host / Origin / token), SSE cursor, and the API over a fake engine."""
 import os
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -164,3 +165,49 @@ def test_singles_upload_switch_delete(env):
     c.post("/api/singles", files={"file": ("y.png", buf.getvalue())}, headers=h)
     assert c.delete("/api/singles", headers=h).json() == {"deleted": 1}
     assert list((tmp / "data" / "singles").iterdir()) == []
+
+
+def test_ratio_validated_at_the_api(env):
+    c, _, tmp = env
+    (tmp / "shoot").mkdir()
+    h = {**OK, "x-birdcm-token": "tok"}
+    assert c.post("/api/scans", json={"folder": str(tmp / "shoot"), "ratio": {"p3": "x"}}, headers=h).status_code == 400
+    sid = c.post("/api/scans", json={"folder": str(tmp / "shoot")}, headers=h).json()["id"]
+    assert c.put(f"/api/scans/{sid}/ratio", json={"p3": 90, "p2": 30}, headers=h).status_code == 400
+    assert c.put(f"/api/scans/{sid}/ratio", json={"p3": 20, "p2": 30, "burst_cap": 3}, headers=h).status_code == 200
+
+
+def test_upload_limits_leave_nothing(env, monkeypatch):
+    import io
+
+    from PIL import Image
+
+    from birdcm import app as appmod
+    c, api, tmp = env
+    h = {**OK, "x-birdcm-token": "tok"}
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 300)).save(buf, "PNG")
+    monkeypatch.setattr(appmod, "MAX_PIXELS", 1000)
+    r = c.post("/api/singles", files={"file": ("big.png", buf.getvalue())}, headers=h)
+    assert r.status_code == 400 and "太大" in r.json()["detail"]
+    monkeypatch.setattr(appmod, "MAX_UPLOAD", 10)
+    r = c.post("/api/singles", files={"file": ("x.png", b"0" * 100_000)}, headers=h)
+    assert r.status_code == 413
+    d = tmp / "data" / "singles"
+    assert not d.exists() or list(d.iterdir()) == []
+
+
+def test_preview_pool_survives_a_crashing_decode(tmp_path, monkeypatch):
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    import crashy
+
+    from birdcm import app as appmod
+    p = appmod.Previews()
+    monkeypatch.setattr(appmod.decode, "decode", crashy.decode)
+    try:
+        with pytest.raises(Exception):
+            p.make({"path": "/x/bad", "size": 1, "mtime_ns": 1})
+        p.make({"path": "/x/ok", "size": 1, "mtime_ns": 1})                    # a fresh pool after the crash
+    finally:
+        p.close()

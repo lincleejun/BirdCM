@@ -61,8 +61,13 @@ class Scheduler:
 
     def _loop(self) -> None:
         while not self._quit.is_set():
-            self.drain()
-            if not self.run_once():
+            try:
+                self.drain()
+                busy = self.run_once()
+            except Exception:  # noqa: BLE001 - the one model thread must not die (singles would hang)
+                traceback.print_exc()
+                busy = False
+            if not busy:
                 self.wake.wait(1.0)
                 self.wake.clear()
 
@@ -79,7 +84,8 @@ class Scheduler:
             self.finalize(sid)
             return True
         if not self.store.set_state(sid, "running", when=("queued", "running")):
-            return True                                           # stopped meanwhile: look again
+            self.store.set_state(sid, "paused", when=("stopping",))    # a stop landed after next_scan read it
+            return True
         try:
             if self.engine is None:
                 self.engine = self.engine_factory()
@@ -109,15 +115,24 @@ class Scheduler:
 
     def finalize(self, sid: int) -> None:
         """Group bursts and rate, deterministically from the stored rows; safe to redo after a crash. A stop that got in
-        first wins: the scan is paused instead (resume finalizes it)."""
+        first wins: the scan is paused instead (resume finalizes it). A rating error fails this scan, not the scheduler."""
         if not self.store.set_state(sid, "finalizing", when=("queued", "running", "finalizing")):
             self.store.set_state(sid, "paused", when=("stopping",))
             return
         scan = self.store.scan(sid)
-        self.store.write_rating(sid, stars.rate(self.store.rows_for_rating(sid), scan["ratio"]), complete=True)
+        try:
+            rating = stars.rate(self.store.rows_for_rating(sid), scan["ratio"])
+        except Exception as e:  # noqa: BLE001
+            traceback.print_exc()
+            self.store.set_state(sid, "failed", error=f"标星出错：{type(e).__name__}: {e}"[:500])
+            return
+        self.store.write_rating(sid, rating, complete=True)
 
     def rerate(self, sid: int) -> None:
         """Ratio changed on a completed scan: stars only, no rescan."""
         scan = self.store.scan(sid)
         if scan and scan["state"] == "completed":
-            self.store.write_rating(sid, stars.rate(self.store.rows_for_rating(sid), scan["ratio"]), complete=False)
+            try:
+                self.store.write_rating(sid, stars.rate(self.store.rows_for_rating(sid), scan["ratio"]), complete=False)
+            except Exception:  # noqa: BLE001 - keep the previous stars
+                traceback.print_exc()
