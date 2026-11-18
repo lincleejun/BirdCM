@@ -1,0 +1,10 @@
+Model                           : ILCE-7M4
+LensModel                       : FE 200-600mm F5.6-6.3 G OSS
+FocalLength                     : 600.0 mm
+FNumber                         : 6.3
+ExposureTime                    : 1/1000
+ISO                             : 250
+ExposureCompensation            : 0
+MeteringMode                    : Multi-segment
+AFAreaMode                      : Tracking
+ImageSize                       : 7168x5120

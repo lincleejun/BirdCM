@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>观羽 · 桌面审片</title>
+<style>
+:root {
+  color-scheme: light;
+  --paper: #f4f1e8; --surface: #fcfaf3; --ink: #222c24; --muted: #516053;
+  --line: #c8cdc0; --soft: #e5eadf; --green: #254d39; --on-green: #fffdf4;
+  --amber: #815919; --rust: #903d2a; --focus: #376f53;
+  --mat: #202922; --mat-text: #eeeade; --mat-muted: #c5d0bf;
+  --sans: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --serif: "Songti SC", "Noto Serif CJK SC", "SimSun", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #181f1a; --surface: #222c24; --ink: #f1eee2; --muted: #bec9bb;
+    --line: #495849; --soft: #303f32; --green: #b8d6af; --on-green: #1b3022;
+    --amber: #f0ca83; --rust: #ffa58b; --focus: #c1e7aa;
+    --mat: #101611; --mat-text: #eeeade; --mat-muted: #c5d0bf;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); }
+button, input, select { font: inherit; color: inherit; }
+button, select, summary { cursor: pointer; }
+button:disabled { cursor: default; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; } h1[tabindex="-1"]:focus-visible, h2[tabindex="-1"]:focus-visible { outline: none; }
+h1, h2, h3, p, figure, dd { margin: 0; }
+h2 { font: 700 clamp(36px, 4.3vw, 64px)/1.08 var(--serif); letter-spacing: -.04em; }
+.masthead { border-bottom: 1px solid var(--line); }
+.masthead-inner { max-width: 1520px; margin: auto; padding: 14px clamp(20px, 4vw, 60px); display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 69px; }
+.brand { display: flex; align-items: center; gap: 13px; }
+.brand h1 { font: 700 27px/1 var(--serif); }
+.brand small { font-size: 13px; color: var(--muted); padding-left: 12px; border-left: 1px solid var(--line); }
+.emblem { display: inline-grid; place-items: center; flex: none; width: 31px; height: 31px; border: 1px solid currentColor; border-radius: 50% 50% 50% 4px; color: var(--green); }
+.emblem::before { content: ""; border: 1px solid currentColor; border-radius: 50%; width: 11px; height: 11px; box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 6px currentColor; }
+.tag-proto { color: var(--muted); font-size: 12px; white-space: nowrap; }
+main { max-width: 1520px; margin: auto; padding: 34px clamp(20px, 4vw, 60px) 60px; }
+.workbench { display: grid; grid-template-columns: minmax(390px, .92fr) minmax(0, 1.08fr); border: 1px solid var(--line); background: var(--surface); border-radius: 16px; overflow: clip; }
+.setup { padding: clamp(24px, 3.5vw, 50px); min-width: 0; }
+.kicker { color: var(--green); font-size: 13px; font-weight: 700; letter-spacing: .11em; margin-bottom: 12px; }
+.intro { color: var(--muted); margin: 11px 0 24px; }
+.field { padding: 14px 0; border-top: 1px solid var(--line); }
+.label { display: block; font-weight: 700; margin-bottom: 7px; }
+.row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.hint, .note { color: var(--muted); font-size: 13px; margin-top: 7px; }
+.note { margin-top: 11px; }
+.btn, select, input[type=number] { min-height: 42px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 13px; background: var(--surface); }
+.btn { font-weight: 650; }
+.btn:hover:not(:disabled), .tile:hover { background: var(--soft); }
+.btn.primary { background: var(--green); color: var(--on-green); border-color: var(--green); }
+.btn.primary:hover:not(:disabled) { background: var(--on-green); color: var(--green); }
+.btn:disabled { background: var(--soft); color: var(--muted); border-color: var(--line); }
+.btn.big { width: 100%; min-height: 49px; margin-top: 8px; }
+.btn.link { color: var(--green); background: transparent; border-color: transparent; }
+.folder { flex: 1; min-width: 90px; border: 1px dashed var(--line); border-radius: 7px; padding: 8px 10px; color: var(--muted); min-height: 42px; overflow-wrap: anywhere; }
+.folder.set { color: var(--ink); border-style: solid; }
+input[type=checkbox] { accent-color: var(--green); width: 17px; height: 17px; margin: 0; }
+input[type=number] { width: 73px; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+.seg label { position: relative; }
+.seg input { opacity: 0; position: absolute; inset: 0; margin: 0; width: 100%; height: 100%; cursor: pointer; }
+.seg input + span { display: block; padding: 7px 10px; border-radius: 5px; white-space: nowrap; }
+.seg input:hover + span { background: var(--soft); }
+.seg input:checked + span { background: var(--green); color: var(--on-green); }
+.seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 1px; }
+.tbd { font-size: 11px; color: var(--rust); border: 1px solid currentColor; border-radius: 4px; padding: 1px 4px; white-space: nowrap; }
+.seg input:checked + span .tbd { color: inherit; }
+.hero { display: grid; align-content: center; padding: clamp(24px, 4vw, 60px); background: var(--mat); color: var(--mat-text); min-width: 0; }
+.hero figure { width: min(100%, 560px); margin: auto; }
+.hero-frame { border: 1px solid #748174; padding: 8px; }
+.hero h3 { font: 700 26px/1.2 var(--serif); }
+.hero figcaption { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 5px 18px; padding-top: 13px; }
+.hero figcaption small { color: var(--mat-muted); }
+.settings { font: 12px/1.5 var(--mono); font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; column-gap: 12px; row-gap: 2px; }
+.settings span { white-space: nowrap; }
+.hero .settings { color: var(--mat-muted); margin-top: 7px; }
+.topbar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 20px; }
+.topbar h2 { font-size: clamp(34px, 4vw, 53px); }
+.topbar .sub { color: var(--muted); display: block; margin-top: 7px; }
+.scan-status { display: flex; align-items: center; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; margin-bottom: 14px; color: var(--muted); font-size: 13px; }
+.scan-status p { display: flex; gap: 2px 5px; flex-wrap: wrap; align-items: baseline; font-variant-numeric: tabular-nums; }
+#scan-copy { color: var(--ink); font-weight: 650; }
+#s-res[data-phase=complete] #scan-copy { color: var(--muted); font-weight: 400; }
+.scan-status .btn { min-height: 34px; padding: 4px 12px; }
+.scan-status progress { flex: 0 0 100%; height: 5px; accent-color: var(--green); }
+.summary { border-block: 1px solid var(--line); display: grid; grid-template-columns: repeat(7, minmax(65px, 1fr)) minmax(176px, 2.2fr); margin-bottom: 17px; background: var(--surface); }
+.summary[data-complete=false] { grid-template-columns: repeat(2, minmax(85px, 1fr)) minmax(110px, 2fr); }
+.summary > div { padding: 11px 14px; border-right: 1px solid var(--line); }
+.summary > div:last-child { border-right: 0; }
+.summary b { display: block; font: 650 22px/1.3 var(--mono); color: var(--ink); }
+.summary small { color: var(--muted); }
+.summary .rare-name { font: 650 13px/1.6 var(--sans); color: var(--rust); }
+.stars { color: var(--amber); letter-spacing: .025em; }
+.filters { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.filters .hint { flex-basis: 100%; margin: 0; }
+.seg input:disabled { cursor: not-allowed; }
+.seg input:disabled + span { color: var(--muted); background: none; cursor: not-allowed; }
+.inline { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; }
+.inspection { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .78fr); align-items: start; gap: clamp(12px, 2vw, 28px); }
+.list { min-width: 0; }
+.list-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 8px 12px; border-block: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.list-head h3 { font: inherit; font-weight: 700; color: var(--ink); }
+.tile { display: grid; grid-template-columns: 90px minmax(0, 1fr) minmax(105px, 30%); align-items: center; text-align: left; gap: 11px; width: 100%; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); }
+.tile:focus-visible { position: relative; z-index: 1; outline-offset: -3px; }
+.tile[aria-pressed=true] { background: var(--soft); box-shadow: inset 3px 0 var(--green); }
+.tile .name { font-weight: 750; }
+.tile .small { font-size: 12px; color: var(--muted); }
+.tile .reason-line { margin-top: 3px; }
+.tile .row-result { min-width: 0; }
+.tile .scan-name { font-weight: 650; color: var(--muted); }
+.tile[data-state=working] .scan-name { color: var(--green); }
+.tile[data-state=working] .scan-name::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 6px 2px 0; border-radius: 50%; background: currentColor; }
+.tile .pending-stars { color: var(--muted); font-size: 12px; }
+.tile:not([data-state=ready]) .ph img, .preview-photo.pending .ph img { opacity: .52; }
+.tile .file { font: 11px/1.5 var(--mono); overflow-wrap: anywhere; }
+.tile .ph { border-radius: 3px; overflow: hidden; }
+.pill { display: inline-block; font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin: 2px 4px 0 0; color: var(--muted); }
+.pill.rare { color: var(--rust); border-color: currentColor; }
+.empty { text-align: center; color: var(--muted); padding: 47px 12px; }
+.inspector { position: sticky; top: 12px; background: var(--mat); color: var(--mat-text); border-radius: 12px; overflow: clip; }
+.inspector .ph { max-width: min(100%, 49vh); margin: auto; }
+#s-res:not([data-phase=complete]) .inspector .ph { max-width: min(100%, 49vh, max(245px, calc(100vh - 565px))); }
+.preview-photo { display: block; width: 100%; padding: 13px; color: inherit; border: 0; background: none; }
+.preview-photo:focus-visible { outline-color: #e2f5cb; outline-offset: -4px; }
+.preview-info { border-top: 1px solid #536357; padding: 12px 15px 15px; }
+.preview-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.preview-info h3 { font: 700 25px/1.2 var(--serif); }
+.preview-info .settings, .preview-info .legend { color: var(--mat-muted); }
+.preview-info .preview-note { color: var(--mat-muted); margin-top: 6px; font-size: 13px; }
+.preview-info .settings { margin-top: 8px; }
+.preview-time { color: var(--mat-muted); font: 12px/1.55 var(--mono); margin-top: 3px; }
+.preview-info .btn { min-height: 37px; white-space: nowrap; color: var(--mat-text); background: transparent; border-color: #899489; }
+.preview-info .btn:hover { background: #39483b; }
+.preview-info .btn:focus-visible { outline-color: #e2f5cb; }
+.ph { display: block; position: relative; aspect-ratio: 1; background: #141914; }
+.ph img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.mk { position: absolute; pointer-events: none; }
+.mk.box { border: 2px solid #ffd23f; box-shadow: 0 0 0 1px #000a, inset 0 0 0 1px #000a; border-radius: 2px; }
+.mk.eye, .mk.af { transform: translate(-50%, -50%); box-shadow: 0 0 0 1px #000; }
+.mk.eye { width: 14px; height: 14px; border: 2px solid #ff6666; border-radius: 50%; }
+.mk.af { width: 16px; height: 16px; border: 2px solid #4de1ff; }
+.tile .mk.box { border-width: 1px; }
+.tile .mk.eye, .tile .mk.af { width: 5px; height: 5px; border-width: 1px; }
+.legend { display: flex; gap: 5px 12px; color: var(--muted); font-size: 12px; margin-top: 7px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-right: 4px; box-shadow: 0 0 0 1px #313c31; }
+.l-box { background: #ffd23f; }
+.l-eye { background: #ff6666; border-radius: 50%; }
+.l-af { background: #4de1ff; }
+dialog { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); color: var(--ink); padding: 0; width: min(980px, 94vw); max-height: 92dvh; }
+dialog::backdrop { background: #101913b8; }
+.dlg-head { position: sticky; top: 0; z-index: 2; background: var(--surface); display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+.dlg-head h3 { font-size: 15px; flex: 1 1 140px; }
+.dlg-body { padding: 20px; }
+.detail { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; }
+.verdict { font-size: 20px; font-weight: 700; }
+.reason { margin: 2px 0 14px; font-size: 14px; }
+.sp-cn { font: 700 28px/1.2 var(--serif); }
+.sp-en, .sp-sci { color: var(--muted); font-size: 13px; }
+.sp-sci { font-style: italic; }
+details { margin: 8px 0 12px; }
+summary { color: var(--green); font-weight: 650; padding: 4px 0; }
+details ol { margin: 5px 0 0; padding-left: 24px; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 5px 12px; margin: 9px 0 0; }
+.facts dt, .ref { color: var(--muted); }
+.ref { font-size: 12px; }
+.exif { border-top: 1px solid var(--line); margin-top: 13px; padding-top: 12px; }
+.exif .settings { margin: 6px 0 9px; }
+.exif .facts { font-size: 13px; }
+.exp-list { display: grid; gap: 8px; }
+.exp-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.exp-item .what { flex: 1; font-weight: 650; }
+.exp-item small { display: block; color: var(--muted); font-weight: 400; }
+.exp-item.later { color: var(--muted); }
+@media (max-width: 920px) {
+  .summary { grid-template-columns: repeat(4, 1fr); }
+  .summary[data-complete=true] > div:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
+  .summary[data-complete=true] > div:nth-child(4) { border-right: 0; }
+  .tile { grid-template-columns: 66px minmax(0, 1fr); }
+  .tile .row-settings { grid-column: 2; }
+}
+@media (max-width: 720px) {
+  .workbench, .detail, .inspection { grid-template-columns: 1fr; }
+  .hero { padding: 24px; }
+  .hero figure { max-width: 430px; }
+  .inspector { position: static; }
+  .inspection .list { order: 1; }
+  .tile { grid-template-columns: 68px minmax(0, 1fr); }
+  .brand small { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="brand"><span class="emblem" aria-hidden="true"></span><h1>观羽</h1><small>桌面审片</small></div>
+    <span class="tag-proto">原型 · 示例数据</span>
+  </div>
+</header>
+
+<main>
+<!-- 1. 开始 -->
+<div id="setup" class="workbench">
+<section id="s-start" class="setup" aria-labelledby="h-start">
+  <p class="kicker">批量选片</p>
+  <h2 id="h-start">选一批鸟片</h2>
+  <p class="intro">从一批原片里找鸟、认种，挑出值得细看的照片。</p>
+
+  <div class="field">
+    <span class="label" id="lb-folder">照片文件夹</span>
+    <div class="row">
+      <div class="folder" id="folder" aria-labelledby="lb-folder">还没有选择 · ARW、DNG、JPG</div>
+      <button class="btn" id="pick">选择示例文件夹</button>
+    </div>
+    <label class="row hint" style="margin-top:10px"><input type="checkbox" id="sub"> 包含子文件夹</label>
+  </div>
+
+  <div class="field">
+    <span class="label">拍摄地区</span>
+    <div class="row">
+      <select id="country" aria-label="国家">
+        <option>美国</option><option>加拿大</option><option>中国</option>
+      </select>
+      <select id="state" aria-label="州 / 省"></select>
+    </div>
+    <p class="hint">照片自带位置时，以照片为准。</p>
+  </div>
+
+  <div class="field">
+    <span class="label" id="lb-ratio">留片比例</span>
+    <div class="seg" role="radiogroup" aria-labelledby="lb-ratio" id="ratio">
+      <label><input type="radio" name="ratio" value="loose"><span>宽松</span></label>
+      <label><input type="radio" name="ratio" value="std" checked><span>标准</span></label>
+      <label><input type="radio" name="ratio" value="strict"><span>严格</span></label>
+      <label><input type="radio" name="ratio" value="stricter"><span>更严 <span class="tbd">待定</span></span></label>
+      <label><input type="radio" name="ratio" value="custom"><span>自定义</span></label>
+    </div>
+    <p class="hint" id="ratio-hint"></p>
+    <div class="row" id="custom" hidden style="margin-top:8px">
+      <label>三星 <input type="number" id="c3" min="0" max="100" value="25"> %</label>
+      <label>两星 <input type="number" id="c2" min="0" max="100" value="30"> %</label>
+    </div>
+  </div>
+
+  <button class="btn primary big" id="go" disabled>开始</button>
+  <p class="note">全部在这台电脑上处理，不上传，也不改动原片。</p>
+</section>
+
+  <aside class="hero" aria-label="示例照片">
+    <figure>
+      <div class="hero-frame"><div class="ph"><img src="img/000004_11.jpg" alt="掠过水面的角鸬鹚"></div></div>
+      <figcaption><h3>角鸬鹚</h3><small>索尼 α7 IV · 湿地公园</small></figcaption>
+      <div class="settings"><span>600 mm</span> <span>f/6.3</span> <span>1/1000 s</span> <span>ISO 250</span> <span>0 EV</span></div>
+    </figure>
+  </aside>
+</div>
+
+<!-- 2. 结果与扫描队列 -->
+<section id="s-res" hidden aria-labelledby="h-res">
+  <div class="topbar">
+    <div><h2 id="h-res" tabindex="-1">审片结果</h2><span class="sub" id="res-sub"></span></div>
+    <div class="row"><button class="btn link" id="again">换一批</button><button class="btn primary" id="open-export" disabled>导出</button></div>
+  </div>
+
+  <div class="scan-status" id="scan-status">
+    <p><span id="scan-copy" role="status"></span><span id="scan-step"></span></p>
+    <button type="button" class="btn" id="scan-action">停止</button>
+    <progress id="bar" value="0" aria-label="扫描进度"></progress>
+  </div>
+  <div class="summary" id="summary"></div>
+
+  <div class="filters" role="group" aria-label="筛选和排序">
+    <div class="seg" role="radiogroup" aria-label="星级" id="f-star">
+      <label><input type="radio" name="fs" value="all" checked><span>全部</span></label>
+      <label><input type="radio" name="fs" value="3"><span>三星</span></label>
+      <label><input type="radio" name="fs" value="2"><span>两星</span></label>
+      <label><input type="radio" name="fs" value="1"><span>一星</span></label>
+      <label><input type="radio" name="fs" value="0"><span>0 星</span></label>
+      <label><input type="radio" name="fs" value="-1"><span>淘汰</span></label>
+    </div>
+    <select id="f-sp" aria-label="鸟种"></select>
+    <select id="f-rar" aria-label="稀有度">
+      <option value="0">所有稀有度</option>
+      <option value="1">不常见及以上</option>
+      <option value="2">少见及以上</option>
+      <option value="3">罕见</option>
+    </select>
+    <select id="f-fly" aria-label="是否在飞">
+      <option value="all">所有姿态</option>
+      <option value="fly">在飞</option>
+      <option value="still">不在飞</option>
+    </select>
+    <label class="inline">排序
+      <select id="sort">
+        <option value="queue" selected>队列顺序</option>
+        <option value="star">星级高的在前</option>
+        <option value="time">拍摄时间</option>
+        <option value="species">按鸟种排序</option>
+        <option value="fly">在飞的在前</option>
+        <option value="rar">稀有的在前</option>
+        <option value="eye">眼部清晰的在前</option>
+      </select>
+    </label>
+    <label class="inline"><input type="checkbox" id="f-mk" checked> 显示标记</label>
+    <p class="hint" id="star-hint">星级要等全部照片扫完后互相比较才能定。</p>
+  </div>
+
+  <div class="inspection">
+    <section class="list" aria-labelledby="list-title">
+      <div class="list-head"><h3 id="list-title">照片列表</h3><span id="count" aria-live="polite"></span></div>
+      <p class="sr-only" id="photo-keys">上、下方向键选择照片，回车查看已扫描照片的详情。</p>
+      <div id="grid"></div>
+    </section>
+    <aside class="inspector" id="inspector" aria-label="所选照片预览" hidden></aside>
+  </div>
+</section>
+</main>
+
+<!-- 详情 -->
+<dialog id="d-detail" aria-labelledby="d-title">
+  <div class="dlg-head">
+    <h3 id="d-title"></h3>
+    <button class="btn" id="prev" aria-label="上一张">上一张</button>
+    <button class="btn" id="next" aria-label="下一张">下一张</button>
+    <button class="btn" id="close-d">关闭</button>
+  </div>
+  <div class="dlg-body detail" id="d-body"></div>
+</dialog>
+
+<!-- 导出 -->
+<dialog id="d-export" aria-labelledby="e-title" style="max-width:560px">
+  <div class="dlg-head">
+    <h3 id="e-title">导出</h3>
+    <button class="btn" id="close-e">关闭</button>
+  </div>
+  <div class="dlg-body">
+    <label class="row" style="margin-bottom:14px"><input type="checkbox" id="e-filtered"> 只导出当前筛选出的 <span id="e-n"></span> 张</label>
+    <div class="exp-list">
+      <div class="exp-item"><div class="what">表格（CSV）<small>每张照片一行，可用 Excel / Numbers 打开</small></div><button class="btn primary" id="e-csv">导出</button></div>
+      <div class="exp-item"><div class="what">数据（JSON）<small>字段同上，给程序用</small></div><button class="btn" id="e-json">导出</button></div>
+      <div class="exp-item later"><div class="what">观鸟清单<small>每个鸟种一行，带数量、日期、地点</small></div><span class="tbd">以后 · 待定</span></div>
+      <div class="exp-item later"><div class="what">写给 Lightroom<small>把星级和鸟种写进旁边的 XMP 文件</small></div><span class="tbd">以后 · 待定</span></div>
+      <div class="exp-item later"><div class="what">网页报告<small>自己看的一页总结</small></div><span class="tbd">以后 · 待定</span></div>
+    </div>
+    <p class="hint" style="margin-top:14px">导出的文件存到你选的位置，原片文件夹里不写任何东西。</p>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+// ---------- 示例数据（全部是假的） ----------
+const RAR = ["常见", "不常见", "少见", "罕见"];
+const SP = {
+  tringa:  { cn: "鹬属（黄脚鹬之一）", en: "Greater / Lesser Yellowlegs", sci: "Tringa sp.", conf: 0.46, genus: true, rar: 0, iucn: "—（只认到属）",
+             c: [["小黄脚鹬", "Lesser Yellowlegs", 46], ["大黄脚鹬", "Greater Yellowlegs", 41], ["孤独鹬", "Solitary Sandpiper", 6], ["斑腹矶鹬", "Spotted Sandpiper", 3], ["长嘴半蹼鹬", "Long-billed Dowitcher", 2]] },
+  scoter:  { cn: "斑头海番鸭", en: "Surf Scoter", sci: "Melanitta perspicillata", conf: 0.93, rar: 1, iucn: "无危",
+             c: [["斑头海番鸭", "Surf Scoter", 93], ["白翅海番鸭", "White-winged Scoter", 4], ["黑海番鸭", "Black Scoter", 2], ["小潜鸭", "Lesser Scaup", 0.5], ["长尾鸭", "Long-tailed Duck", 0.3]] },
+  songsp:  { cn: "歌带鹀", en: "Song Sparrow", sci: "Melospiza melodia", conf: 0.88, rar: 0, iucn: "无危",
+             c: [["歌带鹀", "Song Sparrow", 88], ["狐色雀鹀", "Fox Sparrow", 5], ["林氏带鹀", "Lincoln's Sparrow", 4], ["稀树草鹀", "Savannah Sparrow", 2], ["家朱雀", "House Finch", 1]] },
+  corm:    { cn: "角鸬鹚", en: "Double-crested Cormorant", sci: "Nannopterum auritum", conf: 0.95, rar: 0, iucn: "无危",
+             c: [["角鸬鹚", "Double-crested Cormorant", 95], ["加州鸬鹚", "Brandt's Cormorant", 3], ["海鸬鹚", "Pelagic Cormorant", 1], ["美洲蛇鹈", "Anhinga", 0.5], ["普通鸬鹚", "Great Cormorant", 0.3]] },
+  egret:   { cn: "雪鹭", en: "Snowy Egret", sci: "Egretta thula", conf: 0.91, rar: 0, iucn: "无危",
+             c: [["雪鹭", "Snowy Egret", 91], ["大白鹭", "Great Egret", 5], ["牛背鹭", "Cattle Egret", 2], ["小蓝鹭", "Little Blue Heron", 1], ["白鹭", "Little Egret", 0.5]] },
+  ruddy:   { cn: "棕硬尾鸭", en: "Ruddy Duck", sci: "Oxyura jamaicensis", conf: 0.90, rar: 0, iucn: "无危",
+             c: [["棕硬尾鸭", "Ruddy Duck", 90], ["白枕鹊鸭", "Bufflehead", 4], ["小潜鸭", "Lesser Scaup", 3], ["斑头海番鸭", "Surf Scoter", 2], ["林鸳鸯", "Wood Duck", 0.5]] },
+  kingf:   { cn: "白腹鱼狗", en: "Belted Kingfisher", sci: "Megaceryle alcyon", conf: 0.94, rar: 1, iucn: "无危",
+             c: [["白腹鱼狗", "Belted Kingfisher", 94], ["棕腹鱼狗", "Ringed Kingfisher", 3], ["加州灌丛鸦", "California Scrub-Jay", 1], ["暗冠蓝鸦", "Steller's Jay", 1], ["绿鱼狗", "Green Kingfisher", 0.5]] },
+  sayph:   { cn: "棕腹长尾霸鹟", en: "Say's Phoebe", sci: "Sayornis saya", conf: 0.84, rar: 2, iucn: "无危",
+             c: [["棕腹长尾霸鹟", "Say's Phoebe", 84], ["黑长尾霸鹟", "Black Phoebe", 7], ["西绿霸鹟", "Western Wood-Pewee", 4], ["灰胸长尾霸鹟", "Eastern Phoebe", 3], ["灰蓝蚋莺", "Blue-gray Gnatcatcher", 1]] },
+  yrwa:    { cn: "黄腰林莺", en: "Yellow-rumped Warbler", sci: "Setophaga coronata", conf: 0.96, rar: 0, iucn: "无危",
+             c: [["黄腰林莺", "Yellow-rumped Warbler", 96], ["汤氏林莺", "Townsend's Warbler", 2], ["橙冠虫森莺", "Orange-crowned Warbler", 1], ["棕榈林莺", "Palm Warbler", 0.5], ["黄林莺", "Yellow Warbler", 0.3]] },
+  wcsp:    { cn: "白冠带鹀", en: "White-crowned Sparrow", sci: "Zonotrichia leucophrys", conf: 0.89, rar: 0, iucn: "无危",
+             c: [["白冠带鹀", "White-crowned Sparrow", 89], ["金冠带鹀", "Golden-crowned Sparrow", 7], ["家麻雀", "House Sparrow", 2], ["白喉带鹀", "White-throated Sparrow", 1], ["歌带鹀", "Song Sparrow", 0.5]] },
+  tuvu:    { cn: "红头美洲鹫", en: "Turkey Vulture", sci: "Cathartes aura", conf: 0.97, rar: 0, iucn: "无危",
+             c: [["红头美洲鹫", "Turkey Vulture", 97], ["黑头美洲鹫", "Black Vulture", 2], ["加州神鹫", "California Condor", 0.5], ["红尾鵟", "Red-tailed Hawk", 0.3], ["白头海雕", "Bald Eagle", 0.2]] },
+  rwbl:    { cn: "红翅黑鹂", en: "Red-winged Blackbird", sci: "Agelaius phoeniceus", conf: 0.87, rar: 0, iucn: "无危",
+             c: [["红翅黑鹂", "Red-winged Blackbird", 87], ["三色黑鹂", "Tricolored Blackbird", 8], ["蓝头黑鹂", "Brewer's Blackbird", 3], ["褐头牛鹂", "Brown-headed Cowbird", 1], ["紫翅椋鸟", "European Starling", 0.5]] },
+  brbl:    { cn: "蓝头黑鹂", en: "Brewer's Blackbird", sci: "Euphagus cyanocephalus", conf: 0.52, rar: 0, iucn: "无危",
+             c: [["蓝头黑鹂", "Brewer's Blackbird", 52], ["红翅黑鹂", "Red-winged Blackbird", 35], ["褐头牛鹂", "Brown-headed Cowbird", 7], ["三色黑鹂", "Tricolored Blackbird", 4], ["锈色黑鹂", "Rusty Blackbird", 1]] },
+  star:    { cn: "紫翅椋鸟", en: "European Starling", sci: "Sturnus vulgaris", conf: 0.95, rar: 0, iucn: "无危",
+             c: [["紫翅椋鸟", "European Starling", 95], ["蓝头黑鹂", "Brewer's Blackbird", 3], ["红翅黑鹂", "Red-winged Blackbird", 1], ["褐头牛鹂", "Brown-headed Cowbird", 0.5], ["家麻雀", "House Sparrow", 0.2]] },
+};
+// 每个连拍组：图片、鸟种、框 [x0,y0,x1,y1]%、眼 [x,y]%、对焦点 [x,y]%、帧数、基准锐度、基准美学、飞、对焦在鸟外、淘汰
+const GROUPS = [
+  { img: "000001_14", sp: "tringa", box: [8,13,92,86], eye: [19.5,20.5], af: [21,23], n: 4, sh: .74, ae: .58 },
+  { img: "000002_01", sp: "scoter", box: [8,36,94,66], eye: [25.3,40.4], af: [26.8,42.9], n: 4, sh: .82, ae: .66 },
+  { img: "000001_10", sp: "songsp", box: [28,24,62,86], eye: [41,28], af: [42.5,30.5], n: 3, sh: .63, ae: .61 },
+  { img: "000004_11", sp: "corm", box: [9,31,94,67], eye: [81,41], af: [82.5,43.5], n: 4, sh: .70, ae: .71, fly: true },
+  { img: "000004_13", sp: "egret", box: [36,16,58,99], eye: [53.5,19.8], af: [55,22.3], n: 3, sh: .66, ae: .52 },
+  { img: "000005_01", sp: "ruddy", box: [9,27,92,74], eye: [33,35], af: [34.5,37.5], n: 3, sh: .78, ae: .63 },
+  { img: "000005_03", sp: "kingf", box: [25,29,81,70], eye: [40,38], af: [41.5,40.5], n: 4, sh: .68, ae: .69 },
+  { img: "000005_04", sp: "sayph", box: [30,15,70,86], eye: [46,22], af: [47.5,24.5], n: 2, sh: .60, ae: .55 },
+  { img: "000006_13", sp: "yrwa", box: [12,14,93,83], eye: [78,23.5], af: [79.5,26], n: 4, sh: .86, ae: .72 },
+  { img: "000006_07", sp: "wcsp", box: [10,8,95,95], eye: [89,18], af: [90.5,20.5], n: 3, sh: .72, ae: .60 },
+  { img: "000006_04", sp: "tuvu", box: [8,11,95,87], eye: [63,16.5], af: [64.5,19], n: 3, sh: .58, ae: .64 },
+  { img: "000003_15", sp: "rwbl", box: [6,13,93,79], eye: [81.3,15], af: [82.8,17.5], n: 3, sh: .69, ae: .54 },
+  { img: "000003_08", sp: "brbl", box: [27,23,72,74], eye: [38,27], af: [80,85], n: 2, sh: .80, ae: .52, afOff: true },
+  { img: "000005_11", sp: "star", box: [34,29,69,78], eye: [40,33], af: [41.5,35.5], n: 2, sh: .64, ae: .50 },
+  { img: "000003_12", sp: null, box: [10,5,85,60], eye: null, af: [50,80], n: 2, sh: .05, ae: .20, rej: "鸟太糊，看不清" },
+];
+
+// 把连拍组展开成单张（确定性的小抖动，结果每次一样）
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const PHOTOS = [];
+let t = Date.UTC(2026, 10, 15, 15, 41, 8); // 当地 07:41:08（UTC-8）
+let fileNo = 4127;
+GROUPS.forEach((g, gi) => {
+  for (let k = 0; k < g.n; k++) {
+    const exif = {
+      camera: "索尼 α7 IV（ILCE-7M4）", lens: "FE 200-600mm F5.6-6.3 G OSS",
+      focal: [600, 500, 600, 600, 200][gi % 5], aperture: gi % 5 === 4 ? 5.6 : 6.3,
+      shutter: g.fly && k ? "1/2000" : "1/1000", iso: g.fly && k ? 800 : [250, 400, 500, 250, 320][gi % 5],
+      ev: [0, -0.3, 0, 0, 0.3][gi % 5], focus: "跟踪"
+    };
+    const sharp = Math.max(0, Math.min(1, g.sh + (rnd() - .5) * .3));
+    PHOTOS.push({
+      id: PHOTOS.length, file: "DSC0" + (fileNo++) + ".ARW", img: g.img, sp: g.sp, box: g.box, eye: g.eye, af: g.af,
+      fly: !!g.fly, afOff: !!g.afOff, rej: g.rej || null,
+      eyeVis: !!g.eye, sharp: g.rej ? g.sh : (k === 2 && g.sp === "yrwa" ? .12 : sharp),
+      aes: Math.max(0, Math.min(1, g.ae + (rnd() - .5) * .2)),
+      group: gi + 1, time: t, exif, gps: gi % 3 === 0,
+    });
+    t += 300 + Math.round(rnd() * 900); // 连拍间隔 0.3–1.2 秒
+  }
+  t += 60000 * (3 + Math.round(rnd() * 15)); // 组和组之间隔几分钟
+});
+
+// ---------- 标星：同一批照片互相比（见 notes/star-strategy.md） ----------
+const RATIOS = { loose: [40, 30], std: [30, 30], strict: [20, 30], stricter: [10, 20], custom: null };
+function rate(p3, p2) {
+  const pct = (key) => { // 批内百分位
+    const live = PHOTOS.filter(p => !p.rej);
+    const sorted = live.map(p => p[key]).sort((a, b) => a - b);
+    return (v) => sorted.filter(x => x <= v).length / sorted.length;
+  };
+  const psh = pct("sharp"), pae = pct("aes");
+  PHOTOS.forEach(p => {
+    p.stars = null; p.reason = "";
+    if (p.rej) { p.stars = -1; p.reason = p.rej; return; }
+    if (p.sharp < .2) { p.stars = 0; p.reason = "鸟头部太糊，不参与排名"; return; }
+    p.q = .65 * psh(p.sharp) + .35 * pae(p.aes) + (p.fly ? .06 : 0) + (p.afOff ? -.06 : .04);
+  });
+  const ranked = PHOTOS.filter(p => p.stars === null).sort((a, b) => b.q - a.q);
+  const n = ranked.length, q3 = Math.round(n * p3 / 100), q2 = Math.round(n * p2 / 100);
+  let c3 = 0, c2 = 0;
+  const g3 = {};
+  ranked.forEach((p, i) => {
+    const top = `综合第 ${i + 1} / ${n} 名`;
+    if (c3 < q3) {
+      if (p.afOff) { p.stars = 2; c2++; p.reason = "对焦点不在鸟身上，最多两星"; return; }
+      if (!p.eyeVis) { p.stars = 2; c2++; p.reason = "看不见眼睛，最多两星"; return; }
+      if ((g3[p.group] || 0) >= 2) { p.stars = 2; c2++; p.reason = "同一连拍组已有两张三星"; return; }
+      p.stars = 3; c3++; g3[p.group] = (g3[p.group] || 0) + 1;
+      p.reason = (p.fly ? "飞版，" : "") + "眼部清晰，" + top;
+      return;
+    }
+    if (c2 < q2) { p.stars = 2; c2++; p.reason = top; return; }
+    p.stars = 1; p.reason = "排名靠后，" + top;
+  });
+  // 保底：每个鸟种至少一张两星以上
+  const bySp = {};
+  ranked.forEach(p => (bySp[p.sp] = bySp[p.sp] || []).push(p));
+  Object.values(bySp).forEach(list => {
+    if (!list.some(p => p.stars >= 2)) { list[0].stars = 2; list[0].reason = "保底：这个鸟种最好的一张"; }
+  });
+  // 对焦点在鸟外的照片，理由里都说明
+  PHOTOS.forEach(p => { if (p.afOff && !p.rej && !p.reason.includes("对焦点")) p.reason += "；对焦点不在鸟身上"; });
+  // 连拍组内排名
+  const byG = {};
+  PHOTOS.forEach(p => (byG[p.group] = byG[p.group] || []).push(p));
+  Object.values(byG).forEach(list => {
+    list.slice().sort((a, b) => (b.stars - a.stars) || ((b.q || 0) - (a.q || 0))).forEach((p, i) => { p.rank = i + 1; p.gsize = list.length; });
+  });
+}
+
+// ---------- 小工具 ----------
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const starTxt = (s) => s === -1 ? "淘汰" : s === 0 ? "0 星" : "★".repeat(s) + "☆".repeat(3 - s);
+const starLabel = (s) => s === -1 ? "淘汰" : s + " 星";
+const sharpTxt = (v) => (v >= .7 ? "清晰" : v >= .45 ? "一般" : "模糊") + "（" + v.toFixed(2) + "）";
+const fmtTime = (ms) => { const d = new Date(ms - 8 * 3600e3); const z = (x) => String(x).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${z(d.getUTCMonth() + 1)}-${z(d.getUTCDate())} ${z(d.getUTCHours())}:${z(d.getUTCMinutes())}:${z(d.getUTCSeconds())}`; };
+const marks = (p) => `<span class="mk box" style="left:${p.box[0]}%;top:${p.box[1]}%;width:${p.box[2] - p.box[0]}%;height:${p.box[3] - p.box[1]}%"></span>`
+  + (p.eye ? `<span class="mk eye" style="left:${p.eye[0]}%;top:${p.eye[1]}%"></span>` : "")
+  + `<span class="mk af" style="left:${p.af[0]}%;top:${p.af[1]}%"></span>`;
+// 示例图片是同一张裁图，"太糊"的那一帧用模糊滤镜模拟
+const blurStyle = (p) => !p.rej && p.sharp < .2 ? ' style="filter:blur(3px)"' : "";
+const spName = (p) => p.sp ? SP[p.sp].cn : "—";
+const region = () => $("#country").value + " · " + $("#state").value;
+const photoRegion = (p) => p.gps ? "美国 · 加利福尼亚州" : region();
+const evText = (ev) => (ev > 0 ? "+" : "") + ev + " EV";
+const settings = ({ focal, aperture, shutter, iso, ev }) =>
+  `<div class="settings"><span>${focal} mm</span> <span>f/${aperture}</span> <span>${shutter} s</span> <span>ISO ${iso}</span> <span>${evText(ev)}</span></div>`;
+const uncertainty = (s) => s && s.conf < .6;
+const resultName = (p) => uncertainty(SP[p.sp]) ? "不确定" : p.sp ? spName(p) : "未认出鸟种";
+const legend = (p) => `<div class="legend"><span><i class="l-box"></i>鸟框</span>${p.eye ? '<span><i class="l-eye"></i>眼睛</span>' : ""}<span><i class="l-af"></i>相机对焦点</span></div>`;
+const photo = (p, showMarks, alt = "") =>
+  `<span class="ph"><img src="img/${p.img}.jpg" alt="${esc(alt)}"${blurStyle(p)}>${showMarks ? marks(p) : ""}</span>`;
+
+// ---------- 开始页 ----------
+const STATES = { "美国": ["加利福尼亚州", "俄勒冈州", "华盛顿州", "亚利桑那州", "纽约州"], "加拿大": ["不列颠哥伦比亚省", "安大略省", "魁北克省"], "中国": ["云南省", "四川省", "北京市", "广东省"] };
+function fillStates() { $("#state").innerHTML = STATES[$("#country").value].map(s => `<option>${s}</option>`).join(""); }
+$("#country").addEventListener("change", fillStates); fillStates();
+function ratio() {
+  const v = document.querySelector("input[name=ratio]:checked").value;
+  if (v === "custom") {
+    const p3 = Math.max(0, Math.min(100, +$("#c3").value || 0));
+    return [p3, Math.max(0, Math.min(100 - p3, +$("#c2").value || 0))];
+  }
+  return RATIOS[v];
+}
+function ratioHint() {
+  const v = document.querySelector("input[name=ratio]:checked").value;
+  $("#custom").hidden = v !== "custom";
+  const [a, b] = ratio();
+  $("#c2").max = 100 - a;
+  $("#ratio-hint").textContent = `目标 ${a}% 三星、接着 ${b}% 两星。受连拍上限和鸟种保底影响。`
+    + (v === "stricter" ? " 档位待定。" : "")
+    + (v === "custom" && +$("#c2").value > b ? ` 两档合计最多 100%，本次两星按 ${b}% 计算。` : "");
+}
+document.querySelectorAll("input[name=ratio]").forEach(r => r.addEventListener("change", ratioHint));
+["#c3", "#c2"].forEach(s => $(s).addEventListener("input", ratioHint));
+ratioHint();
+$("#pick").addEventListener("click", () => {
+  const f = $("#folder");
+  f.textContent = "湿地公园 · " + PHOTOS.length + " 张原片（ARW）";
+  f.classList.add("set");
+  $("#go").disabled = false; $("#go").focus();
+});
+
+// ---------- 扫描队列 ----------
+const BATCH_SIZE = 3;
+const SCAN_STEPS = ["找鸟", "辨认鸟种、检查眼睛和姿态", "核对稀有度"];
+const total = PHOTOS.length;
+let done = 0, phase = "idle", scanStep = -1, timer = null;
+let view = [], selected = null;
+const isReady = p => p.id < done;
+const rowState = p => isReady(p) ? "ready" : phase === "paused" ? "unscanned"
+  : scanStep >= 0 && p.id < done + BATCH_SIZE ? "working" : "queued";
+const ROW_LABEL = { queued: "排队中", working: "识别中", unscanned: "未扫描" };
+
+function setText(el, value) {
+  if (el.textContent !== value) el.textContent = value;
+}
+function cancelScanTimer() {
+  clearTimeout(timer);
+  timer = null;
+}
+function drawScanStatus() {
+  const complete = phase === "complete";
+  const paused = phase === "paused";
+  const action = $("#scan-action");
+  const actionHadFocus = document.activeElement === action;
+  $("#s-res").dataset.phase = phase;
+  setText($("#scan-copy"), complete ? `已完成 · ${total} 张` : `${paused ? "已停止" : "扫描中"} · 已完成 ${done} / ${total}`);
+  setText($("#scan-step"), complete ? "" : " · " + (paused ? "等待继续" : SCAN_STEPS[scanStep] || "读取拍摄信息"));
+  setText(action, paused ? "继续" : "停止");
+  action.hidden = complete;
+  $("#bar").max = total;
+  $("#bar").value = done;
+  $("#bar").hidden = complete;
+  $("#open-export").disabled = !complete;
+  $("#star-hint").hidden = complete;
+  $("#f-star").setAttribute("aria-disabled", !complete);
+  for (const radio of $("#f-star").querySelectorAll("input")) radio.disabled = !complete;
+  $("#sort option[value=star]").disabled = !complete;
+  for (const control of [$("#f-star"), $("#sort")]) {
+    if (complete) control.removeAttribute("aria-describedby");
+    else control.setAttribute("aria-describedby", "star-hint");
+  }
+  if (complete && actionHadFocus) $("#open-export").focus({ preventScroll: true });
+}
+function showResults() {
+  const entering = $("#s-res").hidden;
+  $("#res-sub").textContent = `${region()} · 2026 年 11 月 15 日${$("#sub").checked ? " · 包含子文件夹" : ""}`;
+  $("#setup").hidden = true;
+  $("#s-res").hidden = false;
+  drawBatch();
+  if (entering) {
+    window.scrollTo(0, 0);
+    $("#h-res").focus({ preventScroll: true });
+  }
+}
+function drawBatch() {
+  drawScanStatus();
+  drawSummary();
+  render();
+}
+function advanceScan() {
+  if (phase !== "scanning") return;
+  scanStep++;
+  if (scanStep >= SCAN_STEPS.length) {
+    done = Math.min(total, done + BATCH_SIZE);
+    if (done === total) {
+      finish();
+      return;
+    }
+    scanStep = 0;
+    drawBatch();
+  } else if (scanStep === 0) {
+    drawBatch();
+  } else {
+    drawScanStatus();
+  }
+  timer = setTimeout(advanceScan, 230);
+}
+$("#go").addEventListener("click", () => {
+  cancelScanTimer();
+  done = 0; phase = "scanning"; scanStep = -1;
+  showResults();
+  timer = setTimeout(advanceScan, 420);
+});
+$("#scan-action").addEventListener("click", () => {
+  if (phase === "scanning") {
+    cancelScanTimer();
+    phase = "paused";
+    drawBatch();
+  } else if (phase === "paused") {
+    phase = "scanning"; scanStep = -1;
+    advanceScan();
+  }
+});
+function finish() {
+  cancelScanTimer();
+  done = total; phase = "complete";
+  rate(...ratio());
+  if ($("#sort").value === "queue") $("#sort").value = "star";
+  showResults();
+}
+function resetFilters() {
+  selected = null;
+  $('input[name=fs][value=all]').checked = true;
+  $("#f-sp").value = "";
+  $("#f-rar").value = "0";
+  $("#f-fly").value = "all";
+  $("#sort").value = "queue";
+}
+function demoScanAt(n) {
+  cancelScanTimer();
+  if ($("#d-detail").open) { detailId = null; $("#d-detail").close(); }
+  if ($("#d-export").open) $("#d-export").close();
+  resetFilters();
+  done = Math.max(0, Math.min(total, Math.trunc(Number(n)) || 0));
+  if (done === total) {
+    finish();
+    return;
+  }
+  phase = "scanning"; scanStep = 1;
+  showResults();
+}
+$("#again").addEventListener("click", () => {
+  cancelScanTimer();
+  done = 0; phase = "idle"; scanStep = -1;
+  resetFilters();
+  $("#folder").textContent = "还没有选择 · ARW、DNG、JPG";
+  $("#folder").classList.remove("set"); $("#go").disabled = true;
+  $("#s-res").hidden = true;
+  $("#setup").hidden = false;
+  window.scrollTo(0, 0);
+  $("#pick").focus();
+});
+
+// ---------- 结果与预览 ----------
+function drawSummary() {
+  const complete = phase === "complete";
+  const species = [...new Set(PHOTOS.slice(0, done).map(p => p.sp).filter(Boolean))];
+  const confirmed = species.filter(s => !uncertainty(SP[s]));
+  const rare = confirmed.filter(s => SP[s].rar >= 2).map(s => `${SP[s].cn}（${RAR[SP[s].rar]}）`);
+  const summary = $("#summary");
+  summary.dataset.complete = complete;
+  const count = s => PHOTOS.filter(p => p.stars === s).length;
+  summary.innerHTML = (complete ? `<div><b>${total}</b><small>张照片</small></div>`
+    + [3, 2, 1, 0].map(s => `<div><b>${count(s)}</b><small class="stars" aria-label="${s} 星">${s ? "★".repeat(s) : "0 星"}</small></div>`).join("")
+    + `<div><b>${count(-1)}</b><small>淘汰</small></div>` : `<div><b>${done} / ${total}</b><small>已扫描照片</small></div>`)
+    + `<div><b>${confirmed.length}</b><small>已认出的鸟种</small></div>`
+    + `<div><b class="rare-name">${rare.join("、") || (complete ? "没有" : "尚未发现")}</b><small>少见和罕见</small></div>`;
+  const select = $("#f-sp");
+  const options = ['<option value="">所有鸟种</option>',
+    ...confirmed.map(s => `<option value="${s}">${SP[s].cn}</option>`)];
+  if (confirmed.length < species.length) options.push('<option value="unsure">不确定或只到属</option>');
+  const html = options.join("");
+  if (select.innerHTML !== html) {
+    const current = select.value;
+    select.innerHTML = html;
+    if ([...select.options].some(option => option.value === current)) select.value = current;
+  }
+}
+
+const tiles = PHOTOS.map(() => {
+  const tile = document.createElement("button");
+  tile.type = "button";
+  tile.className = "tile";
+  tile.setAttribute("aria-describedby", "photo-keys");
+  return tile;
+});
+const emptyRow = document.createElement("p");
+emptyRow.className = "empty";
+emptyRow.textContent = "没有符合条件的照片。";
+
+function paintTile(p, i, showMarks, complete) {
+  const tile = tiles[p.id], state = rowState(p), ready = state === "ready";
+  const version = `${state}:${complete ? p.stars + ":" + p.reason : ""}:${ready && showMarks}`;
+  tile.dataset.i = i;
+  if (tile.dataset.version === version) return tile;
+  tile.dataset.version = version;
+  tile.dataset.state = state;
+  const name = ready ? resultName(p) : ROW_LABEL[state];
+  const rating = complete ? starLabel(p.stars) : "待定星级";
+  tile.setAttribute("aria-label", `${name}，${rating}，${p.file}`);
+  const s = ready && SP[p.sp], e = p.exif;
+  tile.innerHTML = `${photo(p, ready && showMarks)}
+    <span class="row-result"><span class="${ready ? "name" : "scan-name"}">${esc(name)}</span><br>
+      ${complete ? `<span class="stars">${starTxt(p.stars)}</span>` : '<span class="pending-stars">待定星级</span>'}
+      ${s ? `<span class="pill">${p.fly ? "在飞" : "不在飞"}</span>` : ""}
+      ${s && !uncertainty(s) ? `<span class="pill${s.rar >= 2 ? " rare" : ""}">${RAR[s.rar]}</span>` : ""}
+      ${ready ? `<span class="small reason-line" style="display:block">${complete ? esc(p.reason) : p.eyeVis ? "眼睛可见 · " + sharpTxt(p.sharp) : "眼睛未找到"}</span>` : ""}
+    </span>
+    <span class="row-settings"><span class="file">${p.file}</span><br>
+      <span class="small">${e.focal} mm · f/${e.aperture} · ${e.shutter} s<br>ISO ${e.iso} · ${evText(e.ev)}</span></span>`;
+  return tile;
+}
+function render() {
+  const complete = phase === "complete";
+  const fs = document.querySelector("input[name=fs]:checked").value;
+  const sp = $("#f-sp").value, rar = +$("#f-rar").value, fly = $("#f-fly").value, sort = $("#sort").value;
+  const usesResults = sp || rar || fly !== "all";
+  view = PHOTOS.filter(p => {
+    if (complete && fs !== "all" && p.stars !== +fs) return false;
+    if (!usesResults) return true;
+    if (!isReady(p)) return false;
+    const s = SP[p.sp];
+    return (!sp || (sp === "unsure" ? uncertainty(s) : p.sp === sp))
+      && (fly === "all" || (s && (fly === "fly" ? p.fly : !p.fly)))
+      && (!rar || (s && !uncertainty(s) && s.rar >= rar));
+  });
+  const byStars = (a, b) => b.stars - a.stars || (b.q || 0) - (a.q || 0);
+  const rarity = p => SP[p.sp]?.rar ?? -1;
+  const comparators = {
+    queue: (a, b) => a.id - b.id,
+    time: (a, b) => a.time - b.time,
+    star: byStars,
+    rar: (a, b) => rarity(b) - rarity(a) || (complete ? b.stars - a.stars : 0),
+    eye: (a, b) => b.sharp - a.sharp,
+    species: (a, b) => resultName(a).localeCompare(resultName(b), "zh-CN"),
+    fly: (a, b) => Number(b.fly) - Number(a.fly)
+  };
+  if (complete || sort === "queue" || sort === "time") view.sort(comparators[sort]);
+  else view.sort((a, b) => Number(isReady(b)) - Number(isReady(a)) || (isReady(a) && isReady(b) ? comparators[sort](a, b) : a.id - b.id));
+
+  setText($("#count"), `显示 ${view.length} / ${total} 张`);
+  const focused = document.activeElement.closest(".tile");
+  const grid = $("#grid");
+  const showMarks = $("#f-mk").checked;
+  const visible = view.length ? view.map((p, i) => paintTile(p, i, showMarks, complete)) : [emptyRow];
+  const keep = new Set(visible);
+  for (const tile of [...grid.children]) if (!keep.has(tile)) tile.remove();
+  visible.forEach((tile, i) => {
+    if (grid.children[i] !== tile) grid.insertBefore(tile, grid.children[i] || null);
+  });
+  drawSelection();
+  if (focused && grid.contains(focused) && document.activeElement !== focused) focused.focus({ preventScroll: true });
+  if ($("#d-detail").open) updateDetail();
+}
+function drawSelection() {
+  const p = view.find(p => p.id === selected) || view[0];
+  for (const item of view) {
+    const active = item === p;
+    tiles[item.id].setAttribute("aria-pressed", active);
+    tiles[item.id].tabIndex = active ? 0 : -1;
+  }
+  const panel = $("#inspector");
+  panel.hidden = !p;
+  if (!p) { panel.replaceChildren(); delete panel.dataset.version; return; }
+
+  const state = rowState(p), ready = state === "ready", mk = ready && $("#f-mk").checked;
+  const version = `${p.id}:${state}:${mk}`;
+  if (panel.dataset.version === version) return;
+  panel.dataset.version = version;
+  const focused = panel.contains(document.activeElement) ? document.activeElement.className : "";
+  const name = ready ? resultName(p) : { queued: "还在排队", working: "正在识别", unscanned: "未扫描" }[state];
+  const note = state === "unscanned" ? "继续扫描后会在这里显示识别结果。" : "识别完成后会在这里显示鸟种和标记。";
+  const image = photo(p, mk, ready ? name : p.file);
+  panel.innerHTML = `${ready
+      ? `<button class="preview-photo" type="button" aria-label="放大照片，查看详情">${image}</button>`
+      : `<div class="preview-photo pending">${image}</div>`}
+    <div class="preview-info"><div class="preview-top"><h3>${esc(name)}</h3>${ready ? '<button type="button" class="btn">查看详情</button>' : ""}</div>
+    ${settings(p.exif)}<p class="preview-time">${fmtTime(p.time)} · ${p.file}</p>
+    ${ready ? (mk ? legend(p) : "") : `<p class="preview-note">${note}</p>`}</div>`;
+  panel.querySelectorAll("button").forEach(b => {
+    b.addEventListener("click", () => openDetail(p));
+    if (b.className === focused) b.focus({ preventScroll: true });
+  });
+}
+
+document.querySelectorAll("input[name=fs]").forEach(r => r.addEventListener("change", render));
+["#f-sp", "#f-rar", "#f-fly", "#sort", "#f-mk"].forEach(s => $(s).addEventListener("change", render));
+$("#grid").addEventListener("click", e => {
+  const b = e.target.closest(".tile");
+  if (!b) return;
+  const p = view[+b.dataset.i];
+  selected = p.id;
+  drawSelection();
+  if (isReady(p) && matchMedia("(max-width: 720px)").matches) openDetail(p);
+});
+$("#grid").addEventListener("keydown", e => {
+  const b = e.target.closest(".tile");
+  if (!b) return;
+  const i = +b.dataset.i;
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const p = view[i];
+    selected = p.id;
+    drawSelection();
+    if (isReady(p)) openDetail(p);
+    return;
+  }
+  if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+  e.preventDefault();
+  const p = view[i + (e.key === "ArrowDown" ? 1 : -1)];
+  if (!p) return;
+  selected = p.id;
+  drawSelection();
+  tiles[p.id].focus();
+});
+
+// ---------- 详情 ----------
+let detailId = null, detailFromList = false;
+function openDetail(p) {
+  if (!p || !isReady(p)) return;
+  if (!$("#d-detail").open) detailFromList = document.activeElement?.matches(".tile");
+  detailId = p.id;
+  const s = p.sp && SP[p.sp];
+  const pct = s ? Math.round(s.conf * 100) : 0;
+  const uncertain = uncertainty(s);
+  const e = p.exif;
+  $("#d-body").innerHTML = `
+    <div>${photo(p, true, resultName(p))}${legend(p)}
+      <section class="exif" aria-label="拍摄信息"><h3>拍摄信息</h3>${settings(e)}
+        <dl class="facts">
+          <dt>相机</dt><dd>${e.camera}</dd><dt>镜头</dt><dd>${e.lens}</dd>
+          <dt>对焦模式</dt><dd>${e.focus}</dd><dt>拍摄时间</dt><dd>${fmtTime(p.time)}</dd>
+          <dt>地区</dt><dd>${photoRegion(p)} <span class="ref">· ${p.gps ? "照片自带" : "批次设定"}</span></dd>
+        </dl>
+      </section>
+    </div>
+    <div>
+      <div class="verdict stars" id="detail-rating"></div>
+      <p class="reason" id="detail-reason" hidden></p>
+      ${s ? `<div class="sp-cn">${esc(resultName(p))}</div>
+        ${!uncertain || s.genus ? `<div class="sp-en">${esc(s.genus ? "鹬属" : s.en)} · <span class="sp-sci">${esc(s.sci)}</span></div>` : ""}
+        <div>${uncertain ? "最高候选" : "把握"} ${pct}%${s.genus ? " · 只认到属" : ""}</div>
+        <details${s.conf < .6 ? " open" : ""}><summary>前 5 个候选</summary><ol>${s.c.map(c => `<li>${c[0]} ${c[1]} — ${c[2]}%</li>`).join("")}</ol></details>`
+      : `<div class="sp-cn">没有认鸟种</div><p class="hint">照片里的鸟太糊，没有往下认。</p>`}
+      <dl class="facts">
+        <dt>在飞</dt><dd>${p.sp ? (p.fly ? "是" : "否") : "—"}</dd>
+        <dt>眼睛</dt><dd>${p.eyeVis ? "看得见，" + sharpTxt(p.sharp) : "看不见"}</dd>
+        <dt>美学分</dt><dd>${p.aes.toFixed(2)} <span class="ref">仅供参考，不单独用来选片</span></dd>
+        <dt>稀有度</dt><dd>${s && !uncertain ? `当地 11 月 · ${RAR[s.rar]}` : "—"}</dd>
+        <dt>受威胁等级</dt><dd>${s && !uncertain ? "IUCN " + s.iucn : "—"}</dd>
+        <dt>连拍组</dt><dd id="detail-group"></dd>
+      </dl>
+    </div>`;
+  updateDetail();
+  if (!$("#d-detail").open) $("#d-detail").showModal();
+  else if (document.activeElement === document.body || document.activeElement.disabled) $("#close-d").focus();
+  $("#d-detail").scrollTop = 0;
+}
+function updateDetail() {
+  const ready = view.filter(isReady), i = ready.findIndex(p => p.id === detailId);
+  const p = ready[i], complete = phase === "complete";
+  if (!p) { $("#d-detail").close(); return; }
+  setText($("#d-title"), `${p.file}（${i + 1} / ${ready.length}）`);
+  setText($("#detail-rating"), complete ? starTxt(p.stars) : "待定星级");
+  $("#detail-reason").hidden = !complete;
+  setText($("#detail-reason"), complete ? p.reason : "");
+  setText($("#detail-group"), complete ? `第 ${p.group} 组，组内第 ${p.rank} / ${p.gsize} 张` : `第 ${p.group} 组 · 排名待定`);
+  const hadFocus = document.activeElement;
+  $("#prev").disabled = i === 0;
+  $("#next").disabled = i === ready.length - 1;
+  if (hadFocus.disabled && $("#d-detail").contains(hadFocus)) $("#close-d").focus({ preventScroll: true });
+}
+function turnDetail(direction) {
+  const ready = view.filter(isReady), i = ready.findIndex(p => p.id === detailId);
+  if (i >= 0) openDetail(ready[i + direction]);
+}
+$("#prev").addEventListener("click", () => turnDetail(-1));
+$("#next").addEventListener("click", () => turnDetail(1));
+$("#close-d").addEventListener("click", () => $("#d-detail").close());
+$("#d-detail").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") { e.preventDefault(); turnDetail(-1); }
+  if (e.key === "ArrowRight") { e.preventDefault(); turnDetail(1); }
+});
+$("#d-detail").addEventListener("close", () => {
+  if (!view.some(p => p.id === detailId)) return;
+  selected = detailId;
+  drawSelection();
+  const target = detailFromList ? tiles[detailId] : $("#inspector .preview-top button");
+  target?.focus({ preventScroll: !detailFromList });
+});
+
+// ---------- 导出 ----------
+$("#open-export").addEventListener("click", () => {
+  if (phase !== "complete") return;
+  $("#e-n").textContent = view.length;
+  $("#d-export").showModal();
+});
+$("#close-e").addEventListener("click", () => $("#d-export").close());
+function exportRow(p) {
+  const s = SP[p.sp], confirmed = s && !uncertainty(s), e = p.exif;
+  return { 文件: p.file, 星级: starLabel(p.stars), 理由: p.reason,
+    中文名: s?.genus ? "鹬属" : confirmed ? s.cn : "", 英文名: confirmed ? s.en : "", 学名: confirmed || s?.genus ? s.sci : "",
+    识别结果: resultName(p), 把握: s ? s.conf : "",
+    候选: s ? s.c.map(c => c[0] + " · " + c[1] + " · " + c[2] + "%").join(" / ") : "", 在飞: p.sp ? (p.fly ? "是" : "否") : "",
+    鸟框: p.box, 眼睛位置: p.eye, 对焦点: p.af, 眼睛: p.eyeVis ? "看得见" : "看不见",
+    眼部清晰度: p.eyeVis ? +p.sharp.toFixed(2) : "", 美学分: +p.aes.toFixed(2),
+    稀有度: confirmed ? RAR[s.rar] : "", IUCN: confirmed ? s.iucn : "", 连拍组: p.group, 组内排名: p.rank,
+    相机: e.camera, 镜头: e.lens, 焦距毫米: e.focal, 光圈: e.aperture, 快门秒: e.shutter, ISO: e.iso,
+    曝光补偿EV: e.ev, 对焦模式: e.focus, 拍摄时间: fmtTime(p.time), 地区: photoRegion(p), 地区来源: p.gps ? "照片自带" : "批次设定" };
+}
+function rows() { return ($("#e-filtered").checked ? view : PHOTOS).map(exportRow); }
+function save(name, text, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$("#e-csv").addEventListener("click", () => {
+  const r = rows(), keys = Object.keys(exportRow(PHOTOS[0]));
+  const q = (v) => {
+    const text = String(v ?? "");
+    return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  save("选片结果.csv", "﻿" + [keys.join(","), ...r.map(o => keys.map(k => q(o[k])).join(","))].join("\n"), "text/csv");
+});
+$("#e-json").addEventListener("click", () => save("选片结果.json", JSON.stringify(rows(), null, 2), "application/json"));
+
+// 自检（打开控制台可见）：数字对得上、连拍组三星不超过 2、每个鸟种保住一张两星以上
+window.selfCheck = function () {
+  const out = [];
+  for (const [a, b] of [[40, 30], [30, 30], [20, 30], [10, 20], [0, 0], [100, 0]]) {
+    rate(a, b);
+    const sum = [-1, 0, 1, 2, 3].reduce((n, s) => n + PHOTOS.filter(p => p.stars === s).length, 0);
+    console.assert(sum === PHOTOS.length, "总数不对", a, b);
+    const g = {}; PHOTOS.filter(p => p.stars === 3).forEach(p => g[p.group] = (g[p.group] || 0) + 1);
+    console.assert(Object.values(g).every(v => v <= 2), "连拍组三星超过 2", a, b);
+    const sps = new Set(PHOTOS.filter(p => p.sp && p.stars >= 1).map(p => p.sp));
+    sps.forEach(sp => console.assert(PHOTOS.some(p => p.sp === sp && p.stars >= 2), "鸟种没保底", sp, a, b));
+    console.assert(PHOTOS.every(p => p.stars !== 3 || p.reason.includes("眼部清晰")), "三星理由不对");
+    console.assert(PHOTOS.every(p => p.stars === 3 || !p.reason.includes("眼部清晰")), "非三星却写了三星理由");
+    out.push(`${a}/${b}: ` + [3, 2, 1, 0, -1].map(s => PHOTOS.filter(p => p.stars === s).length).join(" "));
+  }
+  rate(...ratio());
+  return out;
+};
+</script>
+</body>
+</html>

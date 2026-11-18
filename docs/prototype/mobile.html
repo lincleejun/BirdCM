@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>观羽 · 手机认鸟</title>
+<style>
+:root {
+  color-scheme: light;
+  --paper: #efeee4; --surface: #fcfaf3; --ink: #222c24; --muted: #516053;
+  --line: #c8cdc0; --soft: #e5eadf; --green: #254d39; --on-green: #fffdf4;
+  --rust: #903d2a; --focus: #376f53; --mat: #1d2720;
+  --sans: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --serif: "Songti SC", "Noto Serif CJK SC", "SimSun", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #181f1a; --surface: #222c24; --ink: #f1eee2; --muted: #bec9bb;
+    --line: #495849; --soft: #303f32; --green: #b8d6af; --on-green: #1b3022;
+    --rust: #ffa58b; --focus: #c1e7aa; --mat: #101811;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.45 var(--sans); }
+button, input, select { font: inherit; color: inherit; }
+button, select, summary { cursor: pointer; }
+button:disabled { cursor: default; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; } h1[tabindex="-1"]:focus-visible, h2[tabindex="-1"]:focus-visible { outline: none; }
+h1, h2, h3, p, figure, dd { margin: 0; }
+.phone { width: 390px; height: 844px; border: 7px solid #19251d; border-radius: 39px; overflow: hidden; background: var(--surface); position: relative; display: flex; flex-direction: column; box-shadow: 0 16px 46px #131e1740; }
+.showcase { min-height: 100vh; display: grid; grid-template-columns: minmax(185px, 245px) 390px; grid-template-areas: "demo phone"; align-items: center; justify-content: center; gap: clamp(35px, 7vw, 100px); padding: 24px; }
+.phone { grid-area: phone; }
+.statusbar { height: 34px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font: 650 12px var(--mono); }
+.statusbar .cutout { width: 75px; height: 14px; border-radius: 999px; background: #19251d; }
+.demo { grid-area: demo; }
+.demo .identity { display: flex; gap: 10px; align-items: center; color: var(--green); font-size: 13px; }
+.emblem { display: inline-grid; place-items: center; width: 26px; height: 26px; flex: none; border: 1px solid currentColor; border-radius: 50% 50% 50% 4px; color: inherit; }
+.emblem::before { content: ""; border-radius: 50%; width: 9px; height: 9px; border: 1px solid currentColor; box-shadow: inset 0 0 0 2px var(--surface), inset 0 0 0 5px currentColor; }
+.demo h2 { margin: 14px 0 8px; font: 700 39px/1.1 var(--serif); }
+.demo p { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+.demo button { display: block; width: 100%; min-height: 44px; text-align: left; padding: 7px 11px; border: 0; border-top: 1px solid var(--line); background: none; }
+.demo button:hover { background: var(--soft); }
+.demo button[aria-current=true] { box-shadow: inset 3px 0 var(--green); background: var(--soft); color: var(--green); font-weight: 750; }
+.screen { display: flex; flex-direction: column; flex: 1; min-height: 0; position: relative; }
+.appbar { min-height: 52px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: env(safe-area-inset-top, 0px) max(15px, env(safe-area-inset-right)) 0 max(15px, env(safe-area-inset-left)); border-bottom: 1px solid var(--line); }
+.appbar .identity { display: flex; align-items: center; gap: 9px; color: var(--green); font: 700 21px var(--serif); }
+.appbar .nav { min-width: 56px; min-height: 44px; padding: 0 5px; margin-left: -5px; border: 0; background: none; color: var(--green); font-weight: 650; display: inline-flex; align-items: center; gap: 7px; }
+.nav .chevron { width: 8px; height: 8px; border: solid currentColor; border-width: 0 0 2px 2px; transform: rotate(45deg); display: inline-block; }
+.proto { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.bar-controls { display: flex; align-items: center; gap: 6px; }
+.more { flex: none; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--green); font-size: 22px; line-height: 1; }
+.more:hover { background: var(--soft); }
+.flow { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 20px 15px; display: flex; flex-direction: column; }
+.flow > * { flex: none; }
+.flow .head { margin-top: auto; }
+.flow h1 { font: 700 clamp(30px, 8.5vw, 44px)/1.08 var(--serif); letter-spacing: -.035em; }
+.lead { color: var(--muted); margin: 7px 0 12px; }
+.small { color: var(--muted); font-size: 12px; }
+.library-flow, .download-flow { padding-top: 22px; }
+.welcome-plate { min-height: 115px; flex: 1 1 auto; margin-bottom: 16px; overflow: hidden; display: grid; grid-template-rows: minmax(0, 1fr) auto; background: var(--mat); border-radius: 7px; color: #f2ede0; }
+.welcome-plate img { width: 100%; height: 100%; object-fit: cover; object-position: 90% 35%; display: block; }
+.welcome-plate figcaption { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; font-size: 12px; }
+.welcome-plate figcaption small { color: #c5d0bf; font-size: 11px; }
+.history-flow { padding-top: 20px; }
+.history-flow .lead { font-size: 13px; margin: 9px 0 17px; }
+.history-list { padding: 0; margin: 0; list-style: none; border-top: 1px solid var(--line); }
+.history-entry { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+.history-open { display: grid; grid-template-columns: 64px minmax(0, 1fr) 12px; align-items: center; gap: 12px; width: 100%; min-height: 84px; position: relative; z-index: 1; padding: 10px 4px 10px 0; border: 0; background: var(--surface); text-align: left; touch-action: pan-y pinch-zoom; user-select: none; transform: translateX(var(--swipe, 0px)); transition: transform 150ms ease-out; }
+.history-open:hover { background: var(--soft); }
+.history-open:focus-visible, .history-delete:focus-visible { outline-offset: -3px; }
+.history-open.dragging { transition: none; }
+.history-entry[data-revealed=true] .history-open { --swipe: -76px; }
+.history-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 5px; }
+.history-name, .history-meta { display: block; }
+.history-name { font-weight: 750; }
+.history-name.uncertain { color: var(--rust); }
+.history-meta { color: var(--muted); font-size: 12px; }
+.history-arrow { width: 7px; height: 7px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); }
+.history-delete { position: absolute; inset: 0 0 0 auto; width: 76px; border: 0; background: var(--rust); color: var(--surface); font-weight: 700; }
+.history-entry:not([data-revealed=true]) .history-delete { visibility: hidden; }
+.history-entry:has(.history-open.dragging) .history-delete { visibility: visible; }
+.history-empty { border-top: 1px solid var(--line); padding: 18px 0; font-size: 14px; color: var(--muted); }
+.dock { background: var(--surface); flex: none; padding: 9px max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); border-top: 1px solid var(--line); }
+.btn { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); padding: 6px 12px; font-weight: 650; }
+.btn.primary { width: 100%; min-height: 50px; background: var(--green); color: var(--on-green); border-color: var(--green); font-size: 16px; }
+.btn.primary:disabled { color: var(--muted); background: var(--soft); border-color: var(--line); }
+.btn.plain { border-color: transparent; background: none; color: var(--green); }
+.btn:active:not(:disabled) { filter: brightness(.88); }
+.row { display: flex; gap: 8px; }
+.row > .btn { flex: 1; }
+.wifi { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; border-top: 1px solid var(--line); cursor: pointer; }
+.wifi input { appearance: none; width: 50px; height: 29px; flex: none; margin: 0; position: relative; cursor: pointer; border-radius: 30px; background: var(--muted); border: 1px solid transparent; }
+.wifi input::before { content: ""; position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; border-radius: 50%; background: var(--on-green); }
+.wifi input:checked { background: var(--green); }
+.wifi input:checked::before { left: 24px; }
+progress { width: 100%; height: 9px; accent-color: var(--green); }
+.download-status { margin: 2px 0 12px; }
+.library { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 5px; }
+.library button { width: 100%; min-width: 44px; min-height: 44px; aspect-ratio: 1; padding: 0; border: 0; border-radius: 5px; background: var(--mat); overflow: hidden; }
+.library button:focus-visible { outline-color: #e4f7cf; outline-offset: -4px; }
+.imgs { display: flex; height: 100%; }
+.imgs img { width: 100%; flex: 1 1 0; min-width: 0; display: block; object-fit: cover; pointer-events: none; }
+.scanning, .manual { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.scanning .flow, .manual .flow { flex: none; }
+.stage { flex: 1; min-height: 0; background: var(--mat); position: relative; }
+.photo-view { position: absolute; inset: 0; display: grid; place-items: center; overflow: hidden; container-type: size; user-select: none; }
+.shot { position: relative; width: min(100cqw, calc(100cqh * var(--ratio))); aspect-ratio: var(--ratio); flex: none; }
+.photo-view[data-gestures], #frame { touch-action: none; }
+#frame { cursor: crosshair; }
+.mk { position: absolute; pointer-events: none; }
+.mk.box, .mk.drag { border: 2px solid #ffd23f; border-radius: 3px; box-shadow: 0 0 0 1px #000a, inset 0 0 0 1px #000a; }
+.mk.off { border: 2px dashed #fff; }
+.mk.drag { border-style: dashed; background: #ffd23f19; }
+.mk.eye { width: 13px; height: 13px; transform: translate(-50%, -50%); border: 2px solid #ff6666; border-radius: 50%; box-shadow: 0 0 0 1px #000; }
+.bird-hit { position: absolute; transform: translate(-50%, -50%); min-width: 44px; min-height: 44px; border: 0; background: transparent; padding: 0; }
+.bird-hit:focus-visible, .zoom:focus-visible { outline-color: #e4f7cf; }
+.zoom { position: absolute; right: 9px; bottom: 16px; min-width: 48px; min-height: 44px; padding: 4px 10px; background: #162018ef; border: 1px solid #9ba99d; border-radius: 8px; color: #fffaf0; font: 650 15px var(--mono); }
+.scanning .status { margin: 6px 0; font-weight: 650; }
+.manual .flow h1, .scanning .flow h1 { font-size: 29px; }
+.manual .lead { margin-bottom: 0; }
+.result { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.result-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.result-scroll:focus-visible { outline-offset: -3px; }
+.result-scroll .photo-view { position: relative; inset: auto; display: block; width: 100%; aspect-ratio: var(--ratio); container-type: normal; background: var(--mat); touch-action: pan-y; }
+.result-scroll .photo-view.zoomed { touch-action: none; }
+.result-scroll .shot { width: 100%; }
+.result-scroll .zoom { bottom: 10px; }
+.result-content { padding: 16px max(17px, env(safe-area-inset-right)) 18px max(17px, env(safe-area-inset-left)); }
+.identity-result { display: flex; align-items: baseline; justify-content: space-between; gap: 5px 9px; flex-wrap: wrap; }
+.sp-cn { font: 700 31px/1.18 var(--serif); letter-spacing: -.035em; }
+.sp-cn.uncertain { color: var(--rust); }
+.sp-en, .sp-sci { font-size: 12px; color: var(--muted); }
+.sp-sci { font-style: italic; }
+.conf { font-size: 12px; font-weight: 700; padding: 3px 6px; background: var(--soft); color: var(--green); border-radius: 4px; }
+.facts-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin-top: 9px; color: var(--muted); font-size: 13px; }
+.facts-inline strong { font-weight: 700; color: var(--ink); }
+.facts-inline .rare { color: var(--rust); }
+.location { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 5px; }
+.location .btn { flex: none; }
+.location .btn, .bird-switch button { min-width: 44px; min-height: 44px; padding: 2px 7px; }
+.bird-switch { display: flex; align-items: center; gap: 5px; margin-top: 9px; }
+.bird-switch .small { margin-left: 4px; }
+.bird-switch button { border: 1px solid var(--line); border-radius: 7px; background: transparent; font-size: 12px; }
+.bird-switch button[aria-pressed=true] { background: var(--green); color: var(--on-green); border-color: var(--green); font-weight: 700; }
+.result-section { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 11px; }
+.result-section h2 { font-size: 15px; }
+.candidates { margin: 6px 0 0; padding-left: 21px; font-size: 13px; }
+.candidates li { padding: 4px 0; }
+.candidates span { color: var(--muted); font-size: 12px; }
+.facts { display: grid; gap: 7px 9px; grid-template-columns: max-content minmax(0, 1fr); font-size: 13px; margin: 8px 0 0; }
+.facts dt { color: var(--muted); }
+.facts dd small { color: var(--muted); display: block; font-size: 11px; }
+.settings { display: flex; gap: 2px 9px; flex-wrap: wrap; margin-top: 7px; color: var(--muted); font: 12px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
+.settings span { white-space: nowrap; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 13px; margin-top: 9px; color: var(--muted); font-size: 12px; }
+.legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; box-shadow: 0 0 0 1px #394739; }
+.l-box { background: #ffd23f; }
+.l-eye { background: #ff6666; border-radius: 50%; }
+.l-off { background: #fff; }
+.destructive { color: var(--rust); }
+.overlay { position: absolute; inset: 0; z-index: 5; background: #101812b0; display: flex; justify-content: center; align-items: end; }
+.overlay .modal { background: var(--surface); width: 100%; border-radius: 18px 18px 0 0; padding: 18px 17px max(16px, env(safe-area-inset-bottom)); max-height: 100%; overflow: auto; }
+.modal h2 { font: 700 25px/1.2 var(--serif); }
+.modal .lead { font-size: 14px; }
+.modal .stack { display: grid; gap: 7px; }
+.modal .btn:disabled { color: var(--muted); }
+.modal select { display: block; width: 100%; min-height: 44px; border: 1px solid var(--line); background: var(--soft); border-radius: 8px; padding: 0 9px; margin: 3px 0 10px; }
+@media (max-width: 690px) {
+  .showcase { display: block; padding: 0; }
+  .phone { width: 100%; height: 100vh; height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+  .statusbar { display: none; }
+  .demo { padding: 24px 16px; border-top: 1px solid var(--line); }
+  .demo h2 { font-size: 30px; }
+}
+@media (max-height: 610px) {
+  .appbar { min-height: 46px; }
+  .dock { padding-top: 6px; padding-bottom: max(7px, env(safe-area-inset-bottom)); }
+  .flow { padding-top: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+<div class="showcase">
+  <main class="phone" aria-label="手机认鸟原型">
+    <div class="statusbar" aria-hidden="true"><span>9:41</span><span class="cutout"></span><span>Wi-Fi</span></div>
+    <div class="screen" id="screen"></div>
+    <p class="sr-only" id="app-live" role="status"></p>
+  </main>
+  <nav class="demo" aria-label="演示状态">
+    <div class="identity"><span class="emblem" aria-hidden="true"></span>观羽 · 手机原型</div>
+    <h2>演示状态</h2>
+    <p>可直接跳到各个步骤。这里的操作在手机界面之外。</p>
+    <div id="demo"></div>
+  </nav>
+</div>
+
+<script>
+"use strict";
+// ---------- 示例数据（全部是假的） ----------
+const RAR = ["常见", "不常见", "少见", "罕见"];
+const PLACE = "美国 · 加利福尼亚州";
+const SAMPLES = {
+  kingf: { imgs: ["000005_03"], time: "2026 年 11 月 15 日 08:12", gps: true,
+    birds: [{ box: [25,29,81,70], eye: [40,38], cn: "白腹鱼狗", en: "Belted Kingfisher", sci: "Megaceryle alcyon", conf: 94, fly: false, rar: 1, iucn: "无危",
+      c: [["棕腹鱼狗", "Ringed Kingfisher", 3], ["加州灌丛鸦", "California Scrub-Jay", 1], ["暗冠蓝鸦", "Steller's Jay", 1], ["绿鱼狗", "Green Kingfisher", 0.5]] }] },
+  corm: { imgs: ["000004_11"], time: "2026 年 11 月 15 日 09:03", gps: true,
+    birds: [{ box: [9,31,94,67], eye: [81,41], cn: "角鸬鹚", en: "Double-crested Cormorant", sci: "Nannopterum auritum", conf: 95, fly: true, rar: 0, iucn: "无危",
+      c: [["加州鸬鹚", "Brandt's Cormorant", 3], ["海鸬鹚", "Pelagic Cormorant", 1], ["美洲蛇鹈", "Anhinga", 0.5], ["普通鸬鹚", "Great Cormorant", 0.3]] }] },
+  // 两张相邻的裁图拼回一张横图：左右各一只椋鸟
+  star: { imgs: ["000005_11", "000005_12"], time: "2026 年 11 月 15 日 10:41", gps: true,
+    birds: [
+      { box: [17,29,35,78], eye: [20,33], cn: "紫翅椋鸟", en: "European Starling", sci: "Sturnus vulgaris", conf: 95, fly: false, rar: 0, iucn: "无危",
+        c: [["蓝头黑鹂", "Brewer's Blackbird", 3], ["红翅黑鹂", "Red-winged Blackbird", 1], ["褐头牛鹂", "Brown-headed Cowbird", 0.5], ["家麻雀", "House Sparrow", 0.2]] },
+      { box: [67,30,81.5,67], eye: [78.2,33.8], cn: "紫翅椋鸟", en: "European Starling", sci: "Sturnus vulgaris", conf: 91, fly: false, rar: 0, iucn: "无危",
+        c: [["蓝头黑鹂", "Brewer's Blackbird", 5], ["红翅黑鹂", "Red-winged Blackbird", 2], ["褐头牛鹂", "Brown-headed Cowbird", 1], ["家麻雀", "House Sparrow", 0.5]] }] },
+  brbl: { imgs: ["000003_08"], time: "2026 年 11 月 15 日 11:20", gps: true,
+    birds: [{ box: [27,23,72,74], eye: [38,27], unsure: true, conf: 52, fly: false,
+      c: [["蓝头黑鹂（雌）", "Brewer's Blackbird", 52], ["红翅黑鹂（雌）", "Red-winged Blackbird", 35], ["褐头牛鹂", "Brown-headed Cowbird", 7], ["三色黑鹂", "Tricolored Blackbird", 4], ["锈色黑鹂", "Rusty Blackbird", 1]] }] },
+  sayph: { imgs: ["000005_04"], time: "2026 年 11 月 16 日 15:47", gps: false,
+    birds: [{ box: [30,15,70,86], eye: [46,22], cn: "棕腹长尾霸鹟", en: "Say's Phoebe", sci: "Sayornis saya", conf: 84, confNoPlace: 78, fly: false, rar: 2, iucn: "无危",
+      c: [["黑长尾霸鹟", "Black Phoebe", 7], ["西绿霸鹟", "Western Wood-Pewee", 4], ["灰胸长尾霸鹟", "Eastern Phoebe", 3], ["灰蓝蚋莺", "Blue-gray Gnatcatcher", 1]] }] },
+  goose: { imgs: ["000003_12"], time: "2026 年 11 月 15 日 10:02", gps: true, nobird: true,
+    birds: [{ cn: "加拿大黑雁", en: "Canada Goose", sci: "Branta canadensis", conf: 71, fly: false, rar: 0, iucn: "无危",
+      c: [["小美洲黑雁", "Cackling Goose", 21], ["灰雁", "Graylag Goose", 4], ["黑雁", "Brant", 2], ["白额雁", "Greater White-fronted Goose", 1]] }] },
+};
+const ORDER = ["kingf", "star", "brbl", "sayph", "goose", "corm"];
+const STATES = { "美国": ["加利福尼亚州", "俄勒冈州", "华盛顿州", "亚利桑那州"], "加拿大": ["不列颠哥伦比亚省", "安大略省"], "中国": ["云南省", "四川省", "北京市", "广东省"] };
+
+// 真实裁图配模拟的相机参数，便于对照相机导入与手机拍摄两种情况。
+const CAMERA = { camera: "索尼 α7 IV（ILCE-7M4）", lens: "FE 200-600mm F5.6-6.3 G OSS", focal: 600, aperture: 6.3, shutter: "1/1000", iso: 250, ev: 0 };
+const PHONE = { camera: "iPhone 15 Pro", lens: "主摄广角镜头（等效 24 mm）", focal: 6.765, aperture: 1.78, shutter: "1/640", iso: 80, ev: -0.3 };
+const CAMERA_DATA = {
+  kingf: CAMERA,
+  corm: { ...CAMERA, shutter: "1/2000", iso: 800 },
+  star: { ...CAMERA, focal: 500, iso: 400 },
+  brbl: { ...CAMERA, focal: 450, iso: 320 },
+  sayph: PHONE,
+  goose: { ...PHONE, shutter: "1/120", iso: 200, ev: 0 },
+};
+
+const $ = (selector) => document.querySelector(selector);
+const screen = $("#screen");
+const phone = $(".phone");
+const READY_KEY = "观羽-手机版-已下载";
+function ready() {
+  try { return localStorage.getItem(READY_KEY) === "1"; }
+  catch { return false; }
+}
+function storeReady(value) {
+  try {
+    if (value) localStorage.setItem(READY_KEY, "1");
+    else localStorage.removeItem(READY_KEY);
+  } catch { /* 文件页的存储可能不可用，当前页的流程仍可继续。 */ }
+}
+
+const S = { screen: ready() ? "home" : "download", sample: "kingf", bird: 0, place: null, placeFrom: "",
+  userBox: null, dl: 0, wifi: true, recordId: null, albumFrom: "home", emptyHistoryPreview: false };
+let timer = null, nextTimer = null;
+let nextRecord = 0;
+const historyEntries = ["brbl", "corm", "kingf"].map(sample => makeRecord(sample));
+const photoZoom = { scale: 1, x: 0, y: 0 };
+
+function makeRecord(sample, userBox = null) {
+  return { id: ++nextRecord, sample, bird: 0, place: null, placeFrom: "", userBox };
+}
+function openRecord(entry) {
+  const { id, sample, bird, place, placeFrom, userBox } = entry;
+  go("result", { recordId: id, sample, bird, place, placeFrom, userBox });
+}
+function recordResult(sample, userBox = null) {
+  const entry = makeRecord(sample, userBox);
+  historyEntries.unshift(entry);
+  openRecord(entry);
+}
+function updateRecord() {
+  const entry = historyEntries.find(item => item.id === S.recordId);
+  if (entry) Object.assign(entry, { bird: S.bird, place: S.place, placeFrom: S.placeFrom });
+}
+function birdName(bird) { return bird.unsure ? "不确定" : bird.cn; }
+function photoPlace(smp, place) { return smp.gps ? PLACE : place; }
+
+const imgsHtml = (smp) => `<div class="imgs">${smp.imgs.map(i => `<img src="img/${i}.jpg" alt="" draggable="false">`).join("")}</div>`;
+const pos = ([x, y, x2, y2]) => `left:${x}%;top:${y}%;width:${x2 - x}%;height:${y2 - y}%`;
+const boxDiv = (b, cls) => b ? `<span class="mk ${cls}" style="${pos(b)}"></span>` : "";
+const action = (name, label, classes = "", attrs = "") =>
+  `<button type="button" class="btn ${classes}" data-act="${name}" ${attrs}>${label}</button>`;
+const dock = (contents) => `<div class="dock">${contents}</div>`;
+const more = (name, label) => `<button type="button" class="more" data-act="${name}" aria-label="${label}" aria-haspopup="dialog">…</button>`;
+const header = (back = "", label = "返回", extra = "") => `<header class="appbar">
+  ${back ? `<button type="button" class="nav" data-act="${back}"><span class="chevron" aria-hidden="true"></span>${label}</button>`
+    : '<div class="identity"><span class="emblem" aria-hidden="true"></span>观羽</div>'}
+  <div class="bar-controls"><span class="proto">原型 · 示例数据</span>${extra}</div>
+</header>`;
+
+function viewPhoto(smp, mode) {
+  const label = mode === "frame" ? "用手在示例照片上框出鸟" : "所选鸟片";
+  return `<div class="photo-view" style="--ratio:${smp.imgs.length}" ${mode === "result" ? "data-gestures" : ""}>
+    <div class="shot" ${mode === "frame" ? 'id="frame"' : ""}>
+      <div role="img" aria-label="${label}" style="height:100%">${imgsHtml(smp)}</div>
+      ${mode === "result" ? '<div id="marks"></div>' : mode === "frame" ? `<span class="mk drag" ${S.userBox ? `style="${pos(S.userBox)}"` : "hidden"}></span>` : ""}
+    </div>
+    ${mode === "result" ? '<button type="button" class="zoom" data-act="zoom" aria-label="放大照片" aria-pressed="false">＋</button>' : ""}
+  </div>`;
+}
+
+function homePlate() {
+  return `<figure class="welcome-plate"><img src="img/000006_13.jpg" alt="枝头的黄腰林莺">
+    <figcaption><span>黄腰林莺</span><small>样片 · 加利福尼亚州</small></figcaption></figure>`;
+}
+function historyList(entries) {
+  if (!entries.length) return '<p class="history-empty">识别过的照片会自动出现在这里。</p>';
+  return `<ol class="history-list" aria-label="识别记录">${entries.map(entry => {
+    const smp = SAMPLES[entry.sample], b = smp.birds[entry.bird];
+    return `<li class="history-entry">
+      <button type="button" class="history-open" data-act="open-history" data-id="${entry.id}">
+        <img class="history-thumb" src="img/${smp.imgs[entry.bird] || smp.imgs[0]}.jpg" alt="" draggable="false">
+        <span><span class="history-name${b.unsure ? " uncertain" : ""}">${birdName(b)}</span>
+          <span class="history-meta">${smp.time}</span><span class="history-meta">${photoPlace(smp, entry.place) || "地区未记录"}</span></span>
+        <i class="history-arrow" aria-hidden="true"></i>
+      </button>
+      <button type="button" class="history-delete" data-act="delete-history" data-id="${entry.id}" aria-label="删除这条记录（${birdName(b)}）">删除</button>
+    </li>`;
+  }).join("")}</ol>`;
+}
+const VIEWS = {
+  download: () => `${header()}
+    <div class="flow">${homePlate()}
+      <div class="head"><h1 tabindex="-1">第一次使用</h1>
+        <p class="lead">先下载约 650 MB 的识别包，以后离线也能认鸟。</p>
+        <label class="wifi">只在 Wi-Fi 下下载<input type="checkbox" role="switch" id="wifi" ${S.wifi ? "checked" : ""}></label>
+        <div class="download-status" id="download-status" hidden>
+          <p class="small" id="download-size" role="status"></p>
+          <progress id="download-progress" max="100" value="0" aria-label="下载进度"></progress>
+          <p class="small">下载完成前暂时无法识别。</p>
+        </div>
+      </div>
+    </div>
+    ${dock(action("dl", "下载识别包", "primary"))}`,
+  home: () => {
+    const entries = S.emptyHistoryPreview ? [] : historyEntries;
+    return `${header("", "", entries.length ? more("history-menu", "历史选项") : "")}
+      <div class="flow history-flow"><h1 tabindex="-1">识别历史</h1>
+        <p class="lead">识别记录只留在这部手机上。</p>
+        ${historyList(entries)}
+      </div>${dock(action("album", "从相册选择", "primary"))}`;
+  },
+  album: () => `${header("cancel-album", "取消")}
+    <div class="flow library-flow">
+      <div class="head"><h1 tabindex="-1">最近项目</h1><p class="lead">轻点一张照片开始识别。</p></div>
+      <div class="library">${ORDER.map((k, i) => `<button type="button" data-act="pick" data-k="${k}" aria-label="选择示例照片 ${i + 1}：${albumLabels[i]}">${imgsHtml(SAMPLES[k])}</button>`).join("")}</div>
+      <p class="small" style="margin-top:10px">示例相册 · 一次选一张</p>
+    </div>`,
+  busy: (smp) => `${header("return-album", "相册")}<div class="scanning">
+    <div class="stage">${viewPhoto(smp, "busy")}</div>
+    <div class="flow"><h1 tabindex="-1">正在识别</h1><p class="status" id="busy-t" role="status">正在找鸟…</p><progress aria-label="识别进度"></progress></div>
+  </div>`,
+  frame: (smp) => `${header("return-album", "相册")}<div class="manual">
+    <div class="stage">${viewPhoto(smp, "frame")}</div>
+    <div class="flow"><h1 tabindex="-1">没有找到鸟</h1><p class="lead">在照片上拖出一个框，也可以用整张照片重试。</p></div>
+    ${dock(action("use-box", "识别框里的鸟", "primary", S.userBox ? "" : "disabled") + action("whole-box", "框住整张照片", "plain", 'style="width:100%"'))}
+  </div>`,
+  result: (smp) => `${header("home", "历史", more("result-menu", "结果选项"))}<div class="result">
+    <div class="result-scroll" role="region" aria-label="识别结果" tabindex="0">
+      ${viewPhoto(smp, "result")}
+      <div class="result-content" id="result-content"></div>
+    </div>
+    <p class="sr-only" id="bird-live" role="status"></p>
+    ${dock(action("album", "再选一张", "primary"))}
+  </div>`,
+};
+
+function go(name, patch = {}, focus = true) {
+  clearTimeout(timer);
+  clearTimeout(nextTimer);
+  if (phone.querySelector(".overlay")) closeOverlay(false);
+  gesture = null;
+  pointers.clear();
+  frameDrag = null;
+  historySwipe = null;
+  lastTap = null;
+  suppressClicksUntil = 0;
+  clearZoom();
+  Object.assign(S, { emptyHistoryPreview: false }, patch, { screen: name });
+  screen.innerHTML = VIEWS[name](SAMPLES[S.sample]);
+  if (name === "result") drawBird();
+  if (focus) screen.querySelector("h1, .head h1")?.focus({ preventScroll: true });
+  const key = name === "result" ? "result:" + S.sample : S.emptyHistoryPreview ? "home-empty" : name;
+  document.querySelectorAll("#demo button").forEach(b => b.setAttribute("aria-current", b.dataset.key === key));
+}
+
+function drawBird() {
+  const smp = SAMPLES[S.sample], b = smp.birds[S.bird];
+  const place = photoPlace(smp, S.place);
+  const from = smp.gps ? "照片自带位置" : S.placeFrom;
+  const conf = place ? b.conf : (b.confNoPlace || b.conf);
+  const e = CAMERA_DATA[S.sample];
+  const ev = (e.ev > 0 ? "+" : "") + e.ev;
+  const multi = smp.birds.length > 1;
+  const eye = b.eye ? `<span class="mk eye" style="left:${b.eye[0]}%;top:${b.eye[1]}%"></span>` : "";
+  $("#marks").innerHTML = (smp.nobird ? boxDiv(S.userBox, "box") : smp.birds.map((bird, i) => {
+    const active = i === S.bird;
+    const [x, y, x2, y2] = bird.box;
+    return boxDiv(bird.box, active ? "box" : "box off") + (multi
+      ? `<button type="button" class="bird-hit" data-act="bird" data-i="${i}" aria-label="照片中的第 ${i + 1} 只鸟" aria-pressed="${active}" style="left:${(x + x2) / 2}%;top:${(y + y2) / 2}%;width:${x2 - x}%;height:${y2 - y}%"></button>` : "");
+  }).join("")) + eye;
+
+  $("#result-content").innerHTML = `
+    <div class="identity-result"><h1 tabindex="-1" class="sp-cn${b.unsure ? " uncertain" : ""}">${birdName(b)}</h1>
+      <span class="conf">${b.unsure ? "最高候选" : place ? "把握" : "初步把握"} ${conf}%</span>
+    </div>
+    ${b.unsure ? '<p class="small">照片里的特征不够清楚。</p>'
+      : `<p class="sp-en">${b.en} <span class="sp-sci">· ${b.sci}</span></p>`}
+    <p class="facts-inline"><strong>${b.fly ? "在飞" : "不在飞"}</strong>
+      ${!b.unsure && place ? `<span>当地 11 月 · <strong class="${b.rar >= 2 ? "rare" : ""}">${RAR[b.rar]}</strong></span>` : ""}
+      ${!b.unsure ? `<span>IUCN ${b.iucn}</span>` : ""}</p>
+    ${multi ? `<div class="bird-switch" role="group" aria-label="切换照片中的鸟">${smp.birds.map((_, i) =>
+      `<button type="button" data-act="bird" data-i="${i}" aria-pressed="${S.bird === i}">第 ${i + 1} 只</button>`).join("")}<span class="small">也可左右滑动照片</span></div>` : ""}
+    <div class="legend"><span><i class="l-box"></i>${S.userBox ? "手动画的框" : "当前鸟框"}</span>
+      ${b.eye ? '<span><i class="l-eye"></i>眼睛</span>' : ""}
+      ${multi ? '<span><i class="l-off"></i>其他鸟框</span>' : ""}</div>
+    <section class="result-section" aria-labelledby="candidate-heading">
+      <h2 id="candidate-heading">${b.unsure ? "前 5 个候选" : "其他候选"}</h2>
+      <ol class="candidates" start="${b.unsure ? 1 : 2}">${b.c.map(c => `<li>${c[0]} <span>${c[1]} · ${c[2]}%</span></li>`).join("")}</ol>
+    </section>
+    <section class="result-section exif" aria-labelledby="exif-heading"><h2 id="exif-heading">拍摄信息</h2>
+      <div class="settings" role="group" aria-label="曝光参数"><span>${e.focal} mm</span> <span>f/${e.aperture}</span> <span>${e.shutter} s</span> <span>ISO ${e.iso}</span> <span>${ev} EV</span></div>
+      <dl class="facts">
+        <dt>相机</dt><dd>${e.camera}</dd><dt>镜头</dt><dd>${e.lens}</dd>
+        <dt>拍摄时间</dt><dd>${smp.time}</dd>
+      </dl>
+    </section>
+    <section class="result-section result-region" aria-labelledby="region-heading">
+      <h2 id="region-heading" tabindex="-1">拍摄地区</h2>
+      ${place ? `<div class="location"><span>${place}</span><span class="small">${from}</span></div>`
+        : `<div class="location"><span class="small">未记录地区，暂无法判断当地稀有度。</span>${action("location", "补充地区", "plain")}</div>`}
+    </section>`;
+}
+
+function switchBird(i, focusClass) {
+  const count = SAMPLES[S.sample].birds.length;
+  const index = (i + count) % count;
+  if (S.bird === index) return;
+  S.bird = index;
+  updateRecord();
+  drawBird();
+  $("#bird-live").textContent = `第 ${index + 1} 只，${$(".conf").textContent}`;
+  if (focusClass) $(focusClass + ' [data-act="bird"][data-i="' + index + '"]')?.focus({ preventScroll: true });
+}
+
+const albumLabels = ["白腹鱼狗", "两只紫翅椋鸟", "雌性黑鹂", "棕腹长尾霸鹟", "模糊的雁", "飞着的角鸬鹚"];
+
+function startDownload() {
+  const button = $('[data-act="dl"]');
+  button.disabled = true;
+  button.textContent = "正在下载…";
+  S.wifi = $("#wifi").checked;
+  $("#wifi").disabled = true;
+  $("#download-status").hidden = false;
+  $("#download-status").scrollIntoView({ block: "nearest" });
+  S.dl = 0;
+  const start = performance.now();
+  let reported = -1;
+  function update() {
+    S.dl = Math.min(100, Math.round((performance.now() - start) / 21));
+    $("#download-progress").value = S.dl;
+    const milestone = Math.floor(S.dl / 25);
+    if (milestone !== reported) {
+      reported = milestone;
+      $("#download-size").textContent = `${Math.round(S.dl * 6.5)} / 650 MB · ${S.wifi ? "仅 Wi-Fi" : "允许使用移动网络"}`;
+    }
+    if (S.dl >= 100) {
+      storeReady(true);
+      go("home");
+    } else {
+      timer = setTimeout(update, 100);
+    }
+  }
+  update();
+}
+
+function identify(k, userBox = null) {
+  go("busy", { sample: k, bird: 0, place: null, placeFrom: "", userBox, recordId: null });
+  timer = setTimeout(() => { $("#busy-t").textContent = "正在辨认鸟种…"; }, 520);
+  nextTimer = setTimeout(() => {
+    if (SAMPLES[k].nobird && !userBox) go("frame");
+    else recordResult(k, userBox);
+  }, 1150);
+}
+
+let modalTrigger = null;
+function showOverlay(title, content, trigger) {
+  modalTrigger = trigger ?? modalTrigger;
+  phone.querySelector(".overlay")?.remove();
+  screen.inert = true;
+  $(".demo").inert = true;
+  const o = document.createElement("div");
+  o.className = "overlay";
+  o.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h2 id="modal-title" tabindex="-1">${title}</h2>${content}</section>`;
+  phone.append(o);
+  o.querySelector("h2").focus();
+  o.addEventListener("keydown", e => {
+    if (e.key === "Escape") { e.preventDefault(); closeOverlay(); }
+    if (e.key !== "Tab") return;
+    const list = [...o.querySelectorAll("button:not(:disabled), select:not(:disabled)")];
+    if (e.shiftKey && (document.activeElement === list[0] || document.activeElement.id === "modal-title")) {
+      e.preventDefault(); list.at(-1).focus();
+    } else if (!e.shiftKey && document.activeElement === list.at(-1)) {
+      e.preventDefault(); list[0].focus();
+    }
+  });
+  o.addEventListener("click", e => { if (e.target === o) closeOverlay(); });
+  return o;
+}
+function closeOverlay(restore = true) {
+  phone.querySelector(".overlay")?.remove();
+  screen.inert = false;
+  $(".demo").inert = false;
+  if (restore) modalTrigger?.focus({ preventScroll: true });
+  modalTrigger = null;
+}
+function setPlace(place, placeFrom) {
+  closeOverlay(false);
+  S.place = place;
+  S.placeFrom = placeFrom;
+  updateRecord();
+  const scroll = $(".result-scroll");
+  const top = scroll.scrollTop;
+  drawBird();
+  scroll.scrollTop = top;
+  $("#region-heading").focus({ preventScroll: true });
+}
+function askLocation(trigger) {
+  if (SAMPLES[S.sample].gps || S.place) return;
+  const o = showOverlay("在哪拍的？", '<p class="lead">只用到国家和州 / 省。你可以用手机定位，也可以自己选。</p><div class="stack"><button class="btn primary" data-loc="phone">用手机定位</button><button class="btn" data-loc="region">自己选地区</button><button class="btn plain" data-loc="close">稍后再说</button></div>', trigger);
+  o.addEventListener("click", e => {
+    const key = e.target.dataset.loc;
+    if (key === "phone") askPermission();
+    if (key === "region") pickRegion();
+    if (key === "close") closeOverlay();
+  });
+}
+function askPermission() {
+  const o = showOverlay("允许“观羽”使用你的位置？", '<p class="lead">通过本机位置补上拍摄地区。此处演示系统权限提示。</p><div class="stack"><button class="btn primary" data-perm="yes">允许一次</button><button class="btn" data-perm="no">不允许</button></div>');
+  o.addEventListener("click", e => {
+    if (e.target.dataset.perm === "yes") setPlace(PLACE, "手机定位");
+    if (e.target.dataset.perm === "no") pickRegion("你可以手动选国家和州 / 省。");
+  });
+}
+function pickRegion(note = "选择照片拍摄的国家和州 / 省。") {
+  const o = showOverlay("选拍摄地区", `<p class="lead">${note}</p><label>国家<select id="r-c">
+    ${Object.keys(STATES).map(c => `<option>${c}</option>`).join("")}</select></label>
+    <label>州 / 省<select id="r-s"></select></label>
+    <div class="row"><button class="btn" data-region="cancel">取消</button><button class="btn primary" data-region="ok">确定</button></div>`);
+  const country = o.querySelector("#r-c"), region = o.querySelector("#r-s");
+  function fill() { region.innerHTML = STATES[country.value].map(s => `<option>${s}</option>`).join(""); }
+  country.addEventListener("change", fill);
+  fill();
+  o.addEventListener("click", e => {
+    if (e.target.dataset.region === "ok") setPlace(country.value + " · " + region.value, "手动选择");
+    if (e.target.dataset.region === "cancel") closeOverlay();
+  });
+}
+
+function removeRecord(id) {
+  const index = historyEntries.findIndex(entry => entry.id === id);
+  if (index === -1) return;
+  historyEntries.splice(index, 1);
+  const scroll = $(".history-flow");
+  const top = scroll?.scrollTop ?? 0;
+  go("home", { recordId: null }, !scroll);
+  $(".history-flow").scrollTop = top;
+  if (scroll) {
+    const rows = screen.querySelectorAll(".history-open");
+    (rows[index] || rows[index - 1] || $(".history-flow h1")).focus({ preventScroll: true });
+  }
+  $("#app-live").textContent = `已删除一条记录，剩余 ${historyEntries.length} 条。`;
+}
+function showResultMenu(trigger) {
+  const o = showOverlay("结果选项", `<div class="stack" style="margin-top:12px">
+    <button type="button" class="btn" disabled>分享图片 · 待定</button>
+    ${S.recordId !== null ? '<button type="button" class="btn destructive" data-command="delete">删除记录</button>' : ""}
+    <button type="button" class="btn plain" data-command="close">取消</button>
+  </div>`, trigger);
+  o.addEventListener("click", e => {
+    if (e.target.dataset.command === "delete") removeRecord(S.recordId);
+    if (e.target.dataset.command === "close") closeOverlay();
+  });
+}
+function showHistoryMenu(trigger) {
+  const o = showOverlay("历史选项", `<div class="stack" style="margin-top:12px">
+    <button type="button" class="btn destructive" data-command="clear">清空历史</button>
+    <button type="button" class="btn plain" data-command="close">取消</button>
+  </div>`, trigger);
+  o.addEventListener("click", e => {
+    if (e.target.dataset.command === "close") closeOverlay();
+    if (e.target.dataset.command !== "clear") return;
+    const confirm = showOverlay("清空识别历史？", `<p class="lead">将删除全部识别记录，相册里的照片仍会保留。</p>
+      <div class="row"><button type="button" class="btn" data-command="cancel">取消</button><button type="button" class="btn destructive" data-command="confirm">清空历史</button></div>`);
+    confirm.addEventListener("click", event => {
+      if (event.target.dataset.command === "cancel") closeOverlay();
+      if (event.target.dataset.command !== "confirm") return;
+      historyEntries.length = 0;
+      go("home", { recordId: null });
+      $("#app-live").textContent = "历史已清空。";
+    });
+  });
+}
+
+screen.addEventListener("click", e => {
+  const target = e.target.closest("[data-act]");
+  if (!target || target.disabled) return;
+  if (e.detail && performance.now() < suppressClicksUntil && target.matches(".history-open, .bird-hit")) return;
+  switch (target.dataset.act) {
+    case "home": go("home"); break;
+    case "open-history": {
+      const row = target.closest(".history-entry");
+      if (row.dataset.revealed === "true" && e.detail) {
+        delete row.dataset.revealed;
+        break;
+      }
+      const entry = historyEntries.find(item => item.id === +target.dataset.id);
+      if (entry) openRecord(entry);
+      break;
+    }
+    case "delete-history": removeRecord(+target.dataset.id); break;
+    case "history-menu": showHistoryMenu(target); break;
+    case "result-menu": showResultMenu(target); break;
+    case "album": go("album", { albumFrom: S.screen }); break;
+    case "return-album": go("album", { albumFrom: "home" }); break;
+    case "cancel-album": go(S.albumFrom); break;
+    case "dl": startDownload(); break;
+    case "pick": identify(target.dataset.k); break;
+    case "bird": switchBird(+target.dataset.i, target.classList.contains("bird-hit") ? "#marks" : ".bird-switch"); break;
+    case "zoom": toggleZoom(); break;
+    case "location": askLocation(target); break;
+    case "whole-box": saveBox([0, 0, 100, 100], true); break;
+    case "use-box": identify(S.sample, S.userBox); break;
+  }
+});
+
+let frameDrag = null, historySwipe = null, gesture = null, lastTap = null, suppressClicksUntil = 0;
+const pointers = new Map();
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+const point = (e) => ({ x: e.clientX, y: e.clientY });
+const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+function saveBox(b, focus = false) {
+  S.userBox = b;
+  const mark = $("#frame .drag");
+  mark.hidden = !b;
+  if (b) mark.setAttribute("style", pos(b));
+  const button = $('[data-act="use-box"]');
+  button.disabled = !b;
+  if (b && focus) button.focus({ preventScroll: true });
+}
+function frameBox(e) {
+  const { rect, start } = frameDrag;
+  const x = clamp((e.clientX - rect.left) / rect.width * 100, 0, 100);
+  const y = clamp((e.clientY - rect.top) / rect.height * 100, 0, 100);
+  return [Math.min(start.x, x), Math.min(start.y, y), Math.max(start.x, x), Math.max(start.y, y)];
+}
+function clearZoom() {
+  Object.assign(photoZoom, { scale: 1, x: 0, y: 0 });
+}
+function paintZoom() {
+  const view = $(".photo-view[data-gestures]"), layer = view.querySelector(".shot");
+  const { scale } = photoZoom;
+  view.classList.toggle("zoomed", scale > 1);
+  const limitX = Math.max(0, (layer.offsetWidth * scale - view.clientWidth) / 2);
+  const limitY = Math.max(0, (layer.offsetHeight * scale - view.clientHeight) / 2);
+  photoZoom.x = clamp(photoZoom.x, -limitX, limitX);
+  photoZoom.y = clamp(photoZoom.y, -limitY, limitY);
+  layer.style.transform = `translate(${photoZoom.x}px, ${photoZoom.y}px) scale(${scale})`;
+  const button = $(".zoom");
+  button.textContent = scale > 1 ? "1×" : "＋";
+  button.setAttribute("aria-label", scale > 1 ? "还原照片大小" : "放大照片");
+  button.setAttribute("aria-pressed", scale > 1);
+}
+function zoomAt(scale, from, to = from) {
+  const r = $(".photo-view[data-gestures]").getBoundingClientRect();
+  const center = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  const next = clamp(scale, 1, 4);
+  const multiplier = next / photoZoom.scale;
+  photoZoom.x = to.x - center.x - (from.x - center.x - photoZoom.x) * multiplier;
+  photoZoom.y = to.y - center.y - (from.y - center.y - photoZoom.y) * multiplier;
+  photoZoom.scale = next;
+  if (next === 1) clearZoom();
+  paintZoom();
+}
+function toggleZoom(p) {
+  const r = $(".photo-view[data-gestures]").getBoundingClientRect();
+  zoomAt(photoZoom.scale > 1 ? 1 : 2.3, p || { x: r.left + r.width / 2, y: r.top + r.height / 2 });
+}
+
+screen.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  suppressClicksUntil = 0;
+  const frame = e.target.closest("#frame");
+  const historyButton = e.target.closest(".history-open");
+  const view = e.target.closest(".photo-view[data-gestures]");
+  if (frame && !frameDrag) {
+    const rect = frame.getBoundingClientRect();
+    frameDrag = { id: e.pointerId, rect, start: { x: (e.clientX - rect.left) / rect.width * 100, y: (e.clientY - rect.top) / rect.height * 100 } };
+    frame.setPointerCapture(e.pointerId);
+  } else if (historyButton && !historySwipe) {
+    const row = historyButton.closest(".history-entry");
+    const revealed = $(".history-entry[data-revealed=true]");
+    if (revealed && revealed !== row) delete revealed.dataset.revealed;
+    historySwipe = { id: e.pointerId, start: point(e), button: historyButton, row, offset: row.dataset.revealed === "true" ? -76 : 0 };
+  } else if (view && !e.target.closest(".zoom")) {
+    if (pointers.size >= 2) return;
+    const p = point(e);
+    pointers.set(e.pointerId, p);
+    if (pointers.size === 1) {
+      gesture = { kind: "tap", start: p, prev: p };
+    } else {
+      const [a, b] = pointers.values();
+      gesture = { kind: "pinch", dist: Math.max(1, distance(a, b)), center: midpoint(a, b) };
+      lastTap = null;
+      for (const id of pointers.keys()) view.setPointerCapture(id);
+    }
+  }
+});
+
+screen.addEventListener("pointermove", e => {
+  if (frameDrag?.id === e.pointerId) {
+    const mark = $("#frame .drag");
+    mark.hidden = false;
+    mark.setAttribute("style", pos(frameBox(e)));
+  } else if (historySwipe?.id === e.pointerId) {
+    const d = historySwipe;
+    const dx = e.clientX - d.start.x, dy = e.clientY - d.start.y;
+    if (!d.dragging) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { historySwipe = null; return; }
+      if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+      d.dragging = true;
+      d.button.setPointerCapture(e.pointerId);
+      d.button.classList.add("dragging");
+    }
+    d.button.style.setProperty("--swipe", clamp(d.offset + dx, -d.row.clientWidth, 0) + "px");
+  } else if (pointers.has(e.pointerId) && gesture) {
+    const next = point(e);
+    pointers.set(e.pointerId, next);
+    if (pointers.size === 2 && gesture.kind === "pinch") {
+      const [a, b] = pointers.values(), dist = Math.max(1, distance(a, b)), center = midpoint(a, b);
+      zoomAt(photoZoom.scale * dist / gesture.dist, gesture.center, center);
+      gesture.dist = dist; gesture.center = center;
+    } else if (gesture.kind === "pan" || (photoZoom.scale > 1 && distance(gesture.start, next) > 8)) {
+      gesture.kind = "pan";
+      const view = $(".photo-view[data-gestures]");
+      if (!view.hasPointerCapture(e.pointerId)) view.setPointerCapture(e.pointerId);
+      photoZoom.x += next.x - gesture.prev.x;
+      photoZoom.y += next.y - gesture.prev.y;
+      paintZoom();
+      gesture.prev = next;
+    }
+  }
+});
+
+function finishGesture(e) {
+  const canceled = e.type === "pointercancel";
+  if (frameDrag?.id === e.pointerId) {
+    const b = frameBox(e);
+    frameDrag = null;
+    saveBox(!canceled && b[2] - b[0] >= 5 && b[3] - b[1] >= 5 ? b : S.userBox);
+  }
+  if (historySwipe?.id === e.pointerId) {
+    const d = historySwipe;
+    historySwipe = null;
+    if (d.dragging) {
+      const offset = d.offset + e.clientX - d.start.x;
+      d.button.classList.remove("dragging");
+      d.button.style.removeProperty("--swipe");
+      if (!canceled) {
+        if (offset <= -Math.min(160, d.row.clientWidth * .52)) removeRecord(+d.button.dataset.id);
+        else d.row.dataset.revealed = offset < -38;
+      }
+      suppressClicksUntil = performance.now() + 300;
+    }
+    return;
+  }
+  if (!pointers.delete(e.pointerId) || !gesture) return;
+  if (pointers.size) {
+    const [p] = pointers.values();
+    gesture = { kind: "pan", start: p, prev: p };
+    return;
+  }
+  const g = gesture, end = point(e);
+  gesture = null;
+  if (canceled || g.kind !== "tap") {
+    lastTap = null;
+    suppressClicksUntil = performance.now() + 300;
+    return;
+  }
+  const dx = end.x - g.start.x, dy = end.y - g.start.y;
+  if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.35 && photoZoom.scale === 1) {
+    switchBird(S.bird + (dx < 0 ? 1 : -1));
+    suppressClicksUntil = performance.now() + 300;
+    lastTap = null;
+  } else if (distance(end, g.start) < 12) {
+    const now = performance.now();
+    if (lastTap && now - lastTap.time < 350 && distance(end, lastTap.point) < 30) {
+      toggleZoom(end);
+      lastTap = null;
+      suppressClicksUntil = now + 300;
+    } else lastTap = { time: now, point: end };
+  } else {
+    lastTap = null;
+  }
+}
+screen.addEventListener("keydown", e => {
+  if (!e.target.matches(".zoom") || photoZoom.scale <= 1) return;
+  const axis = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+  if (!axis) return;
+  e.preventDefault();
+  photoZoom.x += 28 * axis[0];
+  photoZoom.y += 28 * axis[1];
+  paintZoom();
+});
+screen.addEventListener("pointerup", finishGesture);
+screen.addEventListener("pointercancel", finishGesture);
+
+const DEMO = [
+  ["download", "首次打开", () => { storeReady(false); go("download", { dl: 0, wifi: true }); }],
+  ["home", "首页 · 识别历史", () => go("home")],
+  ["home-empty", "首页 · 空历史", () => go("home", { emptyHistoryPreview: true })],
+  ["album", "从相册选", () => go("album", { albumFrom: "home" })],
+  ["busy", "识别中", () => identify("kingf")],
+  ["result:kingf", "识别结果", () => demoResult("kingf")],
+  ["result:corm", "在飞", () => demoResult("corm")],
+  ["result:star", "照片里有两只鸟", () => demoResult("star")],
+  ["result:brbl", "把握低 · 不确定", () => demoResult("brbl")],
+  ["result:sayph", "照片没有位置", () => demoResult("sayph")],
+  ["frame", "没找到鸟 · 手动框", () => go("frame", { sample: "goose", userBox: null })],
+];
+function demoResult(sample) {
+  if (!Object.hasOwn(SAMPLES, sample)) return;
+  recordResult(sample, SAMPLES[sample].nobird ? [0, 0, 100, 100] : null);
+}
+$("#demo").innerHTML = DEMO.map(([key, label], i) => `<button type="button" data-i="${i}" data-key="${key}">${label}</button>`).join("");
+$("#demo").addEventListener("click", e => {
+  const button = e.target.closest("button");
+  if (!button) return;
+  DEMO[+button.dataset.i][2]();
+  if (matchMedia("(max-width: 690px)").matches) window.scrollTo(0, 0);
+});
+go(S.screen, {}, false);
+</script>
+</body>
+</html>
