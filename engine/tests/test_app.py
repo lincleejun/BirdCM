@@ -365,3 +365,21 @@ def test_related_reports_cursor_and_last_good_scan(env):
     assert top["id"] == b and top["last_completed"] == a
     rel = c.get(f"/api/scans/{a}/related", headers=OK).json()
     assert rel["newer"]["state"] == "failed" and "cursor" in rel
+
+
+def test_snapshot_is_compressed_and_slim(env):
+    """Codex P2: the list snapshot leaves out per-box species and the likeness thumbnail, and travels compressed."""
+    c, api, tmp = env
+    store = api.state.store
+    (tmp / "shoot").mkdir()
+    sid = store.create_scan(str(tmp / "shoot"), False, None, {"keep": 20}, "fp", [(f"/x/{i}.ARW", 1, 1) for i in range(300)])
+    sp = {"level": "species", "label": {"sci": "A b", "en": "A", "zh": None, "p": 0.9}, "top5": [{"sci": "A b", "p": 0.9}] * 5}
+    for p in store.queued(sid):
+        store.commit(p["id"], {"rejected": False, "subject": 0, "species": sp, "look": list(range(64)), "exif": {},
+                               "boxes": [{"box": [0, 0, 1, 1], "score": 0.9, "species": sp}]}, None)
+    r = c.get(f"/api/scans/{sid}", headers={**OK, "accept-encoding": "gzip"})
+    assert r.headers.get("content-encoding") == "gzip"
+    row = r.json()["photos"][0]["result"]
+    assert "look" not in row and "species" not in row["boxes"][0] and row["species"]["label"]["sci"] == "A b"
+    full = c.get(f"/api/photos/{r.json()['photos'][0]['id']}", headers=OK).json()["result"]
+    assert full["look"] and full["boxes"][0]["species"]

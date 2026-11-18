@@ -67,6 +67,24 @@ def audit(rows: list[dict]) -> dict[str, list[str]]:
     return out
 
 
+# Known-good checks on 10061114 (only run when the scan holds these files): file -> species.
+KNOWN = {"DSC05136.ARW": "Thalasseus elegans", "DSC05137.ARW": "Thalasseus elegans",       # groups 16/20/21, owner-confirmed
+         "DSC05770.ARW": "Tyrannus melancholicus",                                          # group 99, owner-confirmed
+         "DSC05095.ARW": "Lophodytes cucullatus", "DSC05097.ARW": "Melanitta perspicillata"}  # checked by eye (crops)
+
+
+def known(rows: list[dict]) -> list[str]:
+    out = []
+    for p in rows:
+        want = KNOWN.get(p["file"])
+        if not want or not p["result"]:
+            continue
+        sp = None if p["result"]["rejected"] else (p["fix"] or p["result"]["species"])
+        got = (sp or {}).get("label", {}) and sp["label"]["sci"] if sp and sp.get("level") == "species" else None
+        out.append(f"{'ok ' if got == want else 'BAD'} {p['file']}: {got} (owner: {want})")
+    return out
+
+
 def main() -> None:
     sid = int(sys.argv[1])
     path = sys.argv[2] if len(sys.argv) > 2 else str(config.data_dir() / "birdcm.db")
@@ -81,6 +99,8 @@ def main() -> None:
     for k in checks:
         v = found.get(k, [])
         print(f"{len(v):5d}  {k}" + (f"   e.g. {'; '.join(v[:4])}" if v else ""))
+    for line in known(rows):
+        print("known: " + line)
 
 
 if __name__ == "__main__":

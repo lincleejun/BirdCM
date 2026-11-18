@@ -231,6 +231,8 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         exif.close()
 
     api = FastAPI(title="BirdCM", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    from starlette.middleware.gzip import GZipMiddleware
+    api.add_middleware(GZipMiddleware, minimum_size=4096)    # the list snapshot is JSON: ~1/10 on the wire (event streams excluded)
     api.state.store, api.state.scheduler, api.state.token = store, sched, token
 
     def get_scan(sid: int) -> dict:
