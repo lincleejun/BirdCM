@@ -30,7 +30,7 @@ from birdcm.result import PhotoResult
 from birdcm.sharpness import head_sharpness
 
 SMALL_BOX = 128                 # a subject box shorter than this (2048-frame px) is cropped from the decode resolution
-PIPELINE_VERSION = 8            # bump when any step's output changes: old results stop being reused
+PIPELINE_VERSION = 9            # bump when any step's output changes: old results stop being reused
 SETTINGS = {"frame": decode.FRAME, "embedded_min": decode.EMBEDDED_MIN, "min_crop": geometry.MIN_CROP,
             "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR, "max_boxes": 5}
 DECODE_TIMEOUT = 120.0          # seconds one decode may run before its pool is killed and the file isolated
@@ -63,7 +63,7 @@ def fingerprint(region, model_digest: str | None = None, data: str | None = None
     cfg["geo_grid"] = geo.GRID
     cfg["geo_floor"] = geo.FLOOR
     from birdcm import confirm
-    cfg["confirm"] = [confirm.EPS, confirm.TAU, geo.NEAR, geo.WEEKS, geo.UNKNOWN_PRIOR, geo.NEAR_EDGE]
+    cfg["confirm"] = [confirm.EPS, confirm.TAU, confirm.LOOK_P, confirm.LOOK_RATIO, geo.NEAR, geo.WEEKS, geo.UNKNOWN_PRIOR, geo.NEAR_EDGE]
     s = json.dumps([model_digest or models.digest(), data, PIPELINE_VERSION, cfg, geo.fingerprint_key(region, old_key)], sort_keys=True)
     return hashlib.sha256(s.encode()).hexdigest()[:16]
 
@@ -410,7 +410,7 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         dets.append({"box": [round(v, 5) for v in b], "score": round(score, 4), "clear": lk["clear"],
                      "species": {"level": lk["level"], "label": lk["label"], "top5": lk["top5"], "geo": where is not None,
                                  "genus": lk.get("genus"), "max_cos": lk.get("max_cos"), "visual": lk.get("visual"),
-                                 **{k: lk[k] for k in ("check", "override", "prior") if k in lk}},
+                                 **{k: lk[k] for k in ("check", "override", "prior", "closer") if k in lk}},
                      # eyes, beak and flight only for a clear bird (the gate exists because they are noise otherwise)
                      "eye": to(lk["eyes"][k], rect) if clear else None, "eye_p": round(lk["p_eyes"][k], 4) if clear else None,
                      "beak": to(lk["beak"], rect) if clear else None, "beak_p": round(lk["p_beak"], 4) if clear else None,

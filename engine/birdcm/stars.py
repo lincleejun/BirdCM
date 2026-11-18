@@ -275,7 +275,7 @@ def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
         p = p_of(sp, best)
         out[i] = {"level": "species", "label": {**label, "p": round(p, 4) if p is not None else None}, "top5": sp.get("top5", []),
                   "geo": sp.get("geo", False), "consensus": {"support": score[best][0], "frames": len(named)},
-                  "visual": sp.get("visual"), **{k: src[k] for k in ("check", "prior") if src.get(k)}}
+                  "visual": sp.get("visual"), **{k: src[k] for k in ("check", "prior", "closer") if src.get(k)}}
     return out
 
 
@@ -338,7 +338,7 @@ def lookalikes(frames: list[tuple[int, dict]], fixes: dict[int, dict], near: flo
         p = next((x["p"] for x in own.get("top5", []) if x["sci"] == dom), None)
         out[i] = {"level": "species", "label": {**src["label"], "p": p}, "top5": own.get("top5", []), "geo": own.get("geo", False),
                   "consensus": {"support": count[dom], "frames": len(named)}, "lookalike": s, "visual": own.get("visual"),
-                  **{k: src[k] for k in ("check", "prior") if src.get(k)}}
+                  **{k: src[k] for k in ("check", "prior", "closer") if src.get(k)}}
     return out
 
 

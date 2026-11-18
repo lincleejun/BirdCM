@@ -299,7 +299,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const [allChips, setAllChips] = useState(false);
   // look-alike flips: the corrected frames and the burst-mates they were corrected to (the whole group is the question)
   const lookIds = useMemo(() => {
-    const groups = new Set(photos.filter((p) => p.result?.species?.lookalike).map((p) => p.burst_group));
+    const groups = new Set(photos.filter((p) => p.result?.species?.lookalike || p.result?.species?.closer).map((p) => p.burst_group));
     return new Set(photos.filter((p) => groups.has(p.burst_group) && p.result && !p.result.rejected).map((p) => p.id));
   }, [photos]);
   const rareIds = useMemo(() => new Set(photos.filter((p) => p.result?.species?.check === "rare" && !p.result.rejected).map((p) => p.id)), [photos]);

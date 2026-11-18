@@ -46,6 +46,7 @@ class Species(TypedDict):
     override: NotRequired[dict]     # {why: "range", visual: Name, local: Name | None}: not confirmed because the first
                                     # name is not expected here this season; local = a congener of the top five that is
     prior: NotRequired[dict]        # the first name's prior over the place: {max, median}
+    closer: NotRequired[dict]       # a look-alike congener (top five, >= 1 %) the place expects at least twice as much: 请核对
 
 
 class Detection(TypedDict):        # every box the tower looked at (at most 5, strongest first)

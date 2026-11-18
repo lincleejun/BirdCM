@@ -107,3 +107,12 @@ def test_a_variant_that_is_another_shot_becomes_its_own_photo(tmp_path):
     st.unpair(sid, [(main, var)])
     ph = {p["file"]: p for p in st.snapshot(sid)["photos"]}
     assert ph["A1.ARW"]["variants"] == [] and ph["A1-Enhanced-NR.dng"]["state"] == "queued" and st.state(sid) == "queued"
+
+
+
+def test_a_congener_the_place_expects_more_is_named_for_checking():
+    """Owner's terns: picture says Royal 0.86 / Elegant 0.14; at a Bay shore point Elegant's prior is 3x Royal's."""
+    lk = confirm.decide(look(["Thalasseus maximus", "Thalasseus elegans"], [0.97, 0.03]), np.array([0.108, 0.358]), np.array([0.099, 0.299]))
+    assert lk["level"] == "species" and lk["closer"]["sci"] == "Thalasseus elegans"
+    lk = confirm.decide(look(["Thalasseus maximus", "Thalasseus elegans"], [0.97, 0.03]), np.array([0.49, 0.35]), np.array([0.3, 0.3]))
+    assert "closer" not in lk

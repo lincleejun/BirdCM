@@ -16,6 +16,7 @@ from __future__ import annotations
 from birdcm.tower import level_of
 
 EPS = 0.01          # prior below this: not expected (gardener's range EPS)
+LOOK_P, LOOK_RATIO = 0.01, 2.0   # a congener in the top five at >= 1 % whose prior here is >= 2x the first name's: "请核对"
 TAU = 0.05          # prior at least this: the species "lives here" (a congener to suggest; the median for the flag)
 
 
@@ -33,6 +34,12 @@ def decide(look: dict, wide, typical) -> dict:
     if wide[i] >= EPS:
         if look["level"] == "species" and typical[i] < TAU:
             look["check"] = "rare"
+        if look["level"] == "species":                    # a look-alike congener the place expects more (Royal vs Elegant Tern)
+            gen = look["top5"][0]["sci"].split(" ")[0]
+            near = next((c for c, j in zip(look["top5"][1:], ids[1:]) if c["sci"].split(" ")[0] == gen and c["p"] >= LOOK_P
+                         and wide[j] == wide[j] and wide[j] >= LOOK_RATIO * wide[i]), None)
+            if near:
+                look["closer"] = near
         return look
     gen = look["top5"][0]["sci"].split(" ")[0]
     local = next((c for c, j in zip(look["top5"][1:], ids[1:]) if c["sci"].split(" ")[0] == gen and wide[j] >= TAU), None)  # NaN: no
