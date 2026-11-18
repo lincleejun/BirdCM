@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { get, post } from "./api";
 import Results, { STATE_LABEL } from "./Results";
+import Singles from "./Singles";
 import type { ModelStatus, Ratio, Scan } from "./types";
 import "./styles.css";
 
@@ -125,21 +126,33 @@ function Setup({ onOpen }: { onOpen: (id: number) => void }) {
 }
 
 function App() {
-  const [scanId, setScanId] = useState<number | null>(() => Number(new URLSearchParams(location.search).get("scan")) || null);
+  const q = new URLSearchParams(location.search);
+  const [scanId, setScanId] = useState<number | null>(() => Number(q.get("scan")) || null);
+  const [view, setView] = useState<"batch" | "single">(q.get("view") === "single" ? "single" : "batch");
+  const [regions, setRegions] = useState<Record<string, string[]>>({});
+  useEffect(() => { get<Record<string, string[]>>("/api/regions").then(setRegions).catch(() => {}); }, []);
   const open = (id: number | null) => {
     history.replaceState(null, "", id ? `?scan=${id}` : location.pathname);
     setScanId(id);
     window.scrollTo(0, 0);
+  };
+  const switchTo = (v: "batch" | "single") => {
+    history.replaceState(null, "", v === "single" ? "?view=single" : scanId ? `?scan=${scanId}` : location.pathname);
+    setView(v);
   };
   return (
     <>
       <header className="masthead">
         <div className="masthead-inner">
           <div className="brand"><span className="emblem" aria-hidden="true"></span><h1>观羽</h1><small>桌面审片</small></div>
-          <span className="tag-proto">本机处理 · BirdCM</span>
+          <nav className="views" aria-label="视图">
+            <button aria-current={view === "batch"} onClick={() => switchTo("batch")}>批量选片</button>
+            <button aria-current={view === "single"} onClick={() => switchTo("single")}>认一张</button>
+          </nav>
         </div>
       </header>
-      <main>{scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} /> : <Setup onOpen={open} />}</main>
+      <main>{view === "single" ? <Singles regions={regions} />
+        : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} /> : <Setup onOpen={open} />}</main>
     </>
   );
 }

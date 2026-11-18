@@ -20,3 +20,10 @@ export async function get<T>(url: string): Promise<T> {
 }
 export const post = <T,>(url: string, body?: unknown) => send<T>("POST", url, body);
 export const put = <T,>(url: string, body?: unknown) => send<T>("PUT", url, body);
+export const del = <T,>(url: string) => send<T>("DELETE", url);
+
+export async function upload<T>(url: string, form: FormData): Promise<T> {
+  const r = await fetch(url, { method: "POST", headers: { "X-BirdCM-Token": await session() }, body: form });
+  if (!r.ok) throw new Error((await r.json().catch(() => null))?.detail ?? r.statusText);
+  return r.json();
+}
