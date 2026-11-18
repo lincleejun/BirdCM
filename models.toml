@@ -1,0 +1,52 @@
+# BirdCM model manifest. `birdcm models fetch` downloads what is missing into ~/Library/Caches/BirdCM/models
+# (sha256-checked); BIRDCM_MODEL_DIR=dir1:dir2 lets development point at local copies (also sha256-checked).
+#
+# OWLv2's processor/config files are not listed: the 414-byte config.json of google/owlv2-base-patch16-ensemble
+# at revision cfd3195ba4ea9592eec887ded089f4c08eff231d is all defaults plus four values, inlined in detect.py,
+# and the one prompt "a bird" is pre-tokenised there (see docs/deviations.md). Nothing is fetched at run time.
+#
+# Not yet listed (no released file): the aesthetic head (block-15 ridge head, distill/aesthetic.py fits it at
+# run time from EVA), the rarity table, BirdNET geo data. Their steps report "待定".
+
+[detector]
+use = "owlv2-int8"
+
+[[file]]
+name    = "bioclip-2.5-vith14-visual-int8.safetensors"
+role    = "tower"
+url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/bioclip-2.5-vith14-visual-int8.safetensors"
+sha256  = "126ea3288dcc15a474df3f931b64e2524cad4967bb6c1f7e0ad30009e0eacfe5"
+bytes   = 633415546
+license = "MIT (BioCLIP 2.5)"
+
+[[file]]
+name    = "bioclip-2.5-vith14-avilist-2026-names.npz"
+role    = "names"
+url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/bioclip-2.5-vith14-avilist-2026-names.npz"
+sha256  = "c69f298195f72d14747145bb92b92b8d98a71866066f644965d936b1ea679e5f"
+bytes   = 21597460
+license = "CC BY 4.0 (AviList v2026) + CC0 (TreeOfLife-200M vectors)"
+
+[[file]]
+name    = "owlv2-base-patch16-ensemble-int8.safetensors"
+role    = "detector:owlv2-int8"
+url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/owlv2-base-patch16-ensemble-int8.safetensors"
+sha256  = "e07efa451b90aece527cb4e78ac1761885de6bc41d4c0d35b171da9301ad5679"
+bytes   = 155652122
+license = "Apache-2.0 (google/owlv2-base-patch16-ensemble)"
+
+[[file]]
+name    = "parts.safetensors"
+role    = "parts"
+url     = "https://github.com/lincleejun/bioclip-bird-heads/releases/download/v0.1.0/parts.safetensors"
+sha256  = "2ffa08ea6d775321c124753836a608cb662af272ce119ef4f3eac6fb64301762"
+bytes   = 1334928
+license = "non-commercial only (bioclip-bird-heads WEIGHTS-LICENSE.md)"
+
+[[file]]
+name    = "flight.safetensors"
+role    = "flight"
+url     = "https://github.com/lincleejun/bioclip-bird-heads/releases/download/v0.1.0/flight.safetensors"
+sha256  = "06b5671ccc010a6011151514dd03bb31381a04afdc6d5114db46515c00a45280"
+bytes   = 15628
+license = "non-commercial only (bioclip-bird-heads WEIGHTS-LICENSE.md)"
