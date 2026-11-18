@@ -67,6 +67,58 @@ final class Flows:XCTestCase {
         guard let button=buttons.first(where:{$0.isHittable && $0.identifier != "home.more" && $0.label != "结果操作"}) else {XCTFail("No visible back button");return}
         button.tap()
     }
+    /// Step 4 surfaces in light, dark and largest type: photo calendar (month, day, year), map, observations with the
+    /// group-count editor, eBird export, “这里这个月” and folder backup.
+    func testStep4Screens() throws {
+        let folder=FileManager.default.temporaryDirectory.appendingPathComponent("BirdCMBackupFixture").path
+        try? FileManager.default.createDirectory(atPath:folder,withIntermediateDirectories:true)
+        for extra in [[String](),["-darkMode","YES"],["-largestType","YES"]] {
+            let mode="-"+(extra.isEmpty ? "light":extra.joined())
+            launch("photo-gps",extra:extra+["-historyFixtureCount","3","-locationFixture","allowed","-backupFolderFixture",folder])
+            reveal("home.locate").tap()
+            expectation(for:NSPredicate(format:"label CONTAINS %@","Bolsa Chica"),evaluatedWith:element("home.place"));waitForExpectations(timeout:10)
+            pick();back()
+            tab("tab.stats","统计");outcome("stats.species");try shot("stats"+mode)
+            let day=app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'calendar.day.'")).firstMatch
+            reveal("stats.calendar");try shot("calendar-month"+mode)
+            XCTAssertTrue(day.waitForExistence(timeout:5));reveal(day.identifier).tap();outcome("obs.row.Haliaeetus leucocephalus.2026-11-14");try shot("calendar-day"+mode);back()
+            element("stats.period").buttons["本年"].tap();reveal("calendar.month.11");try shot("calendar-year"+mode)
+            element("calendar.month.11").tap();outcome("stats.range")
+            reveal("stats.map").tap();outcome("map.noPlace");sleep(2);try shot("map"+mode);back()
+            reveal("stats.observationList").tap();let row=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'obs.row.'")).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout:5));row.tap();outcome("obs.count");try shot("observation-editor"+mode)
+            let field=element("obs.count");field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"5");element("obs.save").tap()
+            expectation(for:NSPredicate(format:"label CONTAINS '估计 5'"),evaluatedWith:row);waitForExpectations(timeout:5);back()
+            reveal("stats.ebird").tap();outcome("ebird.export");try shot("ebird"+mode)
+            element("ebird.export").tap();outcome("ebird.message");element("ebird.close").tap()
+            tab("tab.explore","探索");outcome("explore.mode")
+            let likely=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'explore.row.'")).firstMatch
+            XCTAssertTrue(likely.waitForExistence(timeout:60));try shot("explore-local"+mode)
+            reveal("home.more").tap();reveal("settings.backup").tap();reveal("backup.now").tap()
+            XCTAssertTrue(element("backup.folderOK").waitForExistence(timeout:20));try shot("backup-folder-ok"+mode)
+        }
+        launch(extra:["-backupFolderFixture","/nonexistent/birdcm"]);reveal("home.more").tap();reveal("settings.backup").tap();reveal("backup.now").tap()
+        XCTAssertTrue(element("backup.folderError").waitForExistence(timeout:20));try shot("backup-folder-error")
+        launch();reveal("home.more").tap();reveal("settings.backup").tap();reveal("backup.chooseFolder");try shot("backup-folder-off")
+    }
+    /// The last row of each scrolling root can be brought fully above the floating tab bar.
+    func testLastRowsClearTabBar() throws {
+        launch(extra:["-historyFixtureCount","8"]);pick();back()
+        tab("tab.explore","探索");segment("全部物种")
+        let more=element("explore.more");for _ in 0..<40 where !(more.exists && more.isHittable && clear(more,"explore.more")) {app.swipeUp()}
+        XCTAssertTrue(more.isHittable && clear(more,"explore.more"));try shot("explore-last-row")
+        tab("tab.records","记录");segment("照片");let rows=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'"))
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout:5));for _ in 0..<6 {app.swipeUp()}
+        let last=rows.allElementsBoundByIndex.last!;XCTAssertTrue(clear(last,last.identifier));try shot("photos-last-row")
+        tab("tab.stats","统计");XCTAssertTrue(reveal("stats.row.Haliaeetus leucocephalus").exists);try shot("stats-last-row")
+    }
+    /// The installed app shows the K1 icon on the home screen.
+    func testHomeScreenIcon() throws {
+        launch();XCUIDevice.shared.press(.home);sleep(1);try shot("springboard-first")
+        let spring=XCUIApplication(bundleIdentifier:"com.apple.springboard"),icon=spring.icons.matching(NSPredicate(format:"label CONTAINS '观羽' OR identifier CONTAINS '观羽'")).firstMatch
+        for _ in 0..<6 where !(icon.exists && icon.isHittable) {spring.swipeLeft();sleep(1)}
+        XCTAssertTrue(icon.isHittable);try shot("springboard-icon")
+    }
     func testAlaskaRowAtLargestType() throws {
         launch(extra:["-largestType","YES"]);reveal("home.place").tap();sleep(1);try shot("alaska-sheet-largest");search("Alaska")
         let row=element("place.region.US-AK");XCTAssertTrue(row.waitForExistence(timeout:5));XCTAssertTrue(row.isHittable);try shot("alaska-largest");row.tap()

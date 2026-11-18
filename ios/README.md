@@ -103,3 +103,5 @@ Python 参考已重新生成：`tools/regenerate_crop_references.py ../BirdCM` �
 识别 / 记录 / 统计 / 探索 四个标签页各有自己的导航；设置是每个首页右上角的齿轮。结果页可“更正鸟种”（离线搜索全部 11,172 种）、改数量、排除主体、改日期和地点；名称、GBIF 稀有度、IUCN 都在显示时按当前资源查。统计口径：同一鸟种 × 同一天 × 同一地点格 = 一次观察，估计数量取单张最大值。备份是一个 `.birdcm` SQLite 文件（含原图），通过“文件”导出 / 导入，合并或替换。
 
 Debug 启动参数：`-legacyFixture N`（启动前写一个旧格式历史，测迁移）、`-maskFixture success|none|unsupported`、`-cameraFixture YES`、`-historyFixtureCount N`（不同字节、日期、鸟种）。与规格的出入见 `docs/deviations.md` 第 43 条起。
+
+应用图标与首页小标识是本项目原创的翠鸟图形 “K1”（`BirdCM/Assets.xcassets`，源文件 `design/icon/*.svg`），随项目以 MIT 许可发布。

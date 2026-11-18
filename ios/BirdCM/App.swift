@@ -152,6 +152,10 @@ func title(_ r: Identification) -> String {
     func openLibrary(_ dir:URL) {
         do {
             let library=try Library(dir:dir);self.library=library
+            #if DEBUG
+            let seed=UserDefaults.standard.integer(forKey:"seedSynthetic")
+            if seed>0,!library.needsMigration,(try? library.query("SELECT count(*) FROM ll_record").first?.n(0)) == 0 {try library.seedSynthetic(seed,species:Array(catalogue.all.prefix(800).map(\.sci)))}
+            #endif
             if library.needsMigration {migration=0;Task{await migrate()}} else {refresh()}
         } catch {libraryError=String(localized:"无法打开本机记录：\(error.localizedDescription)。旧文件未改动。")}
     }
@@ -346,6 +350,7 @@ func title(_ r: Identification) -> String {
 /// Four native tabs, each with its own NavigationStack; settings is a gear sheet on every root (§6).
 struct RootView: View {
     @Environment(AppModel.self) var model
+    @Environment(\.scenePhase) private var phase
     func stack<V:View>(_ t:AppModel.Tab,@ViewBuilder _ root:()->V) -> some View {
         NavigationStack(path:Binding(get:{model.paths[t] ?? []},set:{model.paths[t]=$0})) {
             root().navigationDestination(for:AppModel.Route.self) {route in
@@ -373,6 +378,7 @@ struct RootView: View {
         }
         .background(Palette.paper)
         .sheet(isPresented:$model.settings) {SettingsView().debugAppearance()}
+        .onChange(of:phase) {_,p in if p == .active && model.migration == nil {Task{await FolderBackup.shared.runIfDue(model.library)}}}
         .sheet(isPresented:$model.needsPlace) {
             NavigationStack {VStack(alignment:.leading,spacing:20) {
                 Text("这张照片没有位置").font(.title2.bold())
@@ -433,7 +439,7 @@ struct IdentifyView: View {
     }
     var body: some View {
         List {
-            HStack(spacing:10) {Image(systemName:"bird.fill").font(.title2);Text("观羽 · 留住每一次相遇").font(.headline)}.foregroundStyle(Palette.green).listRowBackground(Color.clear)
+            HStack(spacing:10) {Image("Mark").resizable().scaledToFit().frame(width:32,height:32).clipShape(RoundedRectangle(cornerRadius:8)).accessibilityHidden(true);Text("观羽 · 留住每一次相遇").font(.headline)}.foregroundStyle(Palette.green).listRowBackground(Color.clear)
             Section {
                 VStack(alignment:.leading,spacing:12) {
                     Button {place=true} label: {

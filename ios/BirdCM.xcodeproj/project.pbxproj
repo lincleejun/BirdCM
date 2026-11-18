@@ -10,7 +10,9 @@
 		002A5BCB61E66B6F597F8046 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = B39535F38A0EE6F535D65138 /* NOTICE.md */; };
 		01B8A5B33EB0B27CA9B1C798 /* DisplayCrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */; };
 		05F9F7DD0B7AFB16A33E9B03 /* PhotoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8171929D21E7139FA08AF9 /* PhotoView.swift */; };
+		130E9932A5461B7185438C94 /* Stats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006A90032792584A5C2E4B49 /* Stats.swift */; };
 		15546CD4D65177012FF3971F /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6605517F489279F1009821D1 /* Settings.swift */; };
+		16B3D2B0A4085940E4C15BF2 /* EBird.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD30D915D433AD16AEB6EEA9 /* EBird.swift */; };
 		1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */; };
 		219F6C9B1226AC94AA191468 /* Place.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33AB76EF2ADB0CA492710D4A /* Place.swift */; };
 		2A828C1B4B1B72E430198DBA /* clear.json in Resources */ = {isa = PBXBuildFile; fileRef = F388947B5CEEA82620053E9B /* clear.json */; };
@@ -22,10 +24,12 @@
 		448BEEC9B2253191DCEE8565 /* LogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 344DA05F98C2FC721F554253 /* LogicTests.swift */; };
 		48A3DB107D7508B725F231C3 /* clear-training-photos.csv in Resources */ = {isa = PBXBuildFile; fileRef = BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */; };
 		4AE835BD873625AE826C0984 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */; };
+		4D287CAB90BFA983FAB7C7CA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 162A9647DADBC21DA38EAD0F /* Assets.xcassets */; };
 		4D3A0085C128E671C59E9CE3 /* Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */; };
 		52C02BC4B5CC59F2DBC86330 /* Records.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BD3BF22BB3F1AF7E920435 /* Records.swift */; };
 		5884EBDF66602F9226603C85 /* BirdPager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29FC5D8A8FA3896A6DF55FD1 /* BirdPager.swift */; };
 		5C513C60DD11A76149B503AC /* avilist-birdnet-geo3.json in Resources */ = {isa = PBXBuildFile; fileRef = 6613809CF4E907E63588615B /* avilist-birdnet-geo3.json */; };
+		68068F73FAC5F4BD355471E1 /* ebird-names.csv in Resources */ = {isa = PBXBuildFile; fileRef = 9844DA70F8616A0E09609DED /* ebird-names.csv */; };
 		6BEEC576DBB6E08C0C197812 /* Models in Resources */ = {isa = PBXBuildFile; fileRef = 9333FC17867E9236B15D2411 /* Models */; };
 		6E1226DC86BB39731230074A /* Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D329C1F374D5F15D27B885 /* Preview.swift */; };
 		6FA29A78786B99C6B9D4CA9B /* Confirm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1D2B2A7FD7945E0008A5D9 /* Confirm.swift */; };
@@ -45,6 +49,7 @@
 		A6EB614994406B46D67E7059 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5E173523A2A0C66AEEDC6C66 /* PrivacyInfo.xcprivacy */; };
 		ABD2528274041DD945C9663D /* ResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82CDA918FD5F9D910F73E852 /* ResultView.swift */; };
 		C16F865DA367A307655882DF /* Geo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51DFFBE6B207DECEEA343EA0 /* Geo.swift */; };
+		C875DFDF27ADB1A66DECF4C6 /* Explore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B70D6E1935812D02FE9A6A /* Explore.swift */; };
 		C9EFAEFDE332676B38697CEC /* CLEAR-WEIGHTS-LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = 99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */; };
 		E7657A47BD69A3AFD48CF814 /* DisplayCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */; };
 		F87B6A3F0197E0A46960A68B /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931CDAA415795FBEA2C6BAEE /* AboutView.swift */; };
@@ -71,12 +76,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		006A90032792584A5C2E4B49 /* Stats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stats.swift; sourceTree = "<group>"; };
 		0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		09BD3BF22BB3F1AF7E920435 /* Records.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Records.swift; sourceTree = "<group>"; };
 		0D8171929D21E7139FA08AF9 /* PhotoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoView.swift; sourceTree = "<group>"; };
 		0F2DD46E893FADFFFFADB08A /* Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Engine.swift; sourceTree = "<group>"; };
 		141B9603148CE498F6E8E80F /* Pixels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pixels.swift; sourceTree = "<group>"; };
 		141CE94CEBAFCE6C069382E5 /* regions.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = regions.json; sourceTree = "<group>"; };
+		162A9647DADBC21DA38EAD0F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		19B70D6E1935812D02FE9A6A /* Explore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Explore.swift; sourceTree = "<group>"; };
 		1EA75BE835A9655F80493366 /* geo-graph.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "geo-graph.json"; sourceTree = "<group>"; };
 		20D8D66AF2EC535FFE72EE59 /* zh-names.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "zh-names.json"; sourceTree = "<group>"; };
 		28FFB8922A99A3057BEDFEC9 /* boundaries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = boundaries.json; sourceTree = "<group>"; };
@@ -102,6 +110,7 @@
 		931CDAA415795FBEA2C6BAEE /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		9333FC17867E9236B15D2411 /* Models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Models; sourceTree = SOURCE_ROOT; };
 		96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
+		9844DA70F8616A0E09609DED /* ebird-names.csv */ = {isa = PBXFileReference; path = "ebird-names.csv"; sourceTree = "<group>"; };
 		99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "CLEAR-WEIGHTS-LICENSE.md"; sourceTree = "<group>"; };
 		A0CF7E248E2F161C963C6FE2 /* Flows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Flows.swift; sourceTree = "<group>"; };
 		A10C1720395468417D71FB48 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
@@ -110,6 +119,7 @@
 		BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */ = {isa = PBXFileReference; path = "clear-training-photos.csv"; sourceTree = "<group>"; };
 		C064BA2F801B919462B1F37A /* Rarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rarity.swift; sourceTree = "<group>"; };
 		C8D7DD89DAFCEA3EDEE2505E /* Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library.swift; sourceTree = "<group>"; };
+		CD30D915D433AD16AEB6EEA9 /* EBird.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EBird.swift; sourceTree = "<group>"; };
 		DB2F58A4B3E992DA5D3423A1 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Fixtures; path = Tests/Fixtures; sourceTree = SOURCE_ROOT; };
 		E23C9CA7E9EBF3F47CC033A2 /* Ledger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ledger.swift; sourceTree = "<group>"; };
 		F388947B5CEEA82620053E9B /* clear.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = clear.json; sourceTree = "<group>"; };
@@ -188,12 +198,15 @@
 			children = (
 				931CDAA415795FBEA2C6BAEE /* AboutView.swift */,
 				5ECB21C7959391EEFA7F91E4 /* App.swift */,
+				162A9647DADBC21DA38EAD0F /* Assets.xcassets */,
 				29FC5D8A8FA3896A6DF55FD1 /* BirdPager.swift */,
 				4E1D2B2A7FD7945E0008A5D9 /* Confirm.swift */,
 				96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */,
 				85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */,
+				CD30D915D433AD16AEB6EEA9 /* EBird.swift */,
 				92B10BE62A6B849B9592A5B4 /* Editors.swift */,
 				0F2DD46E893FADFFFFADB08A /* Engine.swift */,
+				19B70D6E1935812D02FE9A6A /* Explore.swift */,
 				51DFFBE6B207DECEEA343EA0 /* Geo.swift */,
 				92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */,
 				E23C9CA7E9EBF3F47CC033A2 /* Ledger.swift */,
@@ -206,6 +219,7 @@
 				09BD3BF22BB3F1AF7E920435 /* Records.swift */,
 				82CDA918FD5F9D910F73E852 /* ResultView.swift */,
 				6605517F489279F1009821D1 /* Settings.swift */,
+				006A90032792584A5C2E4B49 /* Stats.swift */,
 				A10C1720395468417D71FB48 /* Store.swift */,
 			);
 			path = BirdCM;
@@ -220,6 +234,7 @@
 				99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */,
 				F388947B5CEEA82620053E9B /* clear.json */,
 				5D252954BF27BD52A11F848B /* countries.json */,
+				9844DA70F8616A0E09609DED /* ebird-names.csv */,
 				1EA75BE835A9655F80493366 /* geo-graph.json */,
 				0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */,
 				B39535F38A0EE6F535D65138 /* NOTICE.md */,
@@ -343,6 +358,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4D287CAB90BFA983FAB7C7CA /* Assets.xcassets in Resources */,
 				C9EFAEFDE332676B38697CEC /* CLEAR-WEIGHTS-LICENSE.md in Resources */,
 				4AE835BD873625AE826C0984 /* Localizable.xcstrings in Resources */,
 				6BEEC576DBB6E08C0C197812 /* Models in Resources */,
@@ -353,6 +369,7 @@
 				48A3DB107D7508B725F231C3 /* clear-training-photos.csv in Resources */,
 				2A828C1B4B1B72E430198DBA /* clear.json in Resources */,
 				8B4B9C1583288BFD30E1F955 /* countries.json in Resources */,
+				68068F73FAC5F4BD355471E1 /* ebird-names.csv in Resources */,
 				7F0D5FE2F4D44840B52C6B44 /* geo-graph.json in Resources */,
 				3DFE8B3E5A4DE25D7CEAB691 /* region-grid.json in Resources */,
 				F94FC0B9917A5CB44B008CB7 /* regions.json in Resources */,
@@ -411,8 +428,10 @@
 				6FA29A78786B99C6B9D4CA9B /* Confirm.swift in Sources */,
 				4D3A0085C128E671C59E9CE3 /* Diagnostics.swift in Sources */,
 				01B8A5B33EB0B27CA9B1C798 /* DisplayCrop.swift in Sources */,
+				16B3D2B0A4085940E4C15BF2 /* EBird.swift in Sources */,
 				FE92CFE9F908780B7E494990 /* Editors.swift in Sources */,
 				94CFDE3C28EFF1BE3BAA7FB7 /* Engine.swift in Sources */,
+				C875DFDF27ADB1A66DECF4C6 /* Explore.swift in Sources */,
 				C16F865DA367A307655882DF /* Geo.swift in Sources */,
 				1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */,
 				74B6224118FFCFA12AD9BCDF /* Ledger.swift in Sources */,
@@ -425,6 +444,7 @@
 				52C02BC4B5CC59F2DBC86330 /* Records.swift in Sources */,
 				ABD2528274041DD945C9663D /* ResultView.swift in Sources */,
 				15546CD4D65177012FF3971F /* Settings.swift in Sources */,
+				130E9932A5461B7185438C94 /* Stats.swift in Sources */,
 				6FC871F322521BAF2703D17A /* Store.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -570,7 +590,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				BIRDCM_BUNDLE_IUCN = 1;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "观羽";
@@ -632,7 +652,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				BIRDCM_BUNDLE_IUCN = 1;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "观羽";
