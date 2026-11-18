@@ -30,8 +30,9 @@ export interface Region {
   name: string | null; source: "photo" | "scan" | null; gps: [number, number] | null;
   prior?: { lat: number; lon: number; source: "photo" | "map" | "device" | "region"; week: number | null } | null;
 }
-export interface Place { lat: number; lon: number; label: string; source: "map" | "device" | "region" }
-export interface Rarity { tier: number | null; label: string; iucn: string | null; region: string | null }
+export interface Place { lat: number; lon: number; label: string; source: "map" | "device" | "region"; code?: string }   // code: ISO 3166 of a chosen region
+export interface Rarity { tier: number | null; label: string; iucn: string | null; region: string | null;
+  coverage?: "tiered" | "country" | "数据不足" | null; note?: string | null }        // note: 按全国数据估计
 
 export interface PhotoResult {
   file: string; width: number; height: number; orientation: number; source: string;

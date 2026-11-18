@@ -6,7 +6,7 @@ import type { Place } from "./types";
 // control: the device's location, a pin on a map, or a country / first-level division (its representative point).
 // Photo GPS, when a photo has it, always wins per photo (engine side); this is the fallback for the rest.
 
-export interface Country { code: string; zh: string; en: string; lat: number; lon: number; regions: { zh: string; en?: string; lat: number; lon: number }[] }
+export interface Country { code: string; zh: string; en: string; lat: number; lon: number; regions: { zh: string; en?: string; code?: string; lat: number; lon: number }[] }
 const KEY = "birdcm.place";
 const SOURCE: Record<Place["source"], string> = { map: "地图选点", device: "本机定位", region: "地区中心点" };
 
@@ -91,7 +91,9 @@ export default function LocationPicker({ value, onChange, catalogue, compact = f
     const cc = catalogue.find((x) => x.code === code);
     if (!cc) return;
     const r = cc.regions.find((x) => x.zh === sub);
-    set(r ? { lat: r.lat, lon: r.lon, label: `${cc.zh} · ${r.zh}`, source: "region" } : { lat: cc.lat, lon: cc.lon, label: cc.zh, source: "region" });
+    // the ISO 3166 code is what the rarity table and the life list key a chosen region by; the point is only the prior's
+    set(r ? { lat: r.lat, lon: r.lon, label: `${cc.zh} · ${r.zh}`, source: "region", code: r.code || undefined }
+      : { lat: cc.lat, lon: cc.lon, label: cc.zh, source: "region", code: cc.code });
   };
   const choosing = !value || editing;
 

@@ -25,7 +25,7 @@ from PIL import Image
 import numpy as np
 
 from birdcm import config, confirm, decode, geo, geometry, models
-from birdcm.rarity import Rarity
+from birdcm import rarity as rarity_mod
 from birdcm.result import PhotoResult
 from birdcm.sharpness import head_sharpness
 
@@ -116,7 +116,7 @@ class Engine:
                            clear=str(p["clear"]) if "clear" in p else None,           # optional files: models.OPTIONAL_EFFECT
                            aesthetic=str(p["aesthetic"]) if "aesthetic" in p else None)
         self.geo = geo.Geo(str(p["geo"]), self.tower.sci)
-        self.rarity = Rarity(str(p["rarity"])) if "rarity" in p else None
+        self.rarity = rarity_mod.table()                # the global table when installed, else US / CA / CN
         self.exif, self._own_exif = exif or decode.ExifTool(), exif is None
         self.workers, self.det_batch, self.tower_batch, self.mode = workers, det_batch, tower_batch, mode
         self.stats: dict[str, float] = {}
@@ -385,7 +385,7 @@ def rarity_for(table, species: dict | None, r: dict) -> dict | None:
     label = reg.get("name") if pr.get("source") in (None, "region") else None
     taken = (r.get("exif") or {}).get("taken_at") or ""
     month = int(taken[5:7]) if len(taken) >= 7 and taken[5:7].isdigit() else None
-    return table.lookup(species["label"]["sci"], pr.get("lat"), pr.get("lon"), label, month)
+    return table.lookup(species["label"]["sci"], pr.get("lat"), pr.get("lon"), label, month, reg.get("code") if label else None)
 
 
 def _err(e: Exception) -> str:
@@ -440,6 +440,7 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         "file": os.path.basename(it["path"]), "width": W, "height": H, "orientation": d["orientation"],
         "source": d["source"], "exif": ex,
         "region": {"name": region.get("label") if isinstance(region, dict) else region,
+                   "code": (region.get("code") if isinstance(region, dict) else None) or rarity_mod.label_iso(geo.location_label(region)),
                    "source": "photo" if ex["gps"] else ("scan" if region else None), "gps": ex["gps"],
                    "prior": {k: where[k] for k in ("lat", "lon", "source", "week")} if where else None},
         "focus": [round(v, 5) for v in focus] if focus else None, "boxes": dets, "subject": subject,

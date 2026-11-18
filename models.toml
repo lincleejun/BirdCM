@@ -5,7 +5,8 @@
 # at revision cfd3195ba4ea9592eec887ded089f4c08eff231d is all defaults plus four values, inlined in detect.py,
 # and the one prompt "a bird" is pre-tokenised there (see docs/deviations.md). Nothing is fetched at run time.
 #
-# The rarity table covers US / CA / CN for now; a global one with the same schema replaces it later.
+# Two rarity tables: the global one (ISO 3166 codes, its own point -> region shapes) replaces the US / CA / CN one when
+# installed; either may be absent. Installing the global table changes the fingerprint: scans made before go stale.
 
 [detector]
 use = "owlv2-int8"
@@ -87,3 +88,14 @@ url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/r
 sha256  = "84ca30397294c2862ea71e657062ff19bc18add8f7468c99fc64696850845592"
 bytes   = 6455296
 license = "GBIF.org record counts (cite GBIF.org, accessed 2026-11-17); IUCN Red List categories (terms unclear, can be switched off)"
+
+[[file]]
+name    = "rarity-global.sqlite"
+optional = true   # the app runs without it (see models.OPTIONAL_EFFECT)
+released = false  # not published yet: its url answers 404; put a local copy in BIRDCM_MODEL_DIR or the model cache
+neutral_when_absent = true   # added after v0.1: while absent it does not change the result fingerprint
+role    = "rarity-global"
+url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/rarity-global.sqlite"
+sha256  = "1ca100562673df5d03a476e6531973b17ac9c8c716f93e66cca61c918adbee68"
+bytes   = 34877440
+license = "GBIF.org record counts (cite GBIF.org, accessed 2026-11-18); IUCN Red List categories (terms unclear, can be switched off); Natural Earth 5.1.1 shapes (public domain)"

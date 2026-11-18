@@ -86,6 +86,20 @@ def place_codes(label: str | None) -> tuple[str, str, str]:
     return country["en"], "", country["code"]
 
 
+def point_codes(lat: float, lon: float) -> tuple[str, str, str]:
+    """A point -> (location name in English, state/province code, country code), through the one point -> region
+    mapping (rarity.place_region: the global table's shapes when installed, else the bundled outlines)."""
+    from birdcm import rarity
+    div, country = rarity.place_region(lat, lon)
+    label = rarity.iso_label(div) or rarity.iso_label(country)
+    if label and (not div or rarity.iso_label(div)):
+        return place_codes(label)
+    if not country:
+        return "", "", ""
+    en = (rarity.region_names(div or country) or (div or country,))[0]
+    return (f"{en} {country}" if div else en), (div.split("-", 1)[1] if div else ""), country
+
+
 def _effective(p: dict) -> dict | None:
     """The photo's burst-corrected species when confirmed; a rejected photo counts when its own species is confirmed."""
     r = p.get("result")
@@ -162,17 +176,15 @@ def checklists(photos: list[dict], location, keep: set[str] | None = None) -> li
         if cell[0] == "gps":
             lat = min(89.99999, max(-89.99999, sum(g[0] for _, _, g in items) / len(items)))
             lon = sum(g[1] for _, _, g in items) / len(items)
-            hit = geo.locate(lat, lon)
-            name, state, country = place_codes(hit[1] or hit[0]) if hit else ("", "", "")
+            name, state, country = point_codes(lat, lon)
             name = f"{name} {lat:.4f} {lon:.4f}".strip()
         else:
             lat = lon = None
             name, state, country = place_codes(location_label(location) if src == "region" else label)
             if pt and src != "region":
                 lat, lon = pt[0], pt[1]
-                hit = geo.locate(lat, lon)
-                if hit:
-                    name, state, country = place_codes(hit[1] or hit[0])
+                if (codes := point_codes(lat, lon))[2]:
+                    name, state, country = codes
                 name = f"{name} {lat:.4f} {lon:.4f}".strip()
         out.append({"key": f"{day.isoformat()}|{cell}", "date": day.strftime("%m/%d/%Y"), "start": times[0].strftime("%H:%M"),
                     "minutes": max(1, math.ceil((times[-1] - times[0]).total_seconds() / 60)),
@@ -208,8 +220,84 @@ def record_csv(photos: list[dict], location, species: list[str], counts: dict[st
                    cl["date"], cl["start"], cl["state"], cl["country"], protocol,
                    "1" if protocol == "Stationary" else "", str(min(cl["minutes"], 1439)) if protocol == "Stationary" else "", "N",
                    "", "", f"From BirdCM photo review ({len(cl['photos'])} photos); not a complete count"]
-            lines.append(",".join(clean(v, n) for v, n in zip(row, LIMITS)))
+            lines.append(line(row))
+    return finish(lines)
+
+
+def line(row: list) -> str:
+    """One Record Format row: 19 fields, each cleaned to its Appendix A limit, comma-joined, no quoting."""
+    return ",".join(clean(v, n) for v, n in zip(row, LIMITS))
+
+
+def finish(lines: list[str]) -> str:
+    """LF after every row; refused (never cut) above eBird's 1 MB."""
     text = "\n".join(lines) + ("\n" if lines else "")
     if len(text.encode("utf-8")) > MAX_BYTES:
         raise ValueError("文件超过 eBird 的 1 MB 上限：请少选几种或分几次导出")
     return text
+
+
+LIFELIST_NOTE = "From BirdCM photo review; not a complete count"
+
+
+def lifelist_checklists(ix, frm=None, to=None, species: set[str] | None = None) -> list[dict]:
+    """The life list's checklists: one per (local day, place bucket) of eligible observations (§8.1). A point bucket's
+    coordinates are those of its first evidence (capture wall time, photo hash, subject id); a region or no place has
+    none (eBird's Fix Locations step). Start time = earliest capture wall time on a photo-dated row, else blank."""
+    from birdcm import rarity
+    out: dict[tuple, dict] = {}
+    for g in ix.groups_in(frm, to):
+        if species is not None and g["sci"] not in species:
+            continue
+        cl = out.setdefault((g["day"], g["place_key"]), {"groups": [], "rows": []})
+        cl["groups"].append(g)
+        cl["rows"] += g["rows"]
+    res = []
+    for (day, pk), cl in sorted(out.items()):
+        rows = sorted(cl["rows"], key=lambda r: (r["capture_wall"] or "", r["asset_hash"], r["subject_id"]))
+        first = rows[0]
+        lat = lon = None
+        if first["lat"] is not None:
+            lat, lon = min(89.99999, max(-89.99999, first["lat"])), first["lon"]
+            name, state, country = point_codes(lat, lon)
+            name = f"{name} {lat:.4f} {lon:.4f}".strip()
+        elif first["region_code"]:
+            code = first["region_code"]
+            nm = rarity.region_names(code)
+            name = (nm[0] if nm else code) + (f" {code[:2]}" if "-" in code else "")
+            state, country = (code.split("-", 1)[1] if "-" in code else ""), code[:2]
+        else:
+            name, state, country = "", "", ""
+        timed = [r["capture_wall"] for r in rows if r["date_source"] in ("photo", "user") and r["capture_wall"] and len(r["capture_wall"]) >= 16]
+        y, m, d = day.split("-")
+        res.append({"key": f"{day}|{pk}", "day": day, "place_key": pk, "date": f"{m}/{d}/{y}", "start": min(timed)[11:16] if timed else "",
+                    "name": name or "BirdCM location", "lat": lat, "lon": lon, "state": state, "country": country,
+                    "fallback": any(r["date_source"].startswith("identified") for r in rows), "groups": cl["groups"]})
+    return res
+
+
+def lifelist_csv(ix, frm=None, to=None, species: list[str] | None = None, counts: dict[str, str] | None = None,
+                 use_estimates: bool = False, fallback: str = "refuse") -> str:
+    """The life list as a Record Format file: one row per species per checklist, Incidental, complete N, count X unless
+    estimates are asked for or a count is given (1-999998 or X) per species. fallback: rows whose capture date is the
+    identification date: refuse (ValueError until reviewed) | include | exclude."""
+    names = clements()
+    keep = set(species) if species is not None else None
+    lines = []
+    cls = lifelist_checklists(ix, frm, to, keep)
+    if fallback == "refuse" and any(c["fallback"] for c in cls):
+        raise ValueError("有照片没有拍摄日期（按首次识别日期统计）：请先核对，选择包含或排除这些记录")
+    for cl in cls:
+        if cl["fallback"] and fallback == "exclude":
+            continue
+        for g in sorted(cl["groups"], key=lambda g: g["sci"]):
+            sci = g["sci"]
+            genus, _, epithet = sci.partition(" ")
+            n = (counts or {}).get(sci) or (str(g["estimate"]) if use_estimates else "X")
+            if n.upper() != "X" and not (n.isdigit() and 0 < int(n) < 999999):
+                raise ValueError(f"{sci} 的数量要是 1–999998 的整数或 X")
+            note = LIFELIST_NOTE + ("; capture date missing (identification date used)" if cl["fallback"] else "")
+            lines.append(line([names.get(sci, ("", ""))[0], genus, epithet, "X" if n.upper() == "X" else n, "", cl["name"],
+                               "" if cl["lat"] is None else f"{cl['lat']:.5f}", "" if cl["lon"] is None else f"{cl['lon']:.5f}",
+                               cl["date"], cl["start"], cl["state"], cl["country"], "Incidental", "", "", "N", "", "", note]))
+    return finish(lines)

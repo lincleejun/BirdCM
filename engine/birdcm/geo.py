@@ -129,9 +129,10 @@ def week_of(taken_at: str | None) -> int | None:
 
 
 @lru_cache(maxsize=1)
-def _region_en() -> dict[tuple[str, str], str]:
+def _region_en() -> dict[tuple[str, str], tuple[str, str]]:
+    """(country zh, division zh) -> (English name, ISO 3166-2 code)."""
     with open(REGIONS, newline="", encoding="utf-8") as f:
-        return {(r["country"], r["region"]): r["name_en"] for r in csv.DictReader(f)}
+        return {(r["country"], r["region"]): (r["name_en"], r.get("iso") or "") for r in csv.DictReader(f)}
 
 
 @lru_cache(maxsize=1)
@@ -152,11 +153,14 @@ def countries() -> list[dict]:
 
 
 def catalogue() -> list[dict]:
-    """For the location control: countries (zh, en, point) with their first-level divisions where we have them."""
+    """For the location control: countries (ISO 3166-1 code, zh, en, point) with their first-level divisions (ISO
+    3166-2 code) where we have them."""
     out = []
     for c in countries():
         subs = regions().get(c["zh"], {})
-        out.append({**c, "regions": [{"zh": n, "en": _region_en().get((c["zh"], n), ""), "lat": p[0], "lon": p[1]} for n, p in subs.items()]})
+        out.append({**c, "regions": [{"zh": n, "en": _region_en().get((c["zh"], n), ("", ""))[0],
+                                      "code": _region_en().get((c["zh"], n), ("", ""))[1], "lat": p[0], "lon": p[1]}
+                                     for n, p in subs.items()]})
     return out
 
 
