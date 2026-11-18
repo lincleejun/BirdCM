@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key><string>io.github.lincleejun.birdcm</string>
+	<key>CFBundleName</key><string>观羽</string>
+	<key>CFBundleDisplayName</key><string>观羽</string>
+	<key>CFBundleExecutable</key><string>BirdCM</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>__VERSION__</string>
+	<key>CFBundleVersion</key><string>__VERSION__</string>
+	<key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
+	<key>LSMinimumSystemVersion</key><string>13.0</string>
+	<key>LSUIElement</key><true/>
+	<key>LSApplicationCategoryType</key><string>public.app-category.photography</string>
+	<key>NSHumanReadableCopyright</key><string>观羽 BirdCM · MIT License</string>
+	<key>NSAppleEventsUsageDescription</key><string>观羽用系统对话框让你选择要扫描的照片文件夹。</string>
+	<key>NSRemovableVolumesUsageDescription</key><string>观羽要读取外接磁盘上你选择的照片（只读，不会改动照片）。</string>
+	<key>NSNetworkVolumesUsageDescription</key><string>观羽要读取网络磁盘上你选择的照片（只读，不会改动照片）。</string>
+	<key>NSDesktopFolderUsageDescription</key><string>观羽要读取“桌面”里你选择的照片（只读，不会改动照片）。</string>
+	<key>NSDocumentsFolderUsageDescription</key><string>观羽要读取“文稿”里你选择的照片（只读，不会改动照片）。</string>
+	<key>NSDownloadsFolderUsageDescription</key><string>观羽要读取“下载”里你选择的照片（只读，不会改动照片）。</string>
+</dict>
+</plist>
