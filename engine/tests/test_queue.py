@@ -277,3 +277,17 @@ def test_singles_go_first_at_batch_boundaries(store):
     g = s.submit(lambda e: 1 / 0)
     s.drain()
     assert isinstance(g.exception(timeout=1), ZeroDivisionError)
+
+
+def test_new_scan_of_a_folder_supersedes_the_old_one(store):
+    a = mk(store, 2)
+    other = store.create_scan("/q", False, None, {}, "fp1", files(1, "/q/y"))
+    flat = store.create_scan("/p", True, None, {}, "fp1", files(2))            # same folder but recursive: its own line
+    b = mk(store, 2)
+    listed = store.scans()
+    assert [s["id"] for s in listed] == [b, flat, other]
+    assert listed[0]["previous"] == [a]
+    assert {s["id"] for s in store.scans(every=True)} == {a, other, flat, b}
+    r = store.related(a)
+    assert r["newer"]["id"] == b and r["newer"]["counts"]["total"] == 2 and r["previous"] is None
+    assert store.related(b) == {"newer": None, "previous": a}

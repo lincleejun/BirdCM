@@ -229,15 +229,29 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         return {"id": sid, "photos": len(files)}
 
     @api.get("/api/scans")
-    def list_scans():
-        return store.scans()
+    def list_scans(all: bool = False):
+        return store.scans(every=all)
 
     @api.get("/api/scans/{sid}")
     def snapshot(sid: int):
         snap = store.snapshot(sid)
         if not snap:
             raise HTTPException(404, "没有这个扫描")
-        return snap
+        return {**snap, **store.related(sid), "stale": is_stale(snap["scan"])}
+
+    @api.get("/api/scans/{sid}/related")
+    def related(sid: int):
+        """Light poll for an open results page: is there a newer scan of this folder, how far is it."""
+        s = get_scan(sid)
+        return {**store.related(sid), "stale": is_stale(s)}
+
+    def is_stale(scan: dict) -> bool:
+        """Results computed under another fingerprint than the one this engine would use now (models, rules, data)."""
+        try:
+            want = sched.engine.fingerprint(scan["region"]) if sched.engine else fingerprint(scan["region"])
+        except Exception:  # noqa: BLE001 - no models: nothing to compare with
+            return False
+        return scan.get("fp") not in (None, want) and scan.get("state") == "completed"
 
     @api.get("/api/scans/{sid}/events")
     async def events(sid: int, request: Request, after: int | None = None):

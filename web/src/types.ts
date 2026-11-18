@@ -53,7 +53,7 @@ export interface Counts { queued: number; working: number; done: number; failed:
 export interface Ratio { preset: string; p3: number; p2: number }
 export interface Scan {
   id: number; folder: string; recursive: number; region: string | Place | null; ratio: Ratio; state: ScanState;
-  error: string | null; created_at: number; counts: Counts;
+  error: string | null; created_at: number; counts: Counts; previous?: number[]; fp?: string;
 }
 export interface Snapshot { scan: Scan; photos: PhotoRow[]; cursor: number }
 export interface ModelStatus { ready: boolean; missing: string[]; fetch: string; exiftool: boolean; engine_error: string | null; pending: string[] }

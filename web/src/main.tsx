@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { get, post } from "./api";
 import Results, { STATE_LABEL } from "./Results";
@@ -31,7 +31,10 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
 
   useEffect(() => {
     get<ModelStatus>("/api/models").then(setModels).catch(() => {});
-    get<Scan[]>("/api/scans").then(setScans).catch(() => {});
+    const poll = () => get<Scan[]>("/api/scans").then(setScans).catch(() => {});
+    poll();
+    const t = window.setInterval(poll, 2000);           // scans in progress show live progress here
+    return () => clearInterval(t);
   }, []);
 
   const ratio = ratioOf(preset, c3, c2);
@@ -100,6 +103,8 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
             {scans.slice(0, 6).map((s) => (
               <button key={s.id} onClick={() => onOpen(s.id)}>
                 {s.folder} · {s.counts.total} 张 · {STATE_LABEL[s.state]}
+                {["running", "queued", "stopping", "finalizing"].includes(s.state) && `（已完成 ${s.counts.done + s.counts.failed} / ${s.counts.total}）`}
+                {s.previous?.length ? ` · 之前扫过 ${s.previous.length} 次` : ""}
               </button>
             ))}
           </div>
@@ -122,11 +127,11 @@ function App() {
   const [view, setView] = useState<"batch" | "single">(q.get("view") === "single" ? "single" : "batch");
   const [catalogue, setCatalogue] = useState<Country[]>([]);
   useEffect(() => { get<Country[]>("/api/regions").then(setCatalogue).catch(() => {}); }, []);
-  const open = (id: number | null) => {
+  const open = useCallback((id: number | null) => {
     history.replaceState(null, "", id ? `?scan=${id}` : location.pathname);
     setScanId(id);
     window.scrollTo(0, 0);
-  };
+  }, []);
   const switchTo = (v: "batch" | "single") => {
     history.replaceState(null, "", v === "single" ? "?view=single" : scanId ? `?scan=${scanId}` : location.pathname);
     setView(v);
@@ -143,7 +148,7 @@ function App() {
         </div>
       </header>
       <main>{view === "single" ? <Singles catalogue={catalogue} />
-        : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} /> : <Setup onOpen={open} catalogue={catalogue} />}</main>
+        : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} onOpen={open} catalogue={catalogue} /> : <Setup onOpen={open} catalogue={catalogue} />}</main>
     </>
   );
 }

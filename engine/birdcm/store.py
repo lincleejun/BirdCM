@@ -129,16 +129,41 @@ class Store:
             return sid
         return self._write(go)
 
-    def scans(self) -> list[dict]:
+    def scans(self, every: bool = False) -> list[dict]:
+        """Newest first. One folder, one current result: a scan of the same folder (and recursive flag) supersedes the
+        older ones, which are listed under it as `previous` (ids, newest first) and left out unless every=True."""
         db = self._db()
-        out = []
-        for r in db.execute("SELECT id, folder, recursive, region, ratio, state, error, created_at FROM scan ORDER BY id DESC"):
+        out, seen = [], {}
+        for r in db.execute("SELECT id, folder, recursive, region, ratio, fp, state, error, created_at FROM scan ORDER BY id DESC"):
             d = dict(r)
             d["ratio"] = json.loads(d["ratio"])
             d["region"] = location(d["region"])
+            key = (d["folder"], d["recursive"])
+            if key in seen:
+                seen[key]["previous"].append(d["id"])
+                if not every:
+                    continue
+            else:
+                d["previous"] = []
+                seen[key] = d
             d["counts"] = self._counts(db, r["id"])
             out.append(d)
         return out
+
+    def related(self, scan_id: int) -> dict:
+        """The newest scan of the same folder when it is newer than this one (else None), and the scan just before it."""
+        db = self._db()
+        s = db.execute("SELECT folder, recursive FROM scan WHERE id = ?", (scan_id,)).fetchone()
+        if not s:
+            return {"newer": None, "previous": None}
+        ids = [r[0] for r in db.execute("SELECT id FROM scan WHERE folder = ? AND recursive = ? ORDER BY id DESC", (s[0], s[1]))]
+        newer = ids[0] if ids and ids[0] != scan_id else None
+        prev = next((i for i in ids if i < scan_id), None)
+        info = None
+        if newer:
+            st = db.execute("SELECT state FROM scan WHERE id = ?", (newer,)).fetchone()[0]
+            info = {"id": newer, "state": st, "counts": self._counts(db, newer)}
+        return {"newer": info, "previous": prev}
 
     def scan(self, scan_id: int) -> dict | None:
         r = self._db().execute("SELECT * FROM scan WHERE id = ?", (scan_id,)).fetchone()

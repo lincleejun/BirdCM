@@ -1,8 +1,8 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post } from "./api";
-import { placeText } from "./Location";
+import LocationPicker, { type Country, placeText } from "./Location";
 import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks } from "./names";
-import type { Exif, PhotoResult, PhotoRow, Scan, Snapshot } from "./types";
+import type { Exif, PhotoResult, PhotoRow, Place, Scan, Snapshot } from "./types";
 
 export const STATE_LABEL: Record<string, string> = { queued: "排队中", running: "扫描中", stopping: "正在停止", paused: "已停止",
   finalizing: "正在汇总", completed: "已完成", failed: "出错已停" };
@@ -125,7 +125,9 @@ function csv(rows: ReturnType<typeof exportRow>[]): string {
 }
 
 // ---------- the view ----------
-export default function Results({ scanId, onBack }: { scanId: number; onBack: () => void }) {
+interface Related { newer: { id: number; state: Scan["state"]; counts: Scan["counts"] } | null; previous: number | null; stale: boolean }
+
+export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId: number; onBack: () => void; onOpen: (id: number) => void; catalogue: Country[] }) {
   const [scan, setScan] = useState<Scan | null>(null);
   const [raw, setPhotos] = useState<PhotoRow[]>([]);
   // what the page shows: a burst's majority species replaces a frame's own (kept as species_own) when stars.py says so
@@ -179,6 +181,33 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
     return () => { dead = true; es?.close(); if (flushTimer.current) clearTimeout(flushTimer.current); };
   }, [scanId, load]);
 
+  // a newer scan of this folder (re-scan): poll lightly, banner at once, switch when the person is not busy here
+  const [rel, setRel] = useState<Related>({ newer: null, previous: null, stale: false });
+  const lastTouch = useRef(Date.now());
+  useEffect(() => {
+    const touch = () => { lastTouch.current = Date.now(); };
+    window.addEventListener("pointerdown", touch);
+    window.addEventListener("keydown", touch);
+    let dead = false;
+    const poll = () => get<Related>(`/api/scans/${scanId}/related`).then((r) => {
+      if (dead) return;
+      setRel(r);
+      if (r.newer && Date.now() - lastTouch.current > 6000 && !document.querySelector("dialog[open]")) onOpen(r.newer.id);
+    }).catch(() => {});
+    poll();
+    const t = window.setInterval(poll, 3000);
+    return () => { dead = true; clearInterval(t); window.removeEventListener("pointerdown", touch); window.removeEventListener("keydown", touch); };
+  }, [scanId, onOpen]);
+
+  // what changed against the previous scan of this folder (shown once this one is complete)
+  const [prevRows, setPrevRows] = useState<Map<string, PhotoRow> | null>(null);
+  useEffect(() => {
+    if (!rel.previous || scan?.state !== "completed") return;
+    get<Snapshot>(`/api/scans/${rel.previous}`).then((s) => setPrevRows(new Map(s.photos.map((p) => [p.path, withFix(p)])))).catch(() => {});
+  }, [rel.previous, scan?.state]);
+  const [onlyIds, setOnlyIds] = useState<{ ids: Set<number>; label: string } | null>(null);
+  const [rescanOpen, setRescanOpen] = useState(false);
+
   const phase: Phase = scan?.state === "completed" ? "complete" : scan && ["paused", "failed"].includes(scan.state) ? "paused" : "scanning";
   const complete = phase === "complete";
   const starsReady = complete && photos.some((p) => p.stars !== null);   // also true for a batch that is all 淘汰
@@ -212,6 +241,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
   const view = useMemo(() => {
     const usesResults = fsp || ffly !== "all" || frar !== "0";
     const v = photos.filter((p) => {
+      if (onlyIds) return onlyIds.ids.has(p.id);
       if (groupOnly !== null) return p.burst_group === groupOnly;
       if (starsReady && fs !== "all" && p.stars !== +fs) return false;
       if (!usesResults) return true;
@@ -234,7 +264,7 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
     // finished photos first in the chosen order; the ones still waiting stay behind them in queue order
     v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp[sort](a, b) : a.seq - b.seq));
     return v;
-  }, [photos, fs, fsp, ffly, frar, sort, starsReady, groupOnly]);
+  }, [photos, fs, fsp, ffly, frar, sort, starsReady, groupOnly, onlyIds]);
 
   // a photo picked from the burst strip may be outside the filtered list: it is still the one shown
   const current = view.find((p) => p.id === selected) ?? (selected !== null ? photos.find((p) => p.id === selected) : undefined) ?? view[0] ?? null;
@@ -297,15 +327,48 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
     : scan.state === "stopping" ? " · 这一批做完就停" : scan.state === "queued" ? " · 等前一个扫描完成" : scan.state === "finalizing" ? " · 分连拍组" : " · 找鸟、认种、看眼睛和姿态";
   const date = photos.find((p) => p.result?.exif.taken_at)?.result?.exif.taken_at;
 
+  const key = (p: PhotoRow) => { const r = p.result, sp = r?.species; return !r || r.rejected || !sp ? "x" : `${sp.level}:${sp.label?.sci ?? ""}`; };
+  const changes = complete && prevRows ? (() => {
+    const changed: number[] = [], vague: number[] = [], fixed: number[] = [];
+    for (const p of photos) {
+      const old = prevRows.get(p.path);
+      if (old && key(old) !== key(p)) {
+        changed.push(p.id);
+        if (p.result?.species && p.result.species.level !== "species" && !p.result.rejected) vague.push(p.id);
+      }
+      if (p.species_fix) fixed.push(p.id);
+    }
+    return { changed, vague, fixed };
+  })() : null;
+
   return (
     <section id="s-res" data-phase={phase} aria-labelledby="h-res">
+      {rel.newer && (
+        <div className="banner" role="status">
+          {rel.newer.state === "completed" ? "这个文件夹已经重新扫描完了" : `这个文件夹正在重新扫描（已完成 ${rel.newer.counts.done + rel.newer.counts.failed} / ${rel.newer.counts.total}）`}
+          {" · "}<button className="btn link" onClick={() => onOpen(rel.newer!.id)}>查看新结果</button>
+          <span className="hint">（几秒钟没有操作就会自动切过去）</span>
+        </div>
+      )}
       <div className="topbar">
         <div><h2 id="h-res" tabIndex={-1}>审片结果</h2>
           <span className="sub">{placeText(scan.region)}{date ? ` · ${date.slice(0, 10)}` : ""}{scan.recursive ? " · 包含子文件夹" : ""} · {scan.folder}</span></div>
         <div className="row"><button className="btn link" onClick={onBack}>换一批</button>
+          <button className="btn" onClick={() => setRescanOpen(true)}>重新扫描</button>
           <button className="btn primary" disabled={!complete} onClick={() => exportRef.current?.showModal()}>导出</button></div>
       </div>
 
+      {rel.stale && !rel.newer && (
+        <p className="stale">这些结果是旧版本算的（模型、地点修正或规则变过） · <button className="btn link" onClick={() => setRescanOpen(true)}>重新扫描</button></p>
+      )}
+      {changes && (
+        <p className="changes">和上一次扫描比：
+          <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.changed), label: "鸟种有变化的" })}>{changes.changed.length} 张鸟种变了</button>，
+          其中 <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.vague), label: "变成不确定 / 只到属的" })}>{changes.vague.length} 张变成不确定或只到属</button>；
+          <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.fixed), label: "按连拍组修正的" })}>{changes.fixed.length} 张按连拍组修正</button>
+        </p>
+      )}
+      {rescanOpen && <Rescan scan={scan} catalogue={catalogue} onClose={() => setRescanOpen(false)} onStarted={(id) => { setRescanOpen(false); onOpen(id); }} />}
       <div className="scan-status">
         <p><span id="scan-copy" role="status">{copy}</span><span>{stepText}</span></p>
         {!complete && scan.state !== "finalizing" && (
@@ -358,6 +421,9 @@ export default function Results({ scanId, onBack }: { scanId: number; onBack: ()
             <option value="eye">头部清晰的在前</option>
           </select>
         </label>
+        {onlyIds && (
+          <span className="chip">只看{onlyIds.label}（{onlyIds.ids.size}）<button type="button" aria-label="清除这个筛选" onClick={() => setOnlyIds(null)}>×</button></span>
+        )}
         {groupOnly !== null && (
           <span className="chip">只看第 {groupOnly} 组连拍<button type="button" aria-label="清除：不再只看这一组" onClick={() => {
             setGroupOnly(null);
@@ -524,3 +590,41 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
     </aside>
   );
 });
+
+const PRESETS: [string, string, number, number][] = [["loose", "宽松", 40, 30], ["std", "标准", 30, 30], ["strict", "严格", 20, 30], ["stricter", "更严", 10, 20]];
+
+/** 重新扫描: the same folder, with the location and ratio prefilled and changeable. */
+function Rescan({ scan, catalogue, onClose, onStarted }: { scan: Scan; catalogue: Country[]; onClose: () => void; onStarted: (id: number) => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const start = typeof scan.region === "object" && scan.region ? scan.region
+    : (() => { const label = scan.region as string | null; if (!label) return null;
+      const [cz, sub] = label.split(" · "); const c = catalogue.find((x) => x.zh === cz); const r = c?.regions.find((x) => x.zh === sub);
+      return c ? { lat: (r ?? c).lat, lon: (r ?? c).lon, label, source: "region" as const } : null; })();
+  const [place, setPlace] = useState<Place | null>(start);
+  const [preset, setPreset] = useState(scan.ratio?.preset ?? "std");
+  const [err, setErr] = useState("");
+  useEffect(() => { ref.current?.showModal(); }, []);
+  const go = async () => {
+    const pr = PRESETS.find((x) => x[0] === preset);
+    const ratio = pr ? { preset, p3: pr[2], p2: pr[3] } : scan.ratio;
+    try {
+      const r = await post<{ id: number }>("/api/scans", { folder: scan.folder, recursive: !!scan.recursive, region: place, ratio });
+      onStarted(r.id);
+    } catch (e) { setErr(String((e as Error).message)); }
+  };
+  return (
+    <dialog ref={ref} onClose={onClose} aria-labelledby="rs-title" style={{ maxWidth: 640 }}>
+      <div className="dlg-head"><h3 id="rs-title">重新扫描这个文件夹</h3><button className="btn" onClick={() => ref.current?.close()}>取消</button></div>
+      <div className="dlg-body">
+        <p className="hint">{scan.folder}{scan.recursive ? " · 包含子文件夹" : ""}。新结果会替代这一次的；没变的照片会直接复用。</p>
+        <div className="field"><span className="label">拍摄地点</span><LocationPicker value={place} onChange={setPlace} catalogue={catalogue} /></div>
+        <div className="field"><span className="label">留片比例</span>
+          <div className="seg" role="radiogroup" aria-label="留片比例">
+            {PRESETS.map(([v, t]) => <label key={v}><input type="radio" name="rs-ratio" checked={preset === v} onChange={() => setPreset(v)} /><span>{t}</span></label>)}
+          </div></div>
+        {err && <p className="error-text">{err}</p>}
+        <button className="btn primary big" onClick={go}>开始重新扫描</button>
+      </div>
+    </dialog>
+  );
+}
