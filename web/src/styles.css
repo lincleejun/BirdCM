@@ -468,17 +468,8 @@ main.res-main { padding-top: 0; }
 .ll-count { margin-top: 6px; }
 .ll-count input { width: 96px; min-height: 36px; }
 .btn.slim { min-height: 36px; padding: 4px 10px; }
-.ll-day { display: inline-grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font-size: 12px; padding: 0; color: var(--ink); }
-.ll-day[data-l="1"] { background: color-mix(in srgb, var(--green) 25%, var(--surface)); }
-.ll-day[data-l="2"] { background: color-mix(in srgb, var(--green) 50%, var(--surface)); }
-.ll-day[data-l="3"] { background: color-mix(in srgb, var(--green) 75%, var(--surface)); color: var(--on-green); }
-.ll-day[data-l="4"] { background: var(--green); color: var(--on-green); }
-.ll-day:disabled { cursor: default; color: var(--muted); }
 .ll-month { display: grid; grid-template-columns: repeat(7, minmax(0, 52px)); gap: 4px; margin-top: 8px; }
 .ll-wd { text-align: center; font-size: 12px; color: var(--muted); }
-.ll-year { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); grid-auto-columns: 13px; gap: 3px; overflow-x: auto; padding: 8px 0; }
-.ll-year .ll-day { width: 13px; height: 13px; border-radius: 2px; }
-.ll-legend i.ll-day { width: 13px; height: 13px; display: inline-block; vertical-align: -2px; }
 .ll-map { height: 420px; }
 .ll-pin span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--green); color: var(--on-green); font: 700 12px/1 var(--sans); border: 2px solid var(--surface); box-shadow: 0 1px 3px #0006; }
 .ll-ev { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
@@ -499,3 +490,23 @@ a.btn { display: inline-flex; align-items: center; color: inherit; text-decorati
 .ll-card { align-content: start; }
 .ll .hint, .ll-places { overflow-wrap: anywhere; }
 .ll-ev select, .ll-ev .row { max-width: 100%; } .ll-ev .loc .row { flex-wrap: wrap; }
+
+/* photo-first calendar */
+.ll-month { grid-template-columns: repeat(7, minmax(0, 112px)); }
+.ll-cal { position: relative; display: block; aspect-ratio: 1; min-width: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; color: var(--muted); }
+.ll-cal.has { cursor: pointer; background: color-mix(in srgb, var(--green) 22%, var(--surface)); color: var(--ink); }
+.ll-cal img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ll-cal-n { position: absolute; left: 5px; top: 3px; font: 600 12px/1.2 var(--mono); }
+.ll-cal.has img ~ .ll-cal-n { color: #fff; text-shadow: 0 1px 2px #000c; }
+.ll-badge { position: absolute; right: 4px; bottom: 4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--green); color: var(--on-green); font: 700 11px/20px var(--sans); text-align: center; }
+.ll-cal-count { position: absolute; inset: 0; display: grid; place-items: center; font: 700 14px/1 var(--sans); }
+.ll-year-tiles { list-style: none; padding: 0; margin: 8px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.ll-year-tiles li { display: grid; gap: 4px; }
+.ll-year-tiles small { color: var(--muted); font-size: 12px; }
+.ll-cal.big .ll-cal-n { font-size: 14px; }
+@media (max-width: 720px) {
+  .ll-month { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+  .ll-year-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .ll-badge { min-width: 16px; height: 16px; font-size: 10px; line-height: 16px; right: 2px; bottom: 2px; }
+}
+.ll-cal:not(.has) { border-color: transparent; background: color-mix(in srgb, var(--surface) 45%, transparent); }

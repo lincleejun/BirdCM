@@ -969,6 +969,42 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                              "name_check": "" if names.get(s, ("", ""))[0] else "not_in_ebird"} for s in sp]}
 
 
+    @api.get("/api/library/crop")
+    def library_crop(kind: str, id: str, subject_id: str, asset_hash: str):
+        """One bird's square crop (calendar covers): cut from the photo's cached preview, cached itself. 404 when
+        the original is not reachable (unmounted volume): the page falls back to the count."""
+        import hashlib
+        ix = lib.index()
+        row = next((x for x in ix.by_hash.get(asset_hash, []) if x["source_kind"] == kind and x["source_id"] == id
+                    and x["subject_id"] == subject_id and x["box_json"]), None)
+        if row is None:
+            raise HTTPException(404, "没有这只鸟")
+        try:
+            if kind == "photo":
+                p = store.photo(int(id))
+                src, size, mtime = p["path"], p["size"], p["mtime_ns"]
+            elif kind == "single":
+                path = stored_path(store.single(int(id)))
+                st = path.stat()
+                src, size, mtime = str(path), st.st_size, st.st_mtime_ns
+            else:
+                rel = import_record(id)["relative_path"]
+                path = lib.imports_dir / Path(rel or "").name
+                st = path.stat()
+                src, size, mtime = str(path), st.st_size, st.st_mtime_ns
+        except (OSError, TypeError, ValueError):
+            raise HTTPException(404, "原图不可用") from None
+        thumb, prev = image_paths(src, size, mtime)
+        out = prev.with_name(prev.stem + "-c" + hashlib.sha1(row["box_json"].encode()).hexdigest()[:10] + ".jpg")
+        if not out.exists():
+            try:
+                if not prev.exists():
+                    previews.make({"path": src, "size": size, "mtime_ns": mtime, "thumb": str(thumb), "preview": str(prev)})
+                library.crop_file(prev, json.loads(row["box_json"]), out)
+            except Exception:  # noqa: BLE001 - not mounted, unreadable: no picture, the count stands
+                raise HTTPException(404, "原图不可用") from None
+        return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
     @api.post("/api/library/ebird")
     def library_ebird(body: LifeEbird):
         from fastapi.responses import Response

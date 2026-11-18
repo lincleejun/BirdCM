@@ -846,11 +846,23 @@ class Index:
         return out
 
     def calendar(self, year: int) -> dict:
-        days = defaultdict(int)
+        """Photo-first calendar (owner, 2026-11-18): per day and per month the observation and species counts and
+        one cover bird (cover_of), so the page shows that day's bird instead of a colour level."""
+        days: dict[str, list] = defaultdict(list)
         for g in self.groups.values():
             if g["day"][:4] == f"{year:04d}":
-                days[g["day"]] += 1
-        return {"year": year, "days": dict(sorted(days.items())), "active_days": len(days),
+                days[g["day"]].append(g)
+
+        def cell(gs):
+            c = cover_of([r for g in gs for r in g["rows"]])
+            return {"observations": len(gs), "species": len({g["sci"] for g in gs}),
+                    "cover": {**ref(c), "crop": crop_url(c), "sci": c["species_key"],
+                              **names_of(c["species_key"])}}
+        months = []
+        for m in range(1, 13):
+            gs = [g for d, x in days.items() if int(d[5:7]) == m for g in x]
+            months.append({"month": m, **(cell(gs) if gs else {"observations": 0, "species": 0, "cover": None})})
+        return {"year": year, "days": {d: cell(gs) for d, gs in sorted(days.items())}, "months": months, "active_days": len(days),
                 "years": sorted({g["day"][:4] for g in self.groups.values()})}
 
     def map(self, s: float, w: float, n: float, e: float, frm=None, to=None, sci=None) -> dict:
@@ -1032,3 +1044,36 @@ def place_text(r: dict) -> str | None:
         name = rarity.iso_label(div) or rarity.iso_label(country) or (rarity.region_names(div or country) or (None, None))[1]
         return f"{name + ' ' if name else ''}{r['lat']:.3f}, {r['lon']:.3f}"
     return r["region_code"]
+
+
+def cover_of(rows: list[dict]) -> dict:
+    """The cover bird of a day / month (shared rule, iOS too): among eligible subjects the latest by local wall time,
+    then photo hash, then subject id (all compared as strings, missing wall time = "")."""
+    return max((r for r in rows if r["eligible"]), key=lambda r: (r["capture_wall"] or "", r["asset_hash"], r["subject_id"]))
+
+
+CROP = 240           # px, square bird crop for calendar cells (cached next to the thumbnails)
+
+
+def crop_file(preview, box, out) -> None:
+    """A square crop around a normalised box (35 % margin, at least 12 % of the frame) from the cached preview."""
+    from PIL import Image
+    with Image.open(preview) as im:
+        w, h = im.size
+        x0, y0, x1, y1 = box
+        side = max((x1 - x0) * w, (y1 - y0) * h) * 1.35
+        side = min(max(side, 0.12 * max(w, h)), min(w, h))
+        cx, cy = (x0 + x1) / 2 * w, (y0 + y1) / 2 * h
+        left = min(max(0, cx - side / 2), w - side)
+        top = min(max(0, cy - side / 2), h - side)
+        c = im.convert("RGB").crop((int(left), int(top), int(left + side), int(top + side))).resize((CROP, CROP), Image.Resampling.LANCZOS)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_suffix(".part")
+        c.save(tmp, "JPEG", quality=85)
+        tmp.replace(out)
+
+
+def crop_url(r: dict) -> str:
+    from urllib.parse import urlencode
+    return "/api/library/crop?" + urlencode({"kind": r["source_kind"], "id": r["source_id"], "subject_id": r["subject_id"],
+                                             "asset_hash": r["asset_hash"]})

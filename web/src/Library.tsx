@@ -306,7 +306,11 @@ function Evidence({ r, catalogue, onClose, onChanged }: { r: Ref; catalogue: Cou
 
 // ---- 统计 ---------------------------------------------------------------------------------------------------------
 export function Stats({ catalogue, onSpecies }: { catalogue: Country[]; onSpecies: (sci: string) => void }) {
-  const [p, setP] = useState<Period>(today);
+  // ?period=year | all | YYYY-MM opens that period (a link to a month / year)
+  const [p, setP] = useState<Period>(() => {
+    const v = new URLSearchParams(location.search).get("period") ?? "", t = today(), m = v.match(/^(\d{4})-(\d{2})$/);
+    return v === "year" || v === "all" ? { ...t, kind: v } : m ? { kind: "month", y: +m[1], m: +m[2] } : t;
+  });
   const rg = range(p);
   const { s, err, reload } = useSummary(rg.from, rg.to);
   const [list, setList] = useState<{ kind: "species" | "obs"; day?: string; rare?: boolean } | null>(null);
@@ -348,7 +352,7 @@ export function Stats({ catalogue, onSpecies }: { catalogue: Country[]; onSpecie
         {list.kind === "species" ? <SpeciesGrid gen={s?.generation} text="" explore={false} sort="recent" onSpecies={onSpecies} from={rg.from} to={rg.to} />
           : <ObsList gen={s?.generation} from={list.day ?? rg.from} to={list.day ?? rg.to} rare={list.rare} onSpecies={onSpecies} onOpen={setOpen} onChanged={reload} />}
       </div>}
-      <Calendar p={p} gen={s?.generation} onDay={(d) => setList({ kind: "obs", day: d })} />
+      <Calendar p={p} gen={s?.generation} onDay={(d) => setList({ kind: "obs", day: d })} onMonth={(y, m) => { setP({ kind: "month", y, m }); setList(null); }} />
       <MapView from={rg.from} to={rg.to} gen={s?.generation} onOpen={setOpen} />
       <DataTools from={rg.from} to={rg.to} gen={s?.generation} onChanged={reload} />
       {open && <Evidence r={open} catalogue={catalogue} onClose={() => setOpen(null)} onChanged={reload} />}
@@ -400,35 +404,46 @@ function ObsList({ gen, from, to, rare, onSpecies, onOpen, onChanged }: {
   );
 }
 
-function Calendar({ p, gen, onDay }: { p: Period; gen?: number; onDay: (d: string) => void }) {
+// Photo-first calendar (owner, 2026-11-18): the day's bird, not a colour level. Cover = the latest eligible bird of
+// the day by wall time, then photo hash, then subject id (engine: library.cover_of); its square crop is cached.
+interface CalCell { observations: number; species: number; cover: (Ref & { crop: string; sci: string; zh: string | null; en: string | null }) | null }
+function CoverCell({ c, text, big }: { c: CalCell; text: string; big?: boolean }) {
+  const [ok, setOk] = useState(true);
+  const name = c.cover ? (c.cover.zh || c.cover.en || c.cover.sci) : "";
+  return ok && c.cover ? <><img src={c.cover.crop} alt={`${name}${c.species > 1 ? ` 等 ${c.species} 种` : ""}`} loading="lazy" onError={() => setOk(false)} />
+    {!big && c.species > 1 && <span className="ll-badge" aria-hidden="true">{c.species}</span>}<span className="ll-cal-n">{text}</span></>
+    : <><span className="ll-cal-count">{c.species} 种</span><span className="ll-cal-n">{text}</span></>;   // no picture (volume not mounted)
+}
+
+function Calendar({ p, gen, onDay, onMonth }: { p: Period; gen?: number; onDay: (d: string) => void; onMonth: (y: number, m: number) => void }) {
   const [year, setYear] = useState(p.y);
-  const [cal, setCal] = useState<{ days: Record<string, number>; active_days: number; years: string[] } | null>(null);
+  const [cal, setCal] = useState<{ days: Record<string, CalCell>; months: (CalCell & { month: number })[]; active_days: number; years: string[] } | null>(null);
   useEffect(() => { setYear(p.kind === "all" ? new Date().getFullYear() : p.y); }, [p.kind, p.y]);
-  useEffect(() => { if (gen !== undefined) get<typeof cal>(`/api/library/calendar?year=${year}`).then(setCal).catch(() => setCal(null)); }, [year, gen]);
+  useEffect(() => { if (gen !== undefined) get<typeof cal>(`/api/library/calendar?year=${p.kind === "month" ? p.y : year}`).then(setCal).catch(() => setCal(null)); }, [year, gen, p.kind, p.y]);
   if (!cal) return null;
-  const lvl = (n: number) => (n === 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 7 ? 3 : 4);
-  const cell = (d: Date) => { const k = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; const n = cal.days[k] ?? 0;
-    return <button key={k} className="ll-day" data-l={lvl(n)} disabled={!n} onClick={() => onDay(k)} title={`${k}：${n} 条观察记录`} aria-label={`${k}，${n} 条观察记录`}>{p.kind === "month" ? d.getDate() : ""}</button>; };
-  const legend = <p className="legend ll-legend">颜色 = 当天的观察记录数：{["0", "1", "2–3", "4–7", "≥8"].map((t, i) => <span key={t}><i className="ll-day" data-l={i} /> {t}</span>)}</p>;
+  const label = (c: CalCell) => c.cover ? `${c.cover.zh || c.cover.en || c.cover.sci}${c.species > 1 ? ` 等 ${c.species} 种` : ""}，${c.observations} 条观察记录` : "";
   if (p.kind === "month") {
     const first = new Date(p.y, p.m - 1, 1), lead = (first.getDay() + 6) % 7, n = new Date(p.y, p.m, 0).getDate();
     return (<div className="result-section"><h3>日历</h3>
-      <div className="ll-month" role="grid" aria-label={`${p.y} 年 ${p.m} 月`}>
+      <div className="ll-month" aria-label={`${p.y} 年 ${p.m} 月`}>
         {["一", "二", "三", "四", "五", "六", "日"].map((w) => <span key={w} className="ll-wd">{w}</span>)}
         {Array.from({ length: lead }, (_, i) => <span key={`x${i}`} />)}
-        {Array.from({ length: n }, (_, i) => cell(new Date(p.y, p.m - 1, i + 1)))}
-      </div>{legend}</div>);
+        {Array.from({ length: n }, (_, i) => {
+          const k = `${p.y}-${pad(p.m)}-${pad(i + 1)}`, c = cal.days[k];
+          return c ? <button key={k} className="ll-cal has" onClick={() => onDay(k)} aria-label={`${k}：${label(c)}`} title={`${k}：${label(c)}`}>
+            <CoverCell c={c} text={String(i + 1)} /></button>
+            : <span key={k} className="ll-cal"><span className="ll-cal-n">{i + 1}</span></span>;
+        })}
+      </div></div>);
   }
-  const start = new Date(year, 0, 1); start.setDate(1 - ((start.getDay() + 6) % 7));        // weeks begin on Monday
-  const days: Date[] = [];
-  for (let d = new Date(start); d.getFullYear() <= year && days.length < 371; d.setDate(d.getDate() + 1)) days.push(new Date(d));
-  return (<div className="result-section"><div className="row"><h3>{year} 年的活动</h3>
+  return (<div className="result-section"><div className="row"><h3>{year} 年</h3>
     {p.kind === "all" && <select value={year} onChange={(e) => setYear(+e.target.value)} aria-label="年份">
       {[...new Set([...cal.years, String(new Date().getFullYear())])].sort().map((y) => <option key={y}>{y}</option>)}</select>}
     <small className="hint">{cal.active_days} 天有记录</small></div>
-    <div className="ll-year">{days.map((d) => d.getFullYear() === year ? cell(d) : <span key={+d} />)}</div>{legend}
-    <details><summary className="hint">按日期列出</summary><ul className="ll-places">{Object.entries(cal.days).map(([k, v]) =>
-      <li key={k}><button className="btn link" onClick={() => onDay(k)}>{k}</button> {v} 条</li>)}</ul></details></div>);
+    <ol className="ll-year-tiles">{cal.months.map((c) => (
+      <li key={c.month}>{c.observations ? <button className="ll-cal has big" onClick={() => onMonth(year, c.month)} aria-label={`${year} 年 ${c.month} 月：${c.species} 种，${c.observations} 条观察；代表照片 ${label(c)}`}>
+        <CoverCell c={c} text={`${c.month} 月`} big /></button> : <span className="ll-cal big"><span className="ll-cal-n">{c.month} 月</span></span>}
+        <small>{c.observations ? `${c.species} 种 · ${c.observations} 条观察` : "没有记录"}</small></li>))}</ol></div>);
 }
 
 function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | null; gen?: number; onOpen: (r: Ref) => void }) {

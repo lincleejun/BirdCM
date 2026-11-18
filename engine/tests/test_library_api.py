@@ -54,7 +54,7 @@ def test_routes_summary_species_observations_calendar_map(tmp_path, monkeypatch)
     burst = next(o for o in obs["items"] if o["sci"] == "Sterna hirundo")
     assert burst["estimate"] == 1 and burst["photo_count"] == 300 and len(burst["source_refs"]) == 6
     cal = c.get("/api/library/calendar?year=2026", headers=H).json()
-    assert cal["days"]["2026-01-01"] == 2 and cal["active_days"] == 4
+    assert cal["days"]["2026-01-01"]["observations"] == 2 and cal["active_days"] == 4 and len(cal["months"]) == 12
     m = c.get("/api/library/map?bounds=10,20,10.5,20.5", headers=H).json()
     assert sum(x["observations"] for x in m["clusters"]) >= 6 and m["no_place_observations"] == 0
     assert c.get("/api/library/map?bounds=1,2,3", headers=H).status_code == 422
@@ -235,3 +235,26 @@ def test_restore_needs_full_archive_and_confirmation_and_keeps_scans(tmp_path, m
     lib.rebuild()
     check_expected(lib.index(), load())
     assert store._db().execute("SELECT count(*) FROM scan").fetchone()[0] == 2
+
+
+def test_crop_route_cuts_the_bird_and_404s_without_the_original(tmp_path, monkeypatch):
+    import io
+    import os
+    from PIL import Image
+    from birdcm.pipeline import image_paths
+    monkeypatch.setenv("BIRDCM_CACHE_DIR", str(tmp_path / "cache"))
+    store, _, folder = native(tmp_path, monkeypatch, rescan=False)
+    c, lib = client(store, tmp_path, monkeypatch)
+    lib.rebuild()
+    cover = lib.index().calendar(2026)["days"]["2026-01-31"]["cover"]
+    p = store.photo(int(cover["id"]))
+    _, prev = image_paths(p["path"], p["size"], p["mtime_ns"])
+    prev.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (400, 300), (10, 120, 60)).save(prev, "JPEG")          # the cached preview the crop is cut from
+    r = c.get(cover["crop"], headers=H)
+    assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+    assert Image.open(io.BytesIO(r.content)).size == (library.CROP, library.CROP)
+    assert c.get(cover["crop"], headers=H).status_code == 200                 # cached
+    other = lib.index().calendar(2026)["days"]["2026-02-01"]["cover"]
+    shutil.rmtree(folder)                                                     # volume gone, nothing cached
+    assert c.get(other["crop"], headers=H).status_code == 404

@@ -220,3 +220,20 @@ def test_store_marks_dirty_and_keeps_a_future_schema(tmp_path):
     db.execute("PRAGMA user_version=2")
     s2 = Store(tmp_path / "a.db")
     assert not s2.library_ok and s2._db().execute("PRAGMA user_version").fetchone()[0] == 2
+
+
+def test_calendar_cover_is_the_latest_eligible_bird(tmp_path, monkeypatch):
+    rows = [{"eligible": 1, "capture_wall": "2026-01-01T08:00:00", "asset_hash": "b", "subject_id": "1"},
+            {"eligible": 1, "capture_wall": "2026-01-01T09:00:00", "asset_hash": "a", "subject_id": "1"},
+            {"eligible": 1, "capture_wall": "2026-01-01T09:00:00", "asset_hash": "a", "subject_id": "2"},
+            {"eligible": 0, "capture_wall": "2026-01-01T23:00:00", "asset_hash": "z", "subject_id": "9"},
+            {"eligible": 1, "capture_wall": None, "asset_hash": "zz", "subject_id": "9"}]
+    assert library.cover_of(rows) is rows[2]                         # wall time, then hash, then subject id
+    store, lib, _ = native(tmp_path, monkeypatch, rescan=False)
+    lib.rebuild()
+    cal = lib.index().calendar(2026)
+    jan1 = cal["days"]["2026-01-01"]
+    assert (jan1["observations"], jan1["species"]) == (2, 2)
+    assert jan1["cover"]["sci"] == "Ardea alba" and jan1["cover"]["crop"].startswith("/api/library/crop?")   # 00:30 > 00:02
+    assert cal["months"][0]["species"] == 2 and cal["months"][0]["observations"] == 3 and cal["months"][2]["cover"] is None
+    assert cal["days"]["2026-11-18"]["cover"]["sci"] == "Sterna hirundo"   # a fallback-dated bird (no wall time) still covers
