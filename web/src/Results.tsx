@@ -253,6 +253,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     return new Set(photos.filter((p) => groups.has(p.burst_group) && p.result && !p.result.rejected).map((p) => p.id));
   }, [photos]);
   const rareIds = useMemo(() => new Set(photos.filter((p) => p.result?.species?.check === "rare" && !p.result.rejected).map((p) => p.id)), [photos]);
+  const chipsN = Math.max(1, CHIPS - (rareIds.size > 0 ? 1 : 0) - (lookIds.size > 0 ? 1 : 0));   // one row at 1440 px
   const [ffly, setFfly] = useState("all");
   const [frar, setFrar] = useState("0");
   const [sort, setSort] = useState("queue");
@@ -481,17 +482,17 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
             <b>{species.list.length} 种鸟</b>
             {rareIds.size > 0 && (
               <button type="button" className="cull-chip rare" title="确认到种，但这里这个季节大部分地方很少有它：可能是稀有记录，请核对"
-                onClick={() => setOnlyIds({ ids: rareIds, label: "可能的稀有记录" })}>可能的稀有记录 {rareIds.size}</button>
+                onClick={() => setOnlyIds({ ids: rareIds, label: "可能的稀有记录" })}>可能稀有 {rareIds.size}</button>
             )}
             {lookIds.size > 0 && (
               <button type="button" className="cull-chip rare" title="同一只鸟在两个很像的种之间来回认，已按多数统一；请核对"
-                onClick={() => setOnlyIds({ ids: lookIds, label: "近似种来回跳" })}>近似种来回跳，请核对 {lookIds.size}</button>
+                onClick={() => setOnlyIds({ ids: lookIds, label: "近似种来回跳" })}>近似种请核对 {lookIds.size}</button>
             )}
-            {(allChips ? notable : notable.slice(0, CHIPS)).map((n) => (
+            {(allChips ? notable : notable.slice(0, chipsN)).map((n) => (
               <button key={n.sci} type="button" className={`cull-chip rare${fsp === n.sci ? " on" : ""}`} title={n.why} onClick={() => setFsp(fsp === n.sci ? "" : n.sci)}>{n.name}<small>{n.tag}</small></button>
             ))}
-            {notable.length > CHIPS && (
-              <button type="button" className="cull-chip" aria-expanded={allChips} onClick={() => setAllChips(!allChips)}>{allChips ? "收起" : `+${notable.length - CHIPS}`}</button>
+            {notable.length > chipsN && (
+              <button type="button" className="cull-chip" aria-expanded={allChips} onClick={() => setAllChips(!allChips)}>{allChips ? "收起" : `+${notable.length - chipsN}`}</button>
             )}
           </div>
         </div>
