@@ -246,7 +246,7 @@ def consensus(frames: list[tuple[int, dict]]) -> dict[int, dict]:
         p = p_of(sp, best)
         out[i] = {"level": "species", "label": {**label, "p": round(p, 4) if p is not None else None}, "top5": sp.get("top5", []),
                   "geo": sp.get("geo", False), "consensus": {"support": score[best][0], "frames": len(named)},
-                  "visual": sp.get("visual"), **({"check": src["check"]} if src.get("check") else {})}
+                  "visual": sp.get("visual"), **{k: src[k] for k in ("check", "prior") if src.get(k)}}
     return out
 
 

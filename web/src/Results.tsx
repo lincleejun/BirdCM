@@ -625,7 +625,7 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
             ) : sp ? (
               <>
                 <SpName sp={sp} big />
-                {sp.check === "rare" && <p className="rare-note"><span className="tbd">本地少见 · 请核对</span> 这里这个季节大部分地方很少有它（地区概率中位数 {pct(sp.prior?.median ?? 0)}），但不是不可能；可能是一条稀有记录。</p>}
+                {sp.check === "rare" && <p className="rare-note"><span className="tbd">本地少见 · 请核对</span> 这里这个季节大部分地方很少有它{sp.prior?.median != null && `（地区里一半地方的概率不到 ${(sp.prior.median * 100).toFixed(1)}%）`}，但不是不可能；可能是一条稀有记录。</p>}
                 {sp.override && (
                   <p className="fixed-note">图像最像：{named({ ...sp, label: sp.override.visual, level: "species" }).title} <i>{sp.override.visual.sci}</i> {pct(sp.override.visual.p)}
                     · 但此地此季几乎没有它，所以只报到{sp.level === "genus" ? "属" : "“不确定”"}{sp.override.local && <>；当地有的同属：{named({ ...sp, label: sp.override.local, level: "species" }).title} <i>{sp.override.local.sci}</i></>}</p>
