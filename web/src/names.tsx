@@ -34,13 +34,19 @@ export function SpName({ sp, big = false }: { sp: Species | null | undefined; bi
 
 export const candidateText = (c: Name) => `${c.zh ? c.zh + " " : ""}${c.en ?? ""}`.trim();
 
+// Collapsed unless the answer is 不确定: once a species/genus is settled the others are mostly 0 % (owner, 2026-11-18).
 export function Candidates({ sp, skipFirst = false }: { sp: Species; skipFirst?: boolean }) {
+  const list = sp.top5.slice(skipFirst ? 1 : 0);
+  const best = Math.max(0, ...list.slice(sp.level === "uncertain" ? 0 : 1).map((c) => c.p));
   return (
-    <ol className="candidates" start={skipFirst ? 2 : 1}>
-      {sp.top5.slice(skipFirst ? 1 : 0).map((c) => (
-        <li key={c.sci}>{candidateText(c) || c.sci} <span>· <i>{c.sci}</i> · {Math.round(c.p * 100)}%</span></li>
-      ))}
-    </ol>
+    <details className="candidates-fold" open={sp.level === "uncertain"}>
+      <summary>{list.length} 个候选 · 其余最高 {Math.round(best * 100)}%</summary>
+      <ol className="candidates" start={skipFirst ? 2 : 1}>
+        {list.map((c) => (
+          <li key={c.sci}>{candidateText(c) || c.sci} <span>· <i>{c.sci}</i> · {Math.round(c.p * 100)}%</span></li>
+        ))}
+      </ol>
+    </details>
   );
 }
 

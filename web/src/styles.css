@@ -510,3 +510,5 @@ a.btn { display: inline-flex; align-items: center; color: inherit; text-decorati
   .ll-badge { min-width: 16px; height: 16px; font-size: 10px; line-height: 16px; right: 2px; bottom: 2px; }
 }
 .ll-cal:not(.has) { border-color: transparent; background: color-mix(in srgb, var(--surface) 45%, transparent); }
+
+.candidates-fold > summary { cursor: pointer; color: var(--muted, inherit); font-size: 0.9em; padding: 4px 0; }
