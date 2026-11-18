@@ -125,6 +125,14 @@ function csv(rows: ReturnType<typeof exportRow>[]): string {
 }
 
 // ---------- the view ----------
+/** A previous result the person opened on purpose is not switched away from automatically (this browser tab only). */
+function keepOld(id: number, set = false): boolean {
+  try {
+    if (set) sessionStorage.setItem(`birdcm.keep.${id}`, "1");
+    return sessionStorage.getItem(`birdcm.keep.${id}`) === "1";
+  } catch { return set; }
+}
+
 interface Related { newer: { id: number; state: Scan["state"]; counts: Scan["counts"] } | null; previous: number | null; stale: boolean }
 
 export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId: number; onBack: () => void; onOpen: (id: number) => void; catalogue: Country[] }) {
@@ -192,7 +200,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
     const poll = () => get<Related>(`/api/scans/${scanId}/related`).then((r) => {
       if (dead) return;
       setRel(r);
-      if (r.newer && Date.now() - lastTouch.current > 6000 && !document.querySelector("dialog[open]")) onOpen(r.newer.id);
+      if (r.newer && Date.now() - lastTouch.current > 6000 && !document.querySelector("dialog[open]") && !keepOld(scanId)) onOpen(r.newer.id);
     }).catch(() => {});
     poll();
     const t = window.setInterval(poll, 3000);
@@ -347,7 +355,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
         <div className="banner" role="status">
           {rel.newer.state === "completed" ? "这个文件夹已经重新扫描完了" : `这个文件夹正在重新扫描（已完成 ${rel.newer.counts.done + rel.newer.counts.failed} / ${rel.newer.counts.total}）`}
           {" · "}<button className="btn link" onClick={() => onOpen(rel.newer!.id)}>查看新结果</button>
-          <span className="hint">（几秒钟没有操作就会自动切过去）</span>
+          {!keepOld(scanId) && <span className="hint">（几秒钟没有操作就会自动切过去）</span>}
         </div>
       )}
       <div className="topbar">
@@ -362,7 +370,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue }: { scanId:
         <p className="stale">这些结果是旧版本算的（模型、地点修正或规则变过） · <button className="btn link" onClick={() => setRescanOpen(true)}>重新扫描</button></p>
       )}
       {changes && (
-        <p className="changes">和上一次扫描比：
+        <p className="changes"><button className="btn link" onClick={() => { keepOld(rel.previous!, true); onOpen(rel.previous!); }}>之前的结果</button> · 和上一次扫描比：
           <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.changed), label: "鸟种有变化的" })}>{changes.changed.length} 张鸟种变了</button>，
           其中 <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.vague), label: "变成不确定 / 只到属的" })}>{changes.vague.length} 张变成不确定或只到属</button>；
           <button className="btn link" onClick={() => setOnlyIds({ ids: new Set(changes.fixed), label: "按连拍组修正的" })}>{changes.fixed.length} 张按连拍组修正</button>
@@ -539,8 +547,9 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
                   <p className="fixed-note"><span className="tbd">按连拍组修正</span> 这一组 {sp.consensus?.frames} 张里 {sp.consensus?.support} 张支持它；
                     这张自己认的是 {named(r!.species_own).title} <i>{named(r!.species_own).sci}</i>（{pct(r!.species_own.top5[0]?.p ?? 0)}）</p>
                 )}
-                <p className="conf-line">{sure ? "把握" : "最高候选"} {pct((sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p) ?? 0)} <span className="ref">· {sp.geo ? "已按拍摄地点和季节修正" : "没有位置，只凭图像"}</span></p>
-                <h4 className="panel-h">前 5 个候选</h4>
+                <p className="conf-line">{r!.species_own ? (sp.label?.p != null ? `这张自己给它 ${pct(sp.label.p)}` : "这张自己的前五里没有它")
+                  : `${sure ? "把握" : "最高候选"} ${pct((sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p) ?? 0)}`} <span className="ref">· {sp.geo ? "已按拍摄地点和季节修正" : "没有位置，只凭图像"}</span></p>
+                <h4 className="panel-h">{r!.species_own ? "这张自己的前 5 个候选" : "前 5 个候选"}</h4>
                 <Candidates sp={sp} />
               </>
             ) : null}
