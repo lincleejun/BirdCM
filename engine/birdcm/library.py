@@ -883,6 +883,106 @@ class Index:
                 "no_place_observations": len(none)}
 
 
+REASON = {"genus": "只认到属", "uncertain": "不确定", "unclassified": "还没识别的框", "unresolved": "名录里没有这个学名",
+          "needs_match": "需核对主体对应"}
+
+
+def _fold(s: str | None) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", unicodedata.normalize("NFKC", s or "")).casefold()
+    return "".join(c for c in s if not unicodedata.combining(c)).strip()
+
+
+def species_list(ix: Index, frm=None, to=None, q="", seen="yes", rarity="all", iucn="all", family="", sort="recent",
+                 offset=0, limit=50) -> dict:
+    """seen=yes: the species seen in the range; seen=no / all: catalogue mode (all-time seen state, no period totals)."""
+    from birdcm import names
+    scoped = ix.species_rows(frm, to)
+    if seen == "yes":
+        keys = list(scoped)
+    else:
+        cat = set(names.catalogue()) | set(ix.first_day)
+        keys = [k for k in cat if seen == "all" or k not in ix.first_day]
+    fq = _fold(q)
+    items = []
+    for k in keys:
+        nm = names_of(k)
+        if fq and not any(fq in _fold(x) for x in (k, nm["en"], nm["zh"])):
+            continue
+        if family and nm["family"] != family:
+            continue
+        if iucn == "threatened" and (iucn_of(k) or "") not in THREATENED:
+            continue
+        e = scoped.get(k)
+        if rarity != "all" and not (e and TIERS.get(int(rarity)) in e["buckets"]):
+            continue
+        items.append({"key": k, **nm, "iucn": iucn_of(k), "seen": k in ix.first_day, "first_day": ix.first_day.get(k),
+                      "last_day": e["last_day"] if e else None, "observations": e["observations"] if e else 0,
+                      "estimated_count": e["estimated_count"] if e else 0, "photos": len(e["photos"]) if e else 0,
+                      "cover_ref": ref(e["cover"][1]) if e and e["cover"] else None})
+    rank = (lambda x: (0 if _fold(x["key"]) == fq or _fold(x["zh"]) == fq or _fold(x["en"]) == fq else 1, x["key"])) if fq else None
+    if sort == "first":
+        items.sort(key=lambda x: (x["first_day"] or "9999", x["key"]))
+    elif sort == "name":
+        items.sort(key=rank or (lambda x: x["key"]))
+    else:
+        items.sort(key=lambda x: x["key"])
+        items.sort(key=lambda x: x["last_day"] or "", reverse=True)
+    return {"total": len(items), "items": items[offset:offset + limit]}
+
+
+def species_detail(ix: Index, sci: str, frm=None, to=None) -> dict:
+    gs = ix.groups_in(frm, to, sci)
+    every = ix.groups_in(sci=sci)
+    months = [0] * 12
+    places: dict[str, dict] = {}
+    photos: dict[str, dict] = {}
+    for g in gs:
+        months[int(g["day"][5:7]) - 1] += 1
+        r0 = g["rows"][0]
+        p = places.setdefault(g["place_key"], {"place_key": g["place_key"], "label": r0["place_label"], "source": r0["place_source"],
+                                               "region_code": r0["region_code"], "observations": 0})
+        p["observations"] += 1
+        for r in g["rows"]:
+            k = (r["local_day"], r["capture_wall"] or "", r["asset_hash"], r["subject_id"])
+            if r["asset_hash"] not in photos or k > photos[r["asset_hash"]]["_k"]:
+                photos[r["asset_hash"]] = {"_k": k, **ref(r), "day": r["local_day"]}
+    plist = sorted(photos.values(), key=lambda x: x["_k"], reverse=True)
+    return {"key": sci, **names_of(sci), "iucn": iucn_of(sci), "seen": sci in ix.first_day,
+            "first_day": min((g["day"] for g in every), default=None), "last_day": max((g["day"] for g in every), default=None),
+            "scope": {"observations": len(gs), "estimated_count": sum(g["estimate"] for g in gs), "photos": len(photos)},
+            "months": months, "places": sorted(places.values(), key=lambda p: (-p["observations"], p["label"] or "", p["place_key"])),
+            "photo_refs": [{k: v for k, v in p.items() if k != "_k"} for p in plist[:50]], "total_photos": len(plist)}
+
+
+def photo_list(ix: Index, sci=None, day=None, status="all", frm=None, to=None, offset=0, limit=50) -> dict:
+    """status all: one item per photo (the subject naming sci when given); pending: one per unresolved subject;
+    no-bird: photos with no bird box."""
+    out = []
+    for h, rows in ix.by_hash.items():
+        c = rows[0]
+        if not ix.within(c["local_day"], frm, to) or (day and c["local_day"] != day):
+            continue
+        subs = [r for r in rows if r["level"] != "photo"]
+        if status == "pending":
+            out += [{**ref(r), "day": r["local_day"], "level": r["level"], "reason": REASON.get(r["level"], r["level"]),
+                     "species_key": r["species_key"], "_k": (r["local_day"], r["capture_wall"] or "", h, r["subject_id"])}
+                    for r in subs if r["level"] in PENDING and (sci is None or r["species_key"] == sci)]
+            continue
+        if status == "no-bird" and subs:
+            continue
+        if sci is not None:
+            subs = [r for r in subs if r["eligible"] and r["species_key"] == sci]
+            if not subs:
+                continue
+        best = next((r for r in subs if r["eligible"]), subs[0] if subs else next(r for r in rows if r["level"] == "photo"))
+        out.append({**ref(best), "day": c["local_day"], "level": best["level"], "species_key": best["species_key"],
+                    "subjects": len(subs), "date_source": c["date_source"], "place_label": c["place_label"],
+                    "_k": (c["local_day"], c["capture_wall"] or "", h, best["subject_id"])})
+    out.sort(key=lambda x: x["_k"], reverse=True)
+    return {"total": len(out), "items": [{k: v for k, v in x.items() if k != "_k"} for x in out[offset:offset + limit]]}
+
+
 def names_of(sci: str) -> dict:
     """Read-time names: Chinese from the current table, English (and family) from the installed name list."""
     from birdcm import names

@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from birdcm import config, decode, geo, models, stars
+from birdcm import archive, config, decode, geo, library, models, stars
 from birdcm.pipeline import EQUIVALENT_DATA, EQUIVALENT_OLD_KEY, fingerprint, image_paths
 from birdcm.queue import Scheduler
 from birdcm.store import Store, slim_row
@@ -176,6 +176,36 @@ class SingleCorrection(BaseModel):
     undo: bool = False
 
 
+
+class CountBody(BaseModel):
+    group_key: str
+    count: int | None = None
+    expected_generation: int
+
+
+class SubjectEditBody(BaseModel):
+    source_ref: dict
+    edit: dict
+    expected_generation: int
+
+
+class ApplyBody(BaseModel):
+    token: str
+    mode: str = "merge"
+    choices: dict[str, str] = {}
+    expected_generation: int
+    confirm_restore: bool = False
+
+
+class LifeEbird(BaseModel):
+    species: list[str] | None = None
+    counts: dict[str, str] = {}
+    use_estimates: bool = False
+    fallback: str = "refuse"
+    start: str | None = None                          # from / to (inclusive) local days
+    end: str | None = None
+
+
 class NewScan(BaseModel):
     folder: str
     recursive: bool = False
@@ -250,6 +280,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     async def lifespan(_app):
         if start_scheduler:
             sched.start()
+            api.state.library.refresh()                     # a restart with a dirty index rebuilds it (background)
         yield
         sched.close()
         previews.close()
@@ -677,6 +708,279 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         names = store.delete_singles()
         remove(names)
         return {"deleted": len(names)}
+
+    # ---- the life list (library.py, archive.py; docs/design-lifelist.md §7.1) ----------------------------------------
+
+    lib = library.of(store, singles_dir=singles_dir, imports_dir=config.data_dir() / "imports")
+    api.state.library = lib
+
+    def day_arg(v: str | None, name: str) -> str | None:
+        if v in (None, ""):
+            return None
+        p = library.parse_wall(v)
+        if not p or p[3] != "day":
+            raise HTTPException(422, f"{name} 要是 YYYY-MM-DD")
+        return p[2]
+
+    def view(frm: str | None, to: str | None):
+        """The status and the index of one generation (a dirty index is rebuilt in the background meanwhile)."""
+        if not store.library_ok:
+            raise HTTPException(503, "数据库是更新版本的观羽写的：这个版本不改动它的记录本")
+        st = lib.refresh()
+        return st, lib.index(), day_arg(frm, "from"), day_arg(to, "to")
+
+    def page(offset: int, limit: int) -> tuple[int, int]:
+        if offset < 0 or not 1 <= limit <= 100:
+            raise HTTPException(422, "offset ≥ 0，limit 1–100")
+        return offset, limit
+
+    @api.get("/api/library/summary")
+    def library_summary(request: Request):
+        q = request.query_params
+        st, ix, frm, to = view(q.get("from"), q.get("to"))
+        return {**st, "generation": ix.generation, "range": {"from": frm, "to": to}, **ix.summary(frm, to)}
+
+    @api.get("/api/library/species")
+    def library_species(request: Request, q: str = "", seen: str = "yes", rarity: str = "all", iucn: str = "all", family: str = "",
+                        sort: str = "recent", offset: int = 0, limit: int = 50):
+        if seen not in ("all", "yes", "no") or rarity not in ("all", "0", "1", "2", "3", "4") or iucn not in ("all", "threatened") \
+                or sort not in ("recent", "first", "name"):
+            raise HTTPException(422, "seen / rarity / iucn / sort 的取值不对")
+        st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
+        offset, limit = page(offset, limit)
+        return {**st, "generation": ix.generation, **library.species_list(ix, frm, to, q[:100], seen, rarity, iucn, family[:100], sort, offset, limit)}
+
+    @api.get("/api/library/species/detail")
+    def library_species_detail(request: Request, sci: str):
+        st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
+        return {**st, "generation": ix.generation, **library.species_detail(ix, sci[:200], frm, to)}
+
+    @api.get("/api/library/photos")
+    def library_photos(request: Request, sci: str | None = None, day: str | None = None, status: str = "all", offset: int = 0, limit: int = 50):
+        if status not in ("all", "pending", "no-bird"):
+            raise HTTPException(422, "status 只能是 all / pending / no-bird")
+        st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
+        offset, limit = page(offset, limit)
+        return {**st, "generation": ix.generation, **library.photo_list(ix, sci, day_arg(day, "day"), status, frm, to, offset, limit)}
+
+    @api.get("/api/library/observations")
+    def library_observations(request: Request, sci: str | None = None, day: str | None = None, rare: bool | None = None,
+                             offset: int = 0, limit: int = 50):
+        st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
+        offset, limit = page(offset, limit)
+        items = ix.observations(frm, to, sci, day_arg(day, "day"), rare)
+        return {**st, "generation": ix.generation, "total": len(items), "items": items[offset:offset + limit]}
+
+    @api.get("/api/library/calendar")
+    def library_calendar(year: int):
+        if not 1 <= year <= 9999:
+            raise HTTPException(422, "year 不对")
+        st, ix, _, _ = view(None, None)
+        return {**st, "generation": ix.generation, **ix.calendar(year)}
+
+    @api.get("/api/library/map")
+    def library_map(request: Request, bounds: str, sci: str | None = None):
+        try:
+            s, w, n, e = (float(x) for x in bounds.split(","))
+            assert -90 <= s < n <= 90 and -180 <= w <= 180 and -180 <= e <= 180
+        except (ValueError, AssertionError):
+            raise HTTPException(422, "bounds 要是 south,west,north,east") from None
+        st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
+        return {**st, "generation": ix.generation, **ix.map(s, w, n, e, frm, to, sci)}
+
+
+    @api.post("/api/library/observation-count")
+    def library_count(body: CountBody):
+        st, ix, _, _ = view(None, None)
+        if body.expected_generation != ix.generation:
+            raise HTTPException(409, "统计已经更新，请重新载入后再改")
+        if body.group_key not in ix.groups:
+            raise HTTPException(404, "没有这条观察记录")
+        if body.count is not None and not 1 <= body.count <= library.MAX_COUNT:
+            raise HTTPException(422, "数量只能是 1–999998")
+        gen = store._write(lambda db: library.write_group_edit(db, body.group_key, body.count))
+        return {**lib.status(), "generation": gen}
+
+
+    @api.post("/api/library/subject-edit")
+    def library_subject_edit(body: SubjectEditBody):
+        from birdcm import names
+        st, ix, _, _ = view(None, None)
+        if body.expected_generation != ix.generation or st["updating"]:
+            raise HTTPException(409, "统计正在更新或已经更新，请重新载入后再改")
+        r = body.source_ref
+        row = next((x for x in ix.by_hash.get(str(r.get("asset_hash")), []) if x["source_kind"] == r.get("kind")
+                    and x["source_id"] == str(r.get("id")) and x["subject_id"] == r.get("subject_id")), None)
+        if row is None:
+            raise HTTPException(404, "没有这张照片或这个主体")
+        try:
+            edit = library.check_edit(body.edit, names.catalogue())
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        photo_wide = edit["op"] in ("date", "place")
+        if not photo_wide and row["subject_id"] == "photo":
+            raise HTTPException(422, "鸟种、数量、排除只能改某一只鸟，不能改整张照片")
+        res = None
+        if row["source_kind"] == "photo":
+            res = (store.photo(int(row["source_id"])) or {}).get("result")
+        elif row["source_kind"] == "single":
+            rec = store.single(int(row["source_id"])) or {}
+            res = rec.get("result")
+        if edit["op"] == "place" and (edit["value"] or {}).get("source") == "photo" and not ((res or {}).get("exif") or {}).get("gps"):
+            raise HTTPException(422, "这张照片没有 GPS，不能恢复成照片位置")
+        box = json.loads(row["box_json"]) if row["box_json"] else None
+        store._write(lambda db: library.write_subject_edit(db, row["asset_hash"], "photo" if photo_wide else row["subject_id"], edit, box))
+        # the subject bird of a scan / single photo: the scan view's correction says the same (one source of truth)
+        if edit["op"] == "species" and res and res.get("boxes"):
+            k = res.get("subject") if row["source_kind"] == "photo" else (store.single(int(row["source_id"])) or {}).get("subject")
+            k = res.get("subject") if k is None else k
+            if k is not None and k < len(res["boxes"]) and library.subject_uuid(row["asset_hash"], res["boxes"][k]["box"]) == row["subject_id"]:
+                if row["source_kind"] == "photo":
+                    pid = int(row["source_id"])
+                    if edit["state"] == "none":
+                        store.clear_corrections([pid])
+                    else:
+                        store.set_corrections([pid], edit["key"], "one")
+                    sched.rerate_now(store.photo(pid)["scan_id"])
+                else:
+                    sid = int(row["source_id"])
+                    store.update_single(sid, correction=None if edit["state"] == "none" else
+                                        {"sci": edit["key"], **(names.catalogue().get(edit["key"] or "", {}))})
+        return lib.refresh()
+
+    staging = archive.Staging(config.data_dir() / "import-staging")
+
+    @api.get("/api/library/export")
+    def library_export(request: Request):
+        """The portable .birdcm file (originals included, not encrypted); from/to = a selection, not a full backup."""
+        q = request.query_params
+        frm, to = day_arg(q.get("from"), "from"), day_arg(q.get("to"), "to")
+        out = staging.new_path()
+        try:
+            archive.export(lib, out, frm, to)
+        except Exception as e:  # noqa: BLE001 - disk full, unreadable file: nothing half-written is sent
+            out.unlink(missing_ok=True)
+            raise HTTPException(500, f"导出失败：{type(e).__name__}: {e}") from None
+        from starlette.background import BackgroundTask
+        name = f"BirdCM-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}{'-selection' if frm or to else ''}.birdcm"
+        return FileResponse(out, media_type=archive.MIME, filename=name, background=BackgroundTask(out.unlink, missing_ok=True))
+
+    @api.post("/api/library/import/preview")
+    async def library_import_preview(request: Request):
+        try:
+            declared = int(request.headers.get("content-length", ""))
+        except ValueError:
+            raise HTTPException(411, "需要 Content-Length") from None
+        if declared > archive.MAX_ARCHIVE or declared * 2 > archive.free_bytes(staging.folder):
+            raise HTTPException(413, "文件太大，或磁盘空间不够暂存和导入它")
+        form = await request.form(max_files=1, max_fields=2)
+        f = form.get("file")
+        if f is None or not hasattr(f, "read"):
+            raise HTTPException(422, "没有收到文件")
+        path = staging.new_path()
+        with open(path, "wb") as out:                     # bounded chunks onto disk, never the whole file in memory
+            while chunk := await f.read(1 << 20):
+                out.write(chunk)
+        try:
+            summary, conflicts, _ = await run_in_threadpool(archive.plan, lib, path)
+        except ValueError as e:
+            path.unlink(missing_ok=True)
+            raise HTTPException(422, str(e)) from None
+        return staging.add(path, summary, conflicts)
+
+
+    @api.post("/api/library/import/apply")
+    def library_import_apply(body: ApplyBody):
+        item = staging.get(body.token)
+        if item is None:
+            raise HTTPException(404, "导入已过期（30 分钟），请重新选择文件")
+        if item["result"] is not None:
+            return item["result"]                            # a retry of a committed import: the same answer, nothing again
+        if body.mode not in ("merge", "restore") or any(v not in ("local", "file") for v in body.choices.values()):
+            raise HTTPException(422, "mode 只能是 merge / restore，选择只能是 local / file")
+        if body.mode == "restore" and (item["summary"]["scope"] != "full" or not body.confirm_restore):
+            raise HTTPException(422, "只有完整备份能恢复，并且要先确认会替换记录本")
+        if body.expected_generation != lib.status()["generation"]:
+            raise HTTPException(409, "统计已经更新，请重新预览")
+        safety = None
+        if body.mode == "restore":                           # a local safety copy first
+            safety = config.data_dir() / "backups" / f"BirdCM-before-restore-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.birdcm"
+            safety.parent.mkdir(parents=True, exist_ok=True)
+            archive.export(lib, safety)
+        try:
+            res = archive.apply(lib, Path(item["path"]), body.choices, restore=body.mode == "restore")
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        if safety:
+            res["safety_backup"] = safety.name
+        item["result"] = res
+        Path(item["path"]).unlink(missing_ok=True)
+        return res
+
+    def import_record(rid: str) -> dict:
+        r = store._db().execute("SELECT r.*, a.relative_path, a.missing, a.mime FROM ll_record r JOIN ll_asset a ON a.hash = r.asset_hash "
+                                "WHERE r.id = ?", (rid,)).fetchone()
+        if not r:
+            raise HTTPException(404, "没有这条导入记录")
+        return dict(r)
+
+    @api.get("/api/library/import-records/{rid}")
+    def library_import_record(rid: str):
+        r = import_record(rid)
+        subs = [dict(s) for s in store._db().execute("SELECT id, ordinal, x0, y0, x1, y1, model_level, model_key, correction_state, "
+                                                       "corrected_key, count_edit, excluded, needs_match FROM ll_subject WHERE record_id = ? "
+                                                       "AND retired = 0 ORDER BY ordinal", (rid,))]
+        keep = ("id", "asset_hash", "origin", "local_day", "capture_wall", "capture_offset_min", "date_source", "lat", "lon",
+                "place_label", "place_source", "region_code", "missing", "mime", "first_identified_utc")
+        return {**{k: r[k] for k in keep}, "shooting": json.loads(store._db().execute(
+            "SELECT shooting_json FROM ll_asset WHERE hash = ?", (r["asset_hash"],)).fetchone()[0]), "subjects": subs}
+
+    @api.get("/api/library/import-records/{rid}/image")
+    def library_import_image(rid: str, size: str = "preview"):
+        r = import_record(rid)
+        if r["missing"] or not r["relative_path"]:
+            raise HTTPException(404, "这张照片的原图不在这台电脑上")
+        path = lib.imports_dir / Path(r["relative_path"]).name        # only our own stored name, never a client path
+        if not path.is_file():
+            raise HTTPException(404, "原图不见了")
+        if size == "original":
+            return FileResponse(path, media_type=r["mime"], headers={"Cache-Control": "private, no-cache"})
+        st = path.stat()
+        thumb, prev = image_paths(str(path), st.st_size, st.st_mtime_ns)
+        out = thumb if size == "thumb" else prev
+        if not out.exists():
+            try:
+                previews.make({"path": str(path), "size": st.st_size, "mtime_ns": st.st_mtime_ns, "thumb": str(thumb), "preview": str(prev)})
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(404, f"无法生成预览：{e}") from None
+        return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, no-cache"})
+
+    @api.get("/api/library/ebird/plan")
+    def library_ebird_plan(request: Request):
+        from birdcm import ebird
+        st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
+        cls = ebird.lifelist_checklists(ix, frm, to)
+        names = ebird.clements()
+        sp = sorted({g["sci"] for c in cls for g in c["groups"]})
+        pending = sum(1 for r in ix.rows_in(frm, to) if r["level"] in library.PENDING)
+        return {**st, "generation": ix.generation, "checklists": len(cls), "fallback_checklists": sum(1 for c in cls if c["fallback"]),
+                "pending_subjects_excluded": pending,
+                "species": [{"sci": s, **library.names_of(s), "ebird_en": names.get(s, ("", ""))[0],
+                             "name_check": "" if names.get(s, ("", ""))[0] else "not_in_ebird"} for s in sp]}
+
+
+    @api.post("/api/library/ebird")
+    def library_ebird(body: LifeEbird):
+        from fastapi.responses import Response
+        from birdcm import ebird
+        if body.fallback not in ("refuse", "include", "exclude"):
+            raise HTTPException(422, "fallback 只能是 refuse / include / exclude")
+        st, ix, frm, to = view(body.start, body.end)
+        try:
+            text = ebird.lifelist_csv(ix, frm, to, body.species, body.counts, body.use_estimates, body.fallback)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        return Response(text, media_type="text/csv; charset=utf-8")
 
     if WEB.is_dir():
         @api.get("/", include_in_schema=False)
