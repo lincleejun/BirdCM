@@ -1,0 +1,76 @@
+name: BirdCM
+options:
+  developmentLanguage: zh-Hans
+  deploymentTarget: { iOS: '17.0' }
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    SWIFT_OPTIMIZATION_LEVEL: '-O'
+    DEVELOPMENT_TEAM: ''
+    CODE_SIGN_STYLE: Automatic
+targets:
+  BirdCM:
+    type: application
+    platform: iOS
+    sources:
+      - path: BirdCM
+        excludes: [Resources]
+      - path: BirdCM/Resources
+        buildPhase: resources
+      - path: Models
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cc.outman.birdcm
+        MARKETING_VERSION: 1.0
+        CURRENT_PROJECT_VERSION: 4
+        BIRDCM_BUNDLE_IUCN: 1
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: 观羽
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: 将你选择的鸟图保存到相册，仅在点击保存时请求。
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: 照片没有 GPS 时，用当前地点修正鸟种；拒绝仍可识别。
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        TARGETED_DEVICE_FAMILY: '1'
+        SWIFT_EMIT_LOC_STRINGS: YES
+    postBuildScripts:
+      - name: Apply bundled data licence flag
+        script: bash "$SRCROOT/tools/prepare_bundle.sh"
+        basedOnDependencyAnalysis: false
+    dependencies:
+      - sdk: libsqlite3.tbd
+  BirdCMTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        excludes: [Fixtures]
+      - path: Tests/Fixtures
+        type: folder
+        buildPhase: resources
+    dependencies: [{ target: BirdCM }]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: cc.outman.birdcm.tests
+  BirdCMUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+      - path: Tests/Fixtures
+        type: folder
+        buildPhase: resources
+    dependencies: [{ target: BirdCM }]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: cc.outman.birdcm.uitests
+        TEST_TARGET_NAME: BirdCM
+schemes:
+  BirdCM:
+    build: { targets: { BirdCM: all, BirdCMTests: [test], BirdCMUITests: [test] } }
+    test: { targets: [BirdCMTests, BirdCMUITests] }

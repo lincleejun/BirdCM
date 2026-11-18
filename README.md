@@ -59,3 +59,8 @@ complete count); counts default to X (present). "Stationary" (duration = first t
 Code: MIT. Models are downloaded, not in this repository, and keep their own licences (`models.toml`):
 BioCLIP 2.5 (MIT), OWLv2 (Apache-2.0), AviList names (CC BY 4.0). **The eye/beak and flight heads are for
 non-commercial use only**; the aesthetic head's training-image licence is not established. Details in `NOTICE.md`.
+
+## 原生 iOS（观羽）
+
+[ios/README.md](ios/README.md)：SwiftUI / iOS 17+ 单张离线识别、地点先验、当地稀有度/IUCN 与本机历史；
+所有模型随安装包提供，地点在首页设置；眼嘴/飞行权重仅限非商用。构建、开发模型覆盖和真机验收限制见该文档及 [验证记录](ios/VALIDATION.md)。

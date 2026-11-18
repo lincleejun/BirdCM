@@ -1,0 +1,42 @@
+[
+  {
+    "file": "photo-0.jpg",
+    "source": "https://www.inaturalist.org/observations/401709788",
+    "license": "CC0",
+    "attribution": "no rights reserved",
+    "original_sha256": "e76bcdf30e05569b877d0a85d0d81b5607ee19fcffed39a27bea4ca0a808040e",
+    "derivative": false
+  },
+  {
+    "file": "photo-1.jpg",
+    "source": "https://www.inaturalist.org/observations/402469647",
+    "license": "CC0",
+    "attribution": "no rights reserved",
+    "original_sha256": "034389ef422c85ecd3f229ca0c2464e4d7bc5b68a1b04abc222aea3450523bc8",
+    "derivative": false
+  },
+  {
+    "file": "photo-2.jpg",
+    "source": "https://www.inaturalist.org/observations/402375721",
+    "license": "CC0",
+    "attribution": "no rights reserved",
+    "original_sha256": "af66513d27f8a96b5a62f8cd5484331a830dfe418d4c049f84945b5c8f91b812",
+    "derivative": false
+  },
+  {
+    "file": "photo-3.jpg",
+    "source": "https://www.inaturalist.org/observations/402373628",
+    "license": "CC0",
+    "attribution": "no rights reserved",
+    "original_sha256": "1638287dd3ecd8b37f57c15775db8c4ed5efc9da7b97270d4c1ce579a1cce23a",
+    "derivative": false
+  },
+  {
+    "file": "photo-4.png",
+    "source": "https://www.inaturalist.org/observations/402656982",
+    "license": "CC0",
+    "attribution": "no rights reserved",
+    "original_sha256": "188082de008053c5d3cc16b17d37b770cb7d87817f6dcbcd2cfd7b5340d29d0a",
+    "derivative": true
+  }
+]

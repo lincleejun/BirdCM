@@ -9,3 +9,11 @@ web/tsconfig.tsbuildinfo
 # the owner's own photos: kept locally, not published
 docs/prototype/img/
 web/public/hero.jpg
+
+# iOS build outputs
+ios/build/
+ios/DerivedData/
+ios/build-*.log
+
+ios/DerivedData-device/
+ios/screenshots/

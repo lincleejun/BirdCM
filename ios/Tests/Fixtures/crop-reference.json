@@ -1,0 +1,106 @@
+{
+  "desktop_geometry_sha256": "d77167e64866894089fb0688f36650b0bb3883be7d45a5f2789fdb020aff12ba",
+  "cases": [
+    {
+      "file": "photo-0.jpg",
+      "source_size": [
+        500,
+        375
+      ],
+      "small": false,
+      "rect": [
+        105,
+        0,
+        425,
+        320
+      ],
+      "input_sha256": "a99da989e6dfff9b471f95a84d2b7b7a111dad14d15453e9a8d1603a896bed6e",
+      "license": "CC0",
+      "source_fixture": "photo-0.jpg"
+    },
+    {
+      "file": "photo-1.jpg",
+      "source_size": [
+        281,
+        500
+      ],
+      "small": true,
+      "rect": [
+        -54,
+        180,
+        266,
+        500
+      ],
+      "input_sha256": "f5c38de0c3349523f4032bc12674eb7ae14362aaa1ead542facde2331193fb6b",
+      "license": "CC0",
+      "source_fixture": "photo-1.jpg"
+    },
+    {
+      "file": "photo-2.jpg",
+      "source_size": [
+        500,
+        281
+      ],
+      "small": false,
+      "rect": [
+        180,
+        -1,
+        500,
+        319
+      ],
+      "input_sha256": "56ad776ea0bf5887d09eca8c7c66e5046fc17b4c4ba03b83e7cc7942b5dba689",
+      "license": "CC0",
+      "source_fixture": "photo-2.jpg"
+    },
+    {
+      "file": "photo-3.jpg",
+      "source_size": [
+        500,
+        333
+      ],
+      "small": true,
+      "rect": [
+        42,
+        13,
+        362,
+        333
+      ],
+      "input_sha256": "8b0bf156a63055926121191817781ab7b36294e28518fd1f9a7bca2fb5f99db6",
+      "license": "CC0",
+      "source_fixture": "photo-3.jpg"
+    },
+    {
+      "file": "photo-4.png",
+      "source_size": [
+        1536,
+        2048
+      ],
+      "small": false,
+      "rect": [
+        107,
+        616,
+        1139,
+        1648
+      ],
+      "input_sha256": "a22ae36553ca5348d389d56f93c157b3df3ed0e06554a39ab787a86c71c42818",
+      "license": "CC0",
+      "source_fixture": "photo-4.png"
+    }
+  ],
+  "small_highres": {
+    "file": "small-highres.png",
+    "source_fixture": "photo-4.png",
+    "license": "CC0",
+    "rect": [
+      1055,
+      1460,
+      1375,
+      1780
+    ],
+    "source_size": [
+      3000,
+      4000
+    ],
+    "input_sha256": "ea1a1d577eb9b56593ab4fc0d1ab2e1bdf02f9f3816bf86a9f6c99bbe9096a80"
+  }
+}

@@ -1,6 +1,6 @@
 # Notices: models and data
 
-BirdCM's code is MIT. The models are downloaded (see `models.toml`), never committed, and each keeps its own licence.
+BirdCM's code is MIT. Desktop models are downloaded (see `models.toml`), never committed, and each keeps its own licence.
 
 | File | What | Licence / terms |
 |---|---|---|
@@ -27,3 +27,44 @@ Pending: a global rarity table (same schema) to replace the US / CA / CN one.
 |---|---|
 | ExifTool 13.64 by Phil Harvey (https://exiftool.org), unmodified, in `观羽.app/Contents/Resources/engine/exiftool` | "This is free software; you can redistribute it and/or modify it under the same terms as Perl itself": the Artistic License or the GNU GPL (version 1 or later), at the recipient's choice. Both texts ship in `Contents/Resources/licenses` (`ExifTool-LICENSE.txt`, `ExifTool-GPL.pod`) |
 | CPython 3.12 (python-build-standalone) and the engine's locked Python dependencies | PSF License and each package's own licence (in its `*.dist-info`); see `macos/THIRD-PARTY.md` |
+
+The iOS Round 3 build uses the global table described below; desktop table selection is separate.
+
+## Native iOS application (`ios/`)
+
+The native app's code is MIT. Its downloaded `mobile-v0` BioCLIP 2.5 Core ML tower uses 8-bit weights (MIT),
+`Detector.mlpackage` is D-FINE nano (Apache-2.0), and `Heads.mlpackage` uses the same eye/beak and flight weights
+listed above: **non-commercial use only**, disclosed in the app's About screen. Models are bundled in Round 3 and never committed.
+The app bundles the Chinese-name table with the IOC v15.2 CC BY 3.0 attribution above, and the clear gate's small
+linear parameters together with `clear-training-photos.csv` and `CLEAR-WEIGHTS-LICENSE.md`.
+BirdNET runs the original SHA-checked FP32 ONNX weights using an exported fixed graph and Apple's Accelerate;
+this does not change the conflicting licence statements recorded above. GBIF/IUCN attribution is also in About;
+`-hideIUCN YES` disables IUCN display. The global rarity table is supplied by a local path at build time, pinned by SHA256 in
+`ios/tools/fetch_models.py`; development keeps a `-rarityPath` override.
+Only verified CC0 iNaturalist images (including a resized derivative) are in `ios/Tests/Fixtures`; their sources,
+attributions and original hashes are recorded in `photos.json`. No owner's photographs are included.
+
+## Round 3: files inside the iOS installation
+
+The iOS app now bundles models, compiled on the build machine. No models are committed to Git.
+`ios/tools/model-assets.json` pins every published source file and SHA256. `Models/integrity.json`
+is generated from the actual compiled resources; launch checks it without copying files from the bundle.
+
+| Bundled file(s) | Licence and attribution |
+|---|---|
+| `Models/BioCLIP.mlmodelc/**` | BioCLIP 2.5 int8, MIT, Imageomics; compiled from the mobile-v0 release |
+| `Models/Detector.mlmodelc/**` | D-FINE nano, Apache-2.0; compiled from mobile-v0 |
+| `Models/Heads.mlmodelc/**` | Eye/beak and flight heads, non-commercial only; CUB-200-2011 and CC BY-NC training sources |
+| `Models/names.f16`, `Models/names.tsv` | TreeOfLife-200M text vectors CC0; AviList Core Team (2026), AviList v2026, CC BY 4.0, doi:10.2173/avilist.v2026 |
+| `Models/BirdNET+_Geomodel_V3.0.4_Global_14K_FP32.onnx` | Direct official v3.0.4 release. Both conflicting licence statements above remain unresolved: geomodel LICENSE-MODELS.md Apache-2.0; birdnet README CC BY-NC-SA 4.0. Cite BirdNET |
+| `geo-graph.json`, `avilist-birdnet-geo3.json` | Exported fixed graph/index mapping for those BirdNET weights; same unresolved model statements |
+| `clear.json`, `CLEAR-WEIGHTS-LICENSE.md`, `clear-training-photos.csv` | Clear linear weights derived from CC BY / CC0 training photos; complete attribution and weight licence travel with the app |
+| `Models/rarity-global.sqlite` | GBIF.org (17 November 2026), GBIF Occurrence Download / search API. IUCN (2026), The IUCN Red List of Threatened Species v2026-1, doi:10.15468/0qnb58. Redistribution of IUCN remains unresolved. `BIRDCM_BUNDLE_IUCN=0` removes every IUCN value from the shipped SQLite data at build time; default 1 for personal builds. Natural Earth shapes public domain |
+| `zh-names.json` | IOC World Bird List v15.2, Gill, Donsker & Rasmussen (Eds), doi:10.14344/IOC.ML.15.2, CC BY 3.0; multilingual compilation Peter Kovalik, detailed Chinese credits above. Wikidata fallback CC0 |
+| `countries.json`, `regions.json` | Hand-entered representative locations and translations, MIT |
+| `region-grid.json`, `boundaries.json` | Natural Earth 1:50m v5.1.1, public domain, https://www.naturalearthdata.com/about/terms-of-use/ |
+| `Models/*.source-sha`, `Models/integrity.json`, `Models/iucn-build-flag` | Generated build metadata, MIT with BirdCM code |
+| `Localizable.xcstrings`, `PrivacyInfo.xcprivacy`, `NOTICE.md`, app icons / executable | BirdCM code, translations, metadata and generated icon, MIT |
+
+Apple MapKit search/tiles are provided by Apple at runtime; their native attribution is preserved.
+Test photos remain CC0-only and are not resources of the Release app. No owner photographs are used.

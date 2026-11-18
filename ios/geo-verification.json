@@ -1,0 +1,39 @@
+{
+  "raw_points": 418,
+  "raw_max_abs_error": 2.771615982055664e-06,
+  "raw_mean_abs_error": 1.674960081743393e-08,
+  "spread": [
+    {
+      "native_swift_wide_error": 1.1026859283447266e-06,
+      "native_swift_median_error": 9.834766387939453e-07,
+      "source": "photo",
+      "points": 9,
+      "weeks": 7,
+      "wide_error": 1.1026859283447266e-06,
+      "median_error": 9.834766387939453e-07
+    },
+    {
+      "native_swift_wide_error": 1.7881393432617188e-06,
+      "native_swift_median_error": 1.2367963790893555e-06,
+      "source": "region",
+      "points": 50,
+      "weeks": 7,
+      "wide_error": 1.7881393432617188e-06,
+      "median_error": 1.2516975402832031e-06
+    }
+  ],
+  "california": {
+    "Xenopsaris albinucha": {
+      "max": 8.940696716308594e-08,
+      "median": 0.0
+    },
+    "Tyrannus melancholicus": {
+      "max": 0.14880231022834778,
+      "median": 0.015939131379127502
+    },
+    "Tyrannus couchii": {
+      "max": 0.002405107021331787,
+      "median": 6.750226020812988e-06
+    }
+  }
+}

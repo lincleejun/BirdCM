@@ -1,0 +1,50 @@
+[
+  {
+    "lat": 33.7,
+    "lon": -118.06,
+    "division": "US-CA",
+    "country": "US"
+  },
+  {
+    "lat": 49.28,
+    "lon": -123.12,
+    "division": "CA-BC",
+    "country": "CA"
+  },
+  {
+    "lat": 32.53,
+    "lon": -117.02,
+    "division": null,
+    "country": "MX"
+  },
+  {
+    "lat": 42.89,
+    "lon": -78.88,
+    "division": "US-NY",
+    "country": "US"
+  },
+  {
+    "lat": 35.7,
+    "lon": 139.7,
+    "division": null,
+    "country": "JP"
+  },
+  {
+    "lat": 20,
+    "lon": -150,
+    "division": null,
+    "country": null
+  },
+  {
+    "lat": -20.9,
+    "lon": 55.5,
+    "division": null,
+    "country": "RE"
+  },
+  {
+    "lat": 39.9,
+    "lon": 116.4,
+    "division": "CN-BJ",
+    "country": "CN"
+  }
+]

@@ -1,0 +1,9 @@
+build/
+DerivedData/
+Models/
+*.xcresult
+
+build-*.log
+
+# Local distribution archives and signed applications
+dist/

@@ -1,0 +1,731 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		002A5BCB61E66B6F597F8046 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = B39535F38A0EE6F535D65138 /* NOTICE.md */; };
+		01B8A5B33EB0B27CA9B1C798 /* DisplayCrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */; };
+		05F9F7DD0B7AFB16A33E9B03 /* PhotoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8171929D21E7139FA08AF9 /* PhotoView.swift */; };
+		1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */; };
+		219F6C9B1226AC94AA191468 /* Place.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33AB76EF2ADB0CA492710D4A /* Place.swift */; };
+		2A828C1B4B1B72E430198DBA /* clear.json in Resources */ = {isa = PBXBuildFile; fileRef = F388947B5CEEA82620053E9B /* clear.json */; };
+		2EDD95AB996DF54A5D203BA1 /* zh-names.json in Resources */ = {isa = PBXBuildFile; fileRef = 20D8D66AF2EC535FFE72EE59 /* zh-names.json */; };
+		3DFE8B3E5A4DE25D7CEAB691 /* region-grid.json in Resources */ = {isa = PBXBuildFile; fileRef = 5A6DCD5461A89C056E7DC1FB /* region-grid.json */; };
+		3EF7B5458D56604B318E839F /* boundaries.json in Resources */ = {isa = PBXBuildFile; fileRef = 28FFB8922A99A3057BEDFEC9 /* boundaries.json */; };
+		3F0C8C2446365780E1E3218B /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = F39911F570E6DA1264A3A0C3 /* libsqlite3.tbd */; };
+		448BEEC9B2253191DCEE8565 /* LogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 344DA05F98C2FC721F554253 /* LogicTests.swift */; };
+		48A3DB107D7508B725F231C3 /* clear-training-photos.csv in Resources */ = {isa = PBXBuildFile; fileRef = BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */; };
+		4AE835BD873625AE826C0984 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */; };
+		4D3A0085C128E671C59E9CE3 /* Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */; };
+		5884EBDF66602F9226603C85 /* BirdPager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29FC5D8A8FA3896A6DF55FD1 /* BirdPager.swift */; };
+		5C513C60DD11A76149B503AC /* avilist-birdnet-geo3.json in Resources */ = {isa = PBXBuildFile; fileRef = 6613809CF4E907E63588615B /* avilist-birdnet-geo3.json */; };
+		6BEEC576DBB6E08C0C197812 /* Models in Resources */ = {isa = PBXBuildFile; fileRef = 9333FC17867E9236B15D2411 /* Models */; };
+		6E1226DC86BB39731230074A /* Preview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D329C1F374D5F15D27B885 /* Preview.swift */; };
+		6FA29A78786B99C6B9D4CA9B /* Confirm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1D2B2A7FD7945E0008A5D9 /* Confirm.swift */; };
+		6FC871F322521BAF2703D17A /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10C1720395468417D71FB48 /* Store.swift */; };
+		7024122ADBB1933352C7B20F /* Flows.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0CF7E248E2F161C963C6FE2 /* Flows.swift */; };
+		75ED900F3DBBA33F45CFE3F3 /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = DB2F58A4B3E992DA5D3423A1 /* Fixtures */; };
+		79BC1621027D5CA4C9B93431 /* Rarity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C064BA2F801B919462B1F37A /* Rarity.swift */; };
+		79E8CB8D110339CD3F41844C /* Pixels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141B9603148CE498F6E8E80F /* Pixels.swift */; };
+		7F0D5FE2F4D44840B52C6B44 /* geo-graph.json in Resources */ = {isa = PBXBuildFile; fileRef = 1EA75BE835A9655F80493366 /* geo-graph.json */; };
+		882EADCA15A93565BEEBF7D7 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ECB21C7959391EEFA7F91E4 /* App.swift */; };
+		8B4B9C1583288BFD30E1F955 /* countries.json in Resources */ = {isa = PBXBuildFile; fileRef = 5D252954BF27BD52A11F848B /* countries.json */; };
+		8BACE772E9F00BCD63CA14EF /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = DB2F58A4B3E992DA5D3423A1 /* Fixtures */; };
+		94CFDE3C28EFF1BE3BAA7FB7 /* Engine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2DD46E893FADFFFFADB08A /* Engine.swift */; };
+		9725D7A4088B49D6A47176DD /* PipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4668201A11936E9A1AF6313 /* PipelineTests.swift */; };
+		A6EB614994406B46D67E7059 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5E173523A2A0C66AEEDC6C66 /* PrivacyInfo.xcprivacy */; };
+		ABD2528274041DD945C9663D /* ResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82CDA918FD5F9D910F73E852 /* ResultView.swift */; };
+		C16F865DA367A307655882DF /* Geo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51DFFBE6B207DECEEA343EA0 /* Geo.swift */; };
+		C9EFAEFDE332676B38697CEC /* CLEAR-WEIGHTS-LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = 99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */; };
+		E7657A47BD69A3AFD48CF814 /* DisplayCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */; };
+		F87B6A3F0197E0A46960A68B /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931CDAA415795FBEA2C6BAEE /* AboutView.swift */; };
+		F94FC0B9917A5CB44B008CB7 /* regions.json in Resources */ = {isa = PBXBuildFile; fileRef = 141CE94CEBAFCE6C069382E5 /* regions.json */; };
+		FFB9D837C6DFC404F0E5F73C /* GeoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A403EFA257B3C771DFF3C /* GeoTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		105D01C5FF0AB78B328AA09D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE34895E21634E5F90DCDF2E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BE27C2ED5CCEA13E1ECC1E43;
+			remoteInfo = BirdCM;
+		};
+		B0B5ACFC09693DF45040C0BB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE34895E21634E5F90DCDF2E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BE27C2ED5CCEA13E1ECC1E43;
+			remoteInfo = BirdCM;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		0D8171929D21E7139FA08AF9 /* PhotoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoView.swift; sourceTree = "<group>"; };
+		0F2DD46E893FADFFFFADB08A /* Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Engine.swift; sourceTree = "<group>"; };
+		141B9603148CE498F6E8E80F /* Pixels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pixels.swift; sourceTree = "<group>"; };
+		141CE94CEBAFCE6C069382E5 /* regions.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = regions.json; sourceTree = "<group>"; };
+		1EA75BE835A9655F80493366 /* geo-graph.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "geo-graph.json"; sourceTree = "<group>"; };
+		20D8D66AF2EC535FFE72EE59 /* zh-names.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "zh-names.json"; sourceTree = "<group>"; };
+		28FFB8922A99A3057BEDFEC9 /* boundaries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = boundaries.json; sourceTree = "<group>"; };
+		29FC5D8A8FA3896A6DF55FD1 /* BirdPager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BirdPager.swift; sourceTree = "<group>"; };
+		33AB76EF2ADB0CA492710D4A /* Place.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Place.swift; sourceTree = "<group>"; };
+		344DA05F98C2FC721F554253 /* LogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogicTests.swift; sourceTree = "<group>"; };
+		3C0148AD90669F677A5EBB9F /* BirdCMTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BirdCMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4E1D2B2A7FD7945E0008A5D9 /* Confirm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Confirm.swift; sourceTree = "<group>"; };
+		51DFFBE6B207DECEEA343EA0 /* Geo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Geo.swift; sourceTree = "<group>"; };
+		5A6DCD5461A89C056E7DC1FB /* region-grid.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "region-grid.json"; sourceTree = "<group>"; };
+		5D252954BF27BD52A11F848B /* countries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = countries.json; sourceTree = "<group>"; };
+		5E173523A2A0C66AEEDC6C66 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		5ECB21C7959391EEFA7F91E4 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		62919E5E424B4D097133A6E5 /* BirdCMUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BirdCMUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6613809CF4E907E63588615B /* avilist-birdnet-geo3.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "avilist-birdnet-geo3.json"; sourceTree = "<group>"; };
+		82CDA918FD5F9D910F73E852 /* ResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultView.swift; sourceTree = "<group>"; };
+		836047A50C479738D28DD920 /* BirdCM.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BirdCM.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayCrop.swift; sourceTree = "<group>"; };
+		92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoNetwork.swift; sourceTree = "<group>"; };
+		931CDAA415795FBEA2C6BAEE /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		9333FC17867E9236B15D2411 /* Models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Models; sourceTree = SOURCE_ROOT; };
+		96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
+		99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "CLEAR-WEIGHTS-LICENSE.md"; sourceTree = "<group>"; };
+		A0CF7E248E2F161C963C6FE2 /* Flows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Flows.swift; sourceTree = "<group>"; };
+		A10C1720395468417D71FB48 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
+		A4668201A11936E9A1AF6313 /* PipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineTests.swift; sourceTree = "<group>"; };
+		B39535F38A0EE6F535D65138 /* NOTICE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = NOTICE.md; sourceTree = "<group>"; };
+		BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */ = {isa = PBXFileReference; path = "clear-training-photos.csv"; sourceTree = "<group>"; };
+		C064BA2F801B919462B1F37A /* Rarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rarity.swift; sourceTree = "<group>"; };
+		DB2F58A4B3E992DA5D3423A1 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Fixtures; path = Tests/Fixtures; sourceTree = SOURCE_ROOT; };
+		F388947B5CEEA82620053E9B /* clear.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = clear.json; sourceTree = "<group>"; };
+		F39911F570E6DA1264A3A0C3 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
+		F52A403EFA257B3C771DFF3C /* GeoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoTests.swift; sourceTree = "<group>"; };
+		F5D329C1F374D5F15D27B885 /* Preview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preview.swift; sourceTree = "<group>"; };
+		FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayCropTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		68EE8767EF8D31B6642EDE86 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3F0C8C2446365780E1E3218B /* libsqlite3.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0F121B37271C43D4705E4C53 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				A0CF7E248E2F161C963C6FE2 /* Flows.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		8483714F6D9AB344CB79594A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				836047A50C479738D28DD920 /* BirdCM.app */,
+				3C0148AD90669F677A5EBB9F /* BirdCMTests.xctest */,
+				62919E5E424B4D097133A6E5 /* BirdCMUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A15DF9A76EB0CA75B951225E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F39911F570E6DA1264A3A0C3 /* libsqlite3.tbd */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		DD2DAE5CA5D033A11E9332C7 = {
+			isa = PBXGroup;
+			children = (
+				DB2F58A4B3E992DA5D3423A1 /* Fixtures */,
+				9333FC17867E9236B15D2411 /* Models */,
+				E9EDF7FFCA4010060B0FE029 /* BirdCM */,
+				EC258D24D1950C38F13A7D3E /* Resources */,
+				E6F57B9DD7E2D0C85E59B315 /* Tests */,
+				0F121B37271C43D4705E4C53 /* UITests */,
+				A15DF9A76EB0CA75B951225E /* Frameworks */,
+				8483714F6D9AB344CB79594A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E6F57B9DD7E2D0C85E59B315 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */,
+				F52A403EFA257B3C771DFF3C /* GeoTests.swift */,
+				344DA05F98C2FC721F554253 /* LogicTests.swift */,
+				A4668201A11936E9A1AF6313 /* PipelineTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		E9EDF7FFCA4010060B0FE029 /* BirdCM */ = {
+			isa = PBXGroup;
+			children = (
+				931CDAA415795FBEA2C6BAEE /* AboutView.swift */,
+				5ECB21C7959391EEFA7F91E4 /* App.swift */,
+				29FC5D8A8FA3896A6DF55FD1 /* BirdPager.swift */,
+				4E1D2B2A7FD7945E0008A5D9 /* Confirm.swift */,
+				96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */,
+				85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */,
+				0F2DD46E893FADFFFFADB08A /* Engine.swift */,
+				51DFFBE6B207DECEEA343EA0 /* Geo.swift */,
+				92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */,
+				0D8171929D21E7139FA08AF9 /* PhotoView.swift */,
+				141B9603148CE498F6E8E80F /* Pixels.swift */,
+				33AB76EF2ADB0CA492710D4A /* Place.swift */,
+				F5D329C1F374D5F15D27B885 /* Preview.swift */,
+				C064BA2F801B919462B1F37A /* Rarity.swift */,
+				82CDA918FD5F9D910F73E852 /* ResultView.swift */,
+				A10C1720395468417D71FB48 /* Store.swift */,
+			);
+			path = BirdCM;
+			sourceTree = "<group>";
+		};
+		EC258D24D1950C38F13A7D3E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				6613809CF4E907E63588615B /* avilist-birdnet-geo3.json */,
+				28FFB8922A99A3057BEDFEC9 /* boundaries.json */,
+				BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */,
+				99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */,
+				F388947B5CEEA82620053E9B /* clear.json */,
+				5D252954BF27BD52A11F848B /* countries.json */,
+				1EA75BE835A9655F80493366 /* geo-graph.json */,
+				0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */,
+				B39535F38A0EE6F535D65138 /* NOTICE.md */,
+				5E173523A2A0C66AEEDC6C66 /* PrivacyInfo.xcprivacy */,
+				5A6DCD5461A89C056E7DC1FB /* region-grid.json */,
+				141CE94CEBAFCE6C069382E5 /* regions.json */,
+				20D8D66AF2EC535FFE72EE59 /* zh-names.json */,
+			);
+			name = Resources;
+			path = BirdCM/Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		111607052ECA1389A060DEFA /* BirdCMTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 73D334D001C162738F4D0142 /* Build configuration list for PBXNativeTarget "BirdCMTests" */;
+			buildPhases = (
+				920F42FF4914E1DD7A55FAC0 /* Sources */,
+				CF1776311198E2E8FB0ED69A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E67915AEF3FF7BF46025E176 /* PBXTargetDependency */,
+			);
+			name = BirdCMTests;
+			packageProductDependencies = (
+			);
+			productName = BirdCMTests;
+			productReference = 3C0148AD90669F677A5EBB9F /* BirdCMTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		99A0E9D3B4E417F71E195C77 /* BirdCMUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0B4F1AD7E4409DDF3F6E7AB5 /* Build configuration list for PBXNativeTarget "BirdCMUITests" */;
+			buildPhases = (
+				8DADBF61E120AEC9C1D5507B /* Sources */,
+				8A388917FC9F3D05E5746094 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				80FB952E34B5364D003CD94E /* PBXTargetDependency */,
+			);
+			name = BirdCMUITests;
+			packageProductDependencies = (
+			);
+			productName = BirdCMUITests;
+			productReference = 62919E5E424B4D097133A6E5 /* BirdCMUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		BE27C2ED5CCEA13E1ECC1E43 /* BirdCM */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1C1668AE1982031FB547CC7C /* Build configuration list for PBXNativeTarget "BirdCM" */;
+			buildPhases = (
+				6A92C77C957266FA3248D2CD /* Sources */,
+				14FBD4768D8FD3423EACB622 /* Resources */,
+				68EE8767EF8D31B6642EDE86 /* Frameworks */,
+				DFE03E3A5363A4671554A623 /* Apply bundled data licence flag */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BirdCM;
+			packageProductDependencies = (
+			);
+			productName = BirdCM;
+			productReference = 836047A50C479738D28DD920 /* BirdCM.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AE34895E21634E5F90DCDF2E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					111607052ECA1389A060DEFA = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					99A0E9D3B4E417F71E195C77 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+						TestTargetID = BE27C2ED5CCEA13E1ECC1E43;
+					};
+					BE27C2ED5CCEA13E1ECC1E43 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 7775CEA09C735156869E7E3C /* Build configuration list for PBXProject "BirdCM" */;
+			developmentRegion = "zh-Hans";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				"zh-Hans",
+			);
+			mainGroup = DD2DAE5CA5D033A11E9332C7;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8483714F6D9AB344CB79594A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BE27C2ED5CCEA13E1ECC1E43 /* BirdCM */,
+				111607052ECA1389A060DEFA /* BirdCMTests */,
+				99A0E9D3B4E417F71E195C77 /* BirdCMUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		14FBD4768D8FD3423EACB622 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C9EFAEFDE332676B38697CEC /* CLEAR-WEIGHTS-LICENSE.md in Resources */,
+				4AE835BD873625AE826C0984 /* Localizable.xcstrings in Resources */,
+				6BEEC576DBB6E08C0C197812 /* Models in Resources */,
+				002A5BCB61E66B6F597F8046 /* NOTICE.md in Resources */,
+				A6EB614994406B46D67E7059 /* PrivacyInfo.xcprivacy in Resources */,
+				5C513C60DD11A76149B503AC /* avilist-birdnet-geo3.json in Resources */,
+				3EF7B5458D56604B318E839F /* boundaries.json in Resources */,
+				48A3DB107D7508B725F231C3 /* clear-training-photos.csv in Resources */,
+				2A828C1B4B1B72E430198DBA /* clear.json in Resources */,
+				8B4B9C1583288BFD30E1F955 /* countries.json in Resources */,
+				7F0D5FE2F4D44840B52C6B44 /* geo-graph.json in Resources */,
+				3DFE8B3E5A4DE25D7CEAB691 /* region-grid.json in Resources */,
+				F94FC0B9917A5CB44B008CB7 /* regions.json in Resources */,
+				2EDD95AB996DF54A5D203BA1 /* zh-names.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A388917FC9F3D05E5746094 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8BACE772E9F00BCD63CA14EF /* Fixtures in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF1776311198E2E8FB0ED69A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				75ED900F3DBBA33F45CFE3F3 /* Fixtures in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		DFE03E3A5363A4671554A623 /* Apply bundled data licence flag */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Apply bundled data licence flag";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "bash \"$SRCROOT/tools/prepare_bundle.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6A92C77C957266FA3248D2CD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F87B6A3F0197E0A46960A68B /* AboutView.swift in Sources */,
+				882EADCA15A93565BEEBF7D7 /* App.swift in Sources */,
+				5884EBDF66602F9226603C85 /* BirdPager.swift in Sources */,
+				6FA29A78786B99C6B9D4CA9B /* Confirm.swift in Sources */,
+				4D3A0085C128E671C59E9CE3 /* Diagnostics.swift in Sources */,
+				01B8A5B33EB0B27CA9B1C798 /* DisplayCrop.swift in Sources */,
+				94CFDE3C28EFF1BE3BAA7FB7 /* Engine.swift in Sources */,
+				C16F865DA367A307655882DF /* Geo.swift in Sources */,
+				1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */,
+				05F9F7DD0B7AFB16A33E9B03 /* PhotoView.swift in Sources */,
+				79E8CB8D110339CD3F41844C /* Pixels.swift in Sources */,
+				219F6C9B1226AC94AA191468 /* Place.swift in Sources */,
+				6E1226DC86BB39731230074A /* Preview.swift in Sources */,
+				79BC1621027D5CA4C9B93431 /* Rarity.swift in Sources */,
+				ABD2528274041DD945C9663D /* ResultView.swift in Sources */,
+				6FC871F322521BAF2703D17A /* Store.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8DADBF61E120AEC9C1D5507B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7024122ADBB1933352C7B20F /* Flows.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		920F42FF4914E1DD7A55FAC0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E7657A47BD69A3AFD48CF814 /* DisplayCropTests.swift in Sources */,
+				FFB9D837C6DFC404F0E5F73C /* GeoTests.swift in Sources */,
+				448BEEC9B2253191DCEE8565 /* LogicTests.swift in Sources */,
+				9725D7A4088B49D6A47176DD /* PipelineTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		80FB952E34B5364D003CD94E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BE27C2ED5CCEA13E1ECC1E43 /* BirdCM */;
+			targetProxy = 105D01C5FF0AB78B328AA09D /* PBXContainerItemProxy */;
+		};
+		E67915AEF3FF7BF46025E176 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BE27C2ED5CCEA13E1ECC1E43 /* BirdCM */;
+			targetProxy = B0B5ACFC09693DF45040C0BB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2336920C64AD0C72FE9FEA0A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cc.outman.birdcm.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BirdCM.app/BirdCM";
+			};
+			name = Release;
+		};
+		28EE16AE154C28D6978E1C6C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		5EBA745632CB73401BFE0AA6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cc.outman.birdcm.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = BirdCM;
+			};
+			name = Debug;
+		};
+		5EF3B764589ECAFDBA250F8F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				BIRDCM_BUNDLE_IUCN = 1;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 4;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "观羽";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "照片没有 GPS 时，用当前地点修正鸟种；拒绝仍可识别。";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "将你选择的鸟图保存到相册，仅在点击保存时请求。";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cc.outman.birdcm;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		B3A64E2C1FEE027430F673FE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cc.outman.birdcm.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = BirdCM;
+			};
+			name = Release;
+		};
+		BBE12D55AF8F147036EB037F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cc.outman.birdcm.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BirdCM.app/BirdCM";
+			};
+			name = Debug;
+		};
+		BE95F16A842AD72AE48DDBC0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				BIRDCM_BUNDLE_IUCN = 1;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 4;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "观羽";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "照片没有 GPS 时，用当前地点修正鸟种；拒绝仍可识别。";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "将你选择的鸟图保存到相册，仅在点击保存时请求。";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cc.outman.birdcm;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		E97ED98518BFF73CC9E075CC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0B4F1AD7E4409DDF3F6E7AB5 /* Build configuration list for PBXNativeTarget "BirdCMUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5EBA745632CB73401BFE0AA6 /* Debug */,
+				B3A64E2C1FEE027430F673FE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		1C1668AE1982031FB547CC7C /* Build configuration list for PBXNativeTarget "BirdCM" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BE95F16A842AD72AE48DDBC0 /* Debug */,
+				5EF3B764589ECAFDBA250F8F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		73D334D001C162738F4D0142 /* Build configuration list for PBXNativeTarget "BirdCMTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBE12D55AF8F147036EB037F /* Debug */,
+				2336920C64AD0C72FE9FEA0A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7775CEA09C735156869E7E3C /* Build configuration list for PBXProject "BirdCM" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				28EE16AE154C28D6978E1C6C /* Debug */,
+				E97ED98518BFF73CC9E075CC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AE34895E21634E5F90DCDF2E /* Project object */;
+}

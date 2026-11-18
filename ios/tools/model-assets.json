@@ -1,0 +1,74 @@
+[
+  {
+    "path": "BioCLIP.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+    "url": "https://github.com/lincleejun/bioclip-bird/releases/download/mobile-v0/BioCLIP.mlpackage__Data__com.apple.CoreML__model.mlmodel",
+    "sha256": "c4b78d275e4cf422bd424438c3f2b9484df018a24f9cdfee4a696f887b7ddad9",
+    "bytes": 474827
+  },
+  {
+    "path": "BioCLIP.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+    "url": "https://github.com/lincleejun/bioclip-bird/releases/download/mobile-v0/BioCLIP.mlpackage__Data__com.apple.CoreML__weights__weight.bin",
+    "sha256": "8cf993453ea26bcd6f713e8d661ab9086a4138951857a16b6cd9e8c27fe49ef8",
+    "bytes": 633405696
+  },
+  {
+    "path": "BioCLIP.mlpackage/Manifest.json",
+    "url": "https://github.com/lincleejun/bioclip-bird/releases/download/mobile-v0/BioCLIP.mlpackage__Manifest.json",
+    "sha256": "444c37552cb6a9fbc17b0755e8aa29072878c35ea1214038cc0b98686d10286b",
+    "bytes": 617
+  },
+  {
+    "path": "Detector.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+    "url": "https://github.com/lincleejun/bioclip-bird/releases/download/mobile-v0/Detector.mlpackage__Data__com.apple.CoreML__model.mlmodel",
+    "sha256": "89c733c8c4a83c49397af768a075f5d5f362d4e7b45ffd84414b0df6d91a4dac",
+    "bytes": 274928
+  },
+  {
+    "path": "Detector.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+    "url": "https://github.com/lincleejun/bioclip-bird/releases/download/mobile-v0/Detector.mlpackage__Data__com.apple.CoreML__weights__weight.bin",
+    "sha256": "85716f23064c81b4cc2bfc67341182fbc4e9ad6cf37b9193334337fbf977a525",
+    "bytes": 15221572
+  },
+  {
+    "path": "Detector.mlpackage/Manifest.json",
+    "url": "https://github.com/lincleejun/bioclip-bird/releases/download/mobile-v0/Detector.mlpackage__Manifest.json",
+    "sha256": "19f78c7429facc9f266701d0321a6e56cdf4b9040832ea1e63b5fabe13aef798",
+    "bytes": 617
+  },
+  {
+    "path": "Heads.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+    "url": "https://github.com/lincleejun/bioclip-bird-heads/releases/download/mobile-v0/Heads.mlpackage__Data__com.apple.CoreML__model.mlmodel",
+    "sha256": "ac96559a3823aab76159643ae1ea2eb22767ad5bbe678771c21c4e24119d13f0",
+    "bytes": 6699
+  },
+  {
+    "path": "Heads.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+    "url": "https://github.com/lincleejun/bioclip-bird-heads/releases/download/mobile-v0/Heads.mlpackage__Data__com.apple.CoreML__weights__weight.bin",
+    "sha256": "6aed6c268a004906914d4c1b0b97175c79721845c172f2088256377e62a35ad8",
+    "bytes": 1350272
+  },
+  {
+    "path": "Heads.mlpackage/Manifest.json",
+    "url": "https://github.com/lincleejun/bioclip-bird-heads/releases/download/mobile-v0/Heads.mlpackage__Manifest.json",
+    "sha256": "bd36a3496fb1cc090dbaa3c5d17f4244843d712e90ad7d37daccc9860ebfac72",
+    "bytes": 617
+  },
+  {
+    "path": "names.f16",
+    "url": "https://github.com/lincleejun/bioclip-bird/releases/download/mobile-v0/names.f16",
+    "sha256": "2153df779f6a72595d21193d2c3f2eaab556aecf48849e52a614ea159048e05f",
+    "bytes": 22880256
+  },
+  {
+    "path": "names.tsv",
+    "url": "https://github.com/lincleejun/bioclip-bird/releases/download/mobile-v0/names.tsv",
+    "sha256": "7d06216fbb3844215f07434dee6ae753b9c9c99ddebf92bb54c8a5c20771412b",
+    "bytes": 771281
+  },
+  {
+    "path": "BirdNET+_Geomodel_V3.0.4_Global_14K_FP32.onnx",
+    "url": "https://github.com/birdnet-team/geomodel/releases/download/v3.0.4/BirdNET+_Geomodel_V3.0.4_Global_14K_FP32.onnx",
+    "sha256": "0de81d222c23dcb6fa428e958b4dac978783191357e01b7268a103fc6f08e61a",
+    "bytes": 15503473
+  }
+]

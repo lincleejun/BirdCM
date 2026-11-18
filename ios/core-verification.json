@@ -1,0 +1,77 @@
+[
+  {
+    "box_iou" : 0.999017842207227,
+    "case" : "photo-0.jpg",
+    "clear" : true,
+    "embedding_cosine" : 0.99964633893890709,
+    "flying" : 0.9999738335609436,
+    "input_mean_difference" : 0.23351137329931973,
+    "top5" : [
+      "Haliaeetus leucocephalus",
+      "Aquila chrysaetos",
+      "Haliaeetus albicilla",
+      "Buteo regalis",
+      "Elanoides forficatus"
+    ]
+  },
+  {
+    "box_iou" : 0.99837794965824578,
+    "case" : "photo-1.jpg",
+    "clear" : true,
+    "embedding_cosine" : 0.99992333618516305,
+    "flying" : 0.072032749652862549,
+    "input_mean_difference" : 0.14751408375850339,
+    "top5" : [
+      "Pelecanus occidentalis",
+      "Pelecanus thagus",
+      "Larus heermanni",
+      "Pelecanus erythrorhynchos",
+      "Urile penicillatus"
+    ]
+  },
+  {
+    "box_iou" : 0.9976416297539441,
+    "case" : "photo-2.jpg",
+    "clear" : true,
+    "embedding_cosine" : 0.99882586420952335,
+    "flying" : 0.015757620334625244,
+    "input_mean_difference" : 0.19747821003401361,
+    "top5" : [
+      "Aphelocoma woodhouseii",
+      "Aphelocoma californica",
+      "Aphelocoma insularis",
+      "Gymnorhinus cyanocephalus",
+      "Aphelocoma wollweberi"
+    ]
+  },
+  {
+    "box_iou" : 0.99402539838717041,
+    "case" : "photo-3.jpg",
+    "clear" : true,
+    "embedding_cosine" : 0.99991049873634152,
+    "flying" : 0.021824274212121964,
+    "input_mean_difference" : 0.1470623405612245,
+    "top5" : [
+      "Egretta thula",
+      "Egretta garzetta",
+      "Ardea alba",
+      "Egretta rufescens",
+      "Egretta caerulea"
+    ]
+  },
+  {
+    "box_iou" : 0.99998773559445042,
+    "case" : "photo-4.png",
+    "clear" : true,
+    "embedding_cosine" : 0.99981597260132593,
+    "flying" : 0.012034726329147816,
+    "input_mean_difference" : 0,
+    "top5" : [
+      "Zonotrichia leucophrys",
+      "Zonotrichia atricapilla",
+      "Spizella passerina",
+      "Zonotrichia albicollis",
+      "Spizella breweri"
+    ]
+  }
+]
