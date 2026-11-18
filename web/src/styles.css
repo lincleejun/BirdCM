@@ -426,3 +426,76 @@ main.res-main { padding-top: 0; }
 .correct-list button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 5px 6px; color: inherit; }
 .correct-list button[aria-pressed=true] { background: var(--soft); box-shadow: inset 3px 0 0 var(--green); }
 .correct-list small { color: var(--muted); margin-left: 4px; }
+
+/* 记录 / 统计 (Library.tsx) */
+.ll .filters { margin-top: 6px; }
+.ll-search { flex: 1 1 220px; max-width: 360px; }
+.ll-grid { list-style: none; padding: 0; margin: 0 0 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.ll-card { display: grid; gap: 8px; width: 100%; height: 100%; padding: 0 0 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); text-align: left; overflow: hidden; }
+.ll-card:hover { background: var(--soft); }
+.ll-card .ll-thumb { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 0; }
+.ll-card-text { display: grid; gap: 2px; padding: 0 11px; min-width: 0; }
+.ll-card-text b { font: 700 17px/1.3 var(--serif); }
+.ll-card-text small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.ll-nozh { color: var(--amber) !important; }
+.ll-thumb { display: grid; place-items: center; width: 64px; height: 64px; object-fit: cover; border-radius: 5px; background: var(--mat); color: var(--mat-muted); font-size: 11px; }
+.ll-sp-title { margin-top: 8px; }
+.ll-months { list-style: none; display: grid; grid-template-columns: repeat(12, minmax(18px, 1fr)); gap: 4px; padding: 0; margin: 8px 0 0; height: 110px; }
+.ll-months li { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; min-width: 0; }
+.ll-months span { width: 100%; min-height: 2px; background: var(--green); border-radius: 3px 3px 0 0; }
+.ll-months small { color: var(--muted); font-size: 11px; }
+.ll-places { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
+.ll-places small { color: var(--muted); }
+.ll-gallery { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; padding: 0; margin: 8px 0 0; }
+.ll-gallery button { display: grid; gap: 3px; width: 100%; padding: 0; border: 0; background: none; text-align: left; color: var(--muted); font-size: 11px; }
+.ll-gallery .ll-thumb { width: 100%; height: auto; aspect-ratio: 1; }
+.ll-links a { margin: 0 6px; color: var(--green); }
+.ll-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-block: 1px solid var(--line); background: var(--surface); margin: 6px 0 10px; }
+.ll-metric { display: grid; gap: 2px; padding: 14px 16px; border: 0; border-right: 1px solid var(--line); background: none; text-align: left; min-height: 44px; }
+.ll-metric:last-child { border-right: 0; }
+.ll-metric:hover:not(:disabled) { background: var(--soft); }
+.ll-metric:disabled { color: inherit; cursor: default; }
+.ll-metric b { font: 650 30px/1.2 var(--mono); }
+.ll-metric small { color: var(--muted); }
+.ll-rarity { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin: 10px 0; }
+.ll-rarity .hint { flex-basis: 100%; margin: 0; }
+.ll-obs { list-style: none; padding: 0; margin: 8px 0 0; border-top: 1px solid var(--line); }
+.ll-obs > li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.ll-obs-refs { display: flex; gap: 4px; }
+.ll-obs-refs button { padding: 0; border: 0; background: none; }
+.ll-obs-refs .ll-thumb { width: 56px; height: 56px; }
+.ll-obs-name { padding: 0; min-height: 0; font-size: 16px; }
+.ll-count { margin-top: 6px; }
+.ll-count input { width: 96px; min-height: 36px; }
+.btn.slim { min-height: 36px; padding: 4px 10px; }
+.ll-day { display: inline-grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font-size: 12px; padding: 0; color: var(--ink); }
+.ll-day[data-l="1"] { background: color-mix(in srgb, var(--green) 25%, var(--surface)); }
+.ll-day[data-l="2"] { background: color-mix(in srgb, var(--green) 50%, var(--surface)); }
+.ll-day[data-l="3"] { background: color-mix(in srgb, var(--green) 75%, var(--surface)); color: var(--on-green); }
+.ll-day[data-l="4"] { background: var(--green); color: var(--on-green); }
+.ll-day:disabled { cursor: default; color: var(--muted); }
+.ll-month { display: grid; grid-template-columns: repeat(7, minmax(0, 52px)); gap: 4px; margin-top: 8px; }
+.ll-wd { text-align: center; font-size: 12px; color: var(--muted); }
+.ll-year { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); grid-auto-columns: 13px; gap: 3px; overflow-x: auto; padding: 8px 0; }
+.ll-year .ll-day { width: 13px; height: 13px; border-radius: 2px; }
+.ll-legend i.ll-day { width: 13px; height: 13px; display: inline-block; vertical-align: -2px; }
+.ll-map { height: 420px; }
+.ll-pin span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--green); color: var(--on-green); font: 700 12px/1 var(--sans); border: 2px solid var(--surface); box-shadow: 0 1px 3px #0006; }
+.ll-ev { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.ll-ev-img { width: 100%; border-radius: 8px; background: var(--mat); }
+.map-dlg .correct-list { max-height: 180px; overflow: auto; }
+@media (max-width: 720px) {
+  .ll-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ll-metric:nth-child(2) { border-right: 0; }
+  .ll-metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .ll-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .ll-ev { grid-template-columns: 1fr; }
+  .ll-map { height: 320px; }
+  .ll-month { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}
+.masthead-inner { flex-wrap: wrap; }
+.views { flex-wrap: wrap; }
+a.btn { display: inline-flex; align-items: center; color: inherit; text-decoration: none; }
+.ll-card { align-content: start; }
+.ll .hint, .ll-places { overflow-wrap: anywhere; }
+.ll-ev select, .ll-ev .row { max-width: 100%; } .ll-ev .loc .row { flex-wrap: wrap; }

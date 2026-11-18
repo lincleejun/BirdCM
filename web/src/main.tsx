@@ -5,6 +5,7 @@ import Results, { STATE_LABEL } from "./Results";
 import Singles from "./Singles";
 import KeepControl, { DEFAULT_KEEP, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, rememberedPlace } from "./Location";
+import { Records, Stats } from "./Library";
 import type { ModelStatus, Place, Scan } from "./types";
 import "./styles.css";
 
@@ -128,7 +129,20 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
 function App() {
   const q = new URLSearchParams(location.search);
   const [scanId, setScanId] = useState<number | null>(() => Number(q.get("scan")) || null);
-  const [view, setView] = useState<"batch" | "single">(q.get("view") === "single" ? "single" : "batch");
+  type View = "batch" | "single" | "library" | "stats";
+  const [view, setView] = useState<View>(() => (["single", "library", "stats"].includes(q.get("view") ?? "") ? q.get("view") as View : "batch"));
+  const [sci, setSci] = useState<string | null>(q.get("sci"));
+  // one history entry per species page, so Back returns to the list (no router: the query string is the state)
+  useEffect(() => {
+    const pop = () => { const p = new URLSearchParams(location.search); setSci(p.get("sci")); if (p.get("view")) setView(p.get("view") as View); };
+    window.addEventListener("popstate", pop);
+    return () => window.removeEventListener("popstate", pop);
+  }, []);
+  const species = (s: string | null) => {
+    if (s) history.pushState(null, "", `?view=library&sci=${encodeURIComponent(s)}`);
+    else history.back();
+    setView("library"); setSci(s); window.scrollTo(0, 0);
+  };
   const [catalogue, setCatalogue] = useState<Country[]>([]);
   useEffect(() => { get<Country[]>("/api/regions").then(setCatalogue).catch(() => {}); }, []);
   const open = useCallback((id: number | null) => {
@@ -136,14 +150,16 @@ function App() {
     setScanId(id);
     window.scrollTo(0, 0);
   }, []);
-  const switchTo = (v: "batch" | "single") => {
-    history.replaceState(null, "", v === "single" ? "?view=single" : scanId ? `?scan=${scanId}` : location.pathname);
-    setView(v);
+  const switchTo = (v: View) => {
+    history.replaceState(null, "", v !== "batch" ? `?view=${v}` : scanId ? `?scan=${scanId}` : location.pathname);
+    setView(v); setSci(null);
   };
   const nav = (
     <nav className="views" aria-label="视图">
       <button aria-current={view === "batch"} onClick={() => switchTo("batch")}>批量选片</button>
       <button aria-current={view === "single"} onClick={() => switchTo("single")}>认一张</button>
+      <button aria-current={view === "library"} onClick={() => switchTo("library")}>记录</button>
+      <button aria-current={view === "stats"} onClick={() => switchTo("stats")}>统计</button>
     </nav>
   );
   const results = view === "batch" && scanId;
@@ -158,6 +174,8 @@ function App() {
         </header>
       )}
       <main className={results ? "res-main" : undefined}>{view === "single" ? <Singles catalogue={catalogue} />
+        : view === "library" ? <Records catalogue={catalogue} sci={sci} onSpecies={species} />
+        : view === "stats" ? <Stats catalogue={catalogue} onSpecies={species} />
         : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} onOpen={open} catalogue={catalogue} nav={nav}
           brand={<div className="brand"><span className="emblem" aria-hidden="true"></span><h1>观羽</h1></div>} /> : <Setup onOpen={open} catalogue={catalogue} />}</main>
     </>

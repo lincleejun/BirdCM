@@ -835,8 +835,8 @@ class Index:
                 continue
             r0 = g["rows"][0]
             pts = sorted({(r["lat"], r["lon"]) for r in g["rows"] if r["lat"] is not None})
-            out.append({"key": g["key"], "sci": g["sci"], "day": g["day"], "place_key": g["place_key"],
-                        "place": {"label": r0["place_label"], "source": r0["place_source"], "region_code": r0["region_code"],
+            out.append({"key": g["key"], "sci": g["sci"], **names_of(g["sci"]), "day": g["day"], "place_key": g["place_key"],
+                        "place": {"label": place_text(r0), "source": r0["place_source"], "region_code": r0["region_code"],
                                   "points": [list(p) for p in pts[:20]]},
                         "estimate": g["estimate"], "estimate_source": g["estimate_source"], "max_in_photo": g["max"],
                         "photo_count": len(g["frames"]), "contexts": self.contexts(g), "rare": self.rare(g),
@@ -940,7 +940,7 @@ def species_detail(ix: Index, sci: str, frm=None, to=None) -> dict:
     for g in gs:
         months[int(g["day"][5:7]) - 1] += 1
         r0 = g["rows"][0]
-        p = places.setdefault(g["place_key"], {"place_key": g["place_key"], "label": r0["place_label"], "source": r0["place_source"],
+        p = places.setdefault(g["place_key"], {"place_key": g["place_key"], "label": place_text(r0), "source": r0["place_source"],
                                                "region_code": r0["region_code"], "observations": 0})
         p["observations"] += 1
         for r in g["rows"]:
@@ -1019,3 +1019,16 @@ def of(store, **kw) -> Library:
         if lib is None or lib.store is not store:
             lib = _libs[id(store)] = Library(store, **kw)
         return lib
+
+
+def place_text(r: dict) -> str | None:
+    """A row's place for people: its own label, else the region the point is in (the one point -> region mapping)
+    with the point, else the region code."""
+    if r["place_label"]:
+        return r["place_label"]
+    from birdcm import rarity
+    if r["lat"] is not None:
+        div, country = rarity.place_region(r["lat"], r["lon"])
+        name = rarity.iso_label(div) or rarity.iso_label(country) or (rarity.region_names(div or country) or (None, None))[1]
+        return f"{name + ' ' if name else ''}{r['lat']:.3f}, {r['lon']:.3f}"
+    return r["region_code"]
