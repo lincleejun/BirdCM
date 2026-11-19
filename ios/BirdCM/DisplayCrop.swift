@@ -109,6 +109,27 @@ struct CropSource {
         ctx.draw(part,in:CGRect(x:0,y:0,width:part.width,height:part.height))
         return ctx.makeImage()
     }
+    /// Covers and list thumbnails: ImageIO downsamples the whole photo first (JPEG/HEIC decode at reduced scale), then the
+    /// window is cut and redrawn at `edge` px on its long side. Never a full-size decode; the result owns only its pixels.
+    func preview(window:[Double],edge:Int) -> CGImage? {
+        let long=max(size.width,size.height), cut=max((window[2]-window[0])*size.width,(window[3]-window[1])*size.height,1)
+        // Halve while the half still covers the need (JPEG decodes at 1/2, 1/4, 1/8 natively) and to at most 2048 px.
+        // ponytail: the 2048 px cap means a tiny bird in a 12 MP photo can look soft at the species-page cover size.
+        var scaled=long
+        while scaled>1 && (scaled/2>=Double(edge)*long/cut || scaled>2048) {scaled/=2}
+        let decode=Int(scaled.rounded(.down))
+        guard let src=CGImageSourceCreateWithURL(url as CFURL,[kCGImageSourceShouldCache:false] as CFDictionary),
+              let small=CGImageSourceCreateThumbnailAtIndex(src,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:max(1,decode)] as CFDictionary) else{return nil}
+        let sw=Double(small.width),sh=Double(small.height)
+        let r=CGRect(x:window[0]*sw,y:window[1]*sh,width:(window[2]-window[0])*sw,height:(window[3]-window[1])*sh).integral.intersection(CGRect(x:0,y:0,width:sw,height:sh))
+        guard !r.isEmpty,let part=small.cropping(to:r) else{return nil}
+        let scale=min(1,Double(edge)/max(r.width,r.height))
+        let w=max(1,Int((r.width*scale).rounded())),h=max(1,Int((r.height*scale).rounded()))
+        guard let ctx=CGContext(data:nil,width:w,height:h,bitsPerComponent:8,bytesPerRow:0,space:CGColorSpace(name:CGColorSpace.sRGB)!,bitmapInfo:CGImageAlphaInfo.noneSkipLast.rawValue) else{return nil}
+        ctx.interpolationQuality = .high
+        ctx.draw(part,in:CGRect(x:0,y:0,width:w,height:h))
+        return ctx.makeImage()
+    }
     func thumbnail(_ record:Record,edge:Int=120) -> CGImage? {
         let window=record.displayCrops?.first ?? record.boxes.first.map{crop($0).normalized(in:size)} ?? [0,0,1,1]
         return image(window:window,edge:edge)

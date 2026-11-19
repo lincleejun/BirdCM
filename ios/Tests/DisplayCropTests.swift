@@ -128,6 +128,25 @@ final class DisplayCropTests:XCTestCase {
         defer{try? FileManager.default.removeItem(at:saved)}
         XCTAssertEqual(try XCTUnwrap(CropSource(saved)).size,CGSize(width:image.width,height:image.height))
     }
+    /// Covers render at display size × scale (owner: 120 px covers looked blurry) from a downsampled decode, not the original.
+    func testCoverPreviewPixels() throws {
+        let url=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension("jpg")
+        defer{try? FileManager.default.removeItem(at:url)}
+        try autoreleasepool {
+            let context=try XCTUnwrap(CGContext(data:nil,width:4000,height:3000,bitsPerComponent:8,bytesPerRow:16000,space:CGColorSpace(name:CGColorSpace.sRGB)!,bitmapInfo:CGImageAlphaInfo.noneSkipLast.rawValue))
+            for i in 0..<40 {context.setFillColor(red:Double(i%5)/4,green:Double(i%7)/6,blue:0.5,alpha:1);context.fill(CGRect(x:i*100,y:0,width:100,height:3000))}
+            let image=try XCTUnwrap(context.makeImage()),dest=try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL,UTType.jpeg.identifier as CFString,1,nil))
+            CGImageDestinationAddImage(dest,image,nil);XCTAssertTrue(CGImageDestinationFinalize(dest))
+        }
+        let source=try XCTUnwrap(CropSource(url)),window=[0.3,0.2,0.6,0.6]   // a 1200 × 1200 px crop
+        // Records grid cell (≈170 × 120 pt at 3×) and the species-page cover (capped at 1024 px). The decode is the 1/2-scale
+        // JPEG (2000 px) both times, so this 30 % crop stops at 600 px for the cover: still 5× the old 120 px.
+        for edge in [510,1024] {
+            let image=try XCTUnwrap(source.preview(window:window,edge:edge))
+            XCTAssertEqual(image.width,min(edge,600),accuracy:1);XCTAssertEqual(image.width,image.height)
+        }
+        XCTAssertEqual(try XCTUnwrap(source.preview(window:[0,0,1,1],edge:300)).width,300)
+    }
     #if os(iOS)
     func testBlankCropMaskFallback() throws {
         let image=RGB(w:128,h:128,px:Array(repeating:220,count:128*128*3)).cgImage()

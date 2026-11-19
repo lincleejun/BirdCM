@@ -20,23 +20,53 @@ struct CropThumbnail:View {
     init(url:URL?,id:UUID,boxes:[[Double]],crops:[[Double]]?,index:Int=0,original:Bool=false) {self.url=url;self.id=id;self.boxes=boxes;self.crops=crops;self.index=index;self.original=original}
     init(url:URL?,record:Record,index:Int=0,original:Bool=false) {self.init(url:url,id:record.id,boxes:record.boxes,crops:record.displayCrops,index:index,original:original)}
     @State private var image:CGImage?
-    /// Decoded 120 px crops, keyed by photo / subject / window; the system evicts under memory pressure.
-    static let cache:NSCache<NSString,CGImage>={let c=NSCache<NSString,CGImage>();c.totalCostLimit=24<<20;return c}()
+    @State private var frame=CGSize.zero
+    @Environment(\.displayScale) private var displayScale
+    /// Decoded crops at their on-screen pixel size, keyed by photo / subject / window / frame; evicted under memory pressure.
+    static let cache:NSCache<NSString,CGImage>={let c=NSCache<NSString,CGImage>();c.totalCostLimit=48<<20;return c}()
+    /// At most four decodes at once: a fast scroll through a large grid never stacks dozens of transient bitmaps.
+    static let gate=Gate(4)
+    /// Long-edge pixels for a window filling `frame` at `scale`, capped: the frame × screen scale, never a fixed thumbnail size.
+    nonisolated static func edge(window:[Double],size:CGSize,frame:CGSize,scale:CGFloat) -> Int {
+        let w=max(1,(window[2]-window[0])*size.width),h=max(1,(window[3]-window[1])*size.height)
+        let fill=max(frame.width/w,frame.height/h)
+        return min(1024,Int((max(w,h)*fill*scale).rounded(.up)))
+    }
+    nonisolated static func load(url:URL,boxes:[[Double]],crops:[[Double]]?,index:Int,original:Bool,frame:CGSize,scale:CGFloat) async -> CGImage? {
+        await gate.enter();defer{gate.leave()}
+        guard !Task.isCancelled,let source=CropSource(url) else{return nil}
+        let window=original || !boxes.indices.contains(index) ? [0.0,0,1,1] : crops?[safe:index] ?? source.crop(boxes[index]).normalized(in:source.size)
+        return source.preview(window:window,edge:edge(window:window,size:source.size,frame:frame,scale:scale))
+    }
     var body:some View {
         // Fill whatever frame the caller proposes, then clip to it (not to the image's own fill size).
-        Rectangle().fill(Palette.paper).overlay {if let image {Image(decorative:image,scale:1).resizable().scaledToFill()}}
-            .clipped().task(id:"\(id)-\(index)-\(original)-\(boxes)") {
-                guard let url else{return}
-                let key="\(id)-\(index)-\(original)-\(crops?[safe:index] ?? [])" as NSString
+        Rectangle().fill(Palette.paper).overlay {if let image {Image(decorative:image,scale:displayScale).resizable().scaledToFill()}}
+            .clipped().onGeometryChange(for:CGSize.self) {$0.size} action:{frame=CGSize(width:$0.width.rounded(),height:$0.height.rounded())}
+            .task(id:"\(id)-\(index)-\(original)-\(boxes)-\(frame)") {
+                guard let url,frame.width>0,frame.height>0 else{return}
+                let key="\(id)-\(index)-\(original)-\(crops?[safe:index] ?? [])-\(frame)@\(displayScale)" as NSString
                 if let hit=Self.cache.object(forKey:key) {image=hit;return}
-                let value=await Task.detached {() -> CGImage? in
-                    guard let source=CropSource(url) else{return nil}
-                    let window=original || !boxes.indices.contains(index) ? [0.0,0,1,1] : crops?[safe:index] ?? source.crop(boxes[index]).normalized(in:source.size)
-                    return source.image(window:window,edge:120)
-                }.value
+                let value=await Self.load(url:url,boxes:boxes,crops:crops,index:index,original:original,frame:frame,scale:displayScale)
                 if let value {Self.cache.setObject(value,forKey:key,cost:value.bytesPerRow*value.height)}
-                if !Task.isCancelled {image=value}
+                if !Task.isCancelled,let value {image=value}
             }
+    }
+}
+/// Counting semaphore for async code (no blocked threads).
+final class Gate:@unchecked Sendable {
+    private let lock=NSLock()
+    private var free:Int
+    private var waiting=[CheckedContinuation<Void,Never>]()
+    init(_ n:Int) {free=n}
+    func enter() async {
+        await withCheckedContinuation {c in
+            lock.lock()
+            if free>0 {free-=1;lock.unlock();c.resume()} else {waiting.append(c);lock.unlock()}
+        }
+    }
+    func leave() {
+        lock.lock()
+        if waiting.isEmpty {free+=1;lock.unlock()} else {let c=waiting.removeFirst();lock.unlock();c.resume()}
     }
 }
 extension Array {
