@@ -114,6 +114,7 @@ struct RecordsView: View {
                     Button { model.open(p.item.id, subject: p.subject.ordinal) } label: {
                         HStack(spacing: 12) {
                             CropThumbnail(url: model.url(p.item.id), id: p.item.id, boxes: p.item.boxes, crops: p.item.crops, index: p.subject.ordinal).frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityHidden(true)
+                                .opensImageViewer(.photo(id: p.item.id, boxes: p.item.boxes, crops: p.item.crops, index: p.subject.ordinal))
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("鸟 \(p.subject.ordinal + 1) · \(p.reason)").font(.subheadline)
                                 Text("\(p.item.day) · \(model.placeName(p.item) ?? String(localized: "没有地点"))").font(.caption).foregroundStyle(Palette.secondary)
@@ -160,6 +161,7 @@ struct SpeciesPage: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let c = stat?.cover {
                     CropThumbnail(url: model.url(c.item.id), id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal).frame(height: 240).clipShape(RoundedRectangle(cornerRadius: 16)).accessibilityLabel("最近一次的照片")
+                        .opensImageViewer(.photo(id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal))
                 }
                 SpeciesName(key: key, size: .hero).accessibilityIdentifier("species.name").accessibilityAddTraits(.isHeader)
                 // A plain state in gray (polish.md): accent is for actions and selection only.

@@ -100,7 +100,8 @@ final class RecordFlows: FlowCase {
     func testPhotosRecentlyViewedFirst() throws {
         launch(extra:["-historyFixtureCount","8"]);pick();openPhotos()
         let opened=try XCTUnwrap(rows.last);XCTAssertNotEqual(rows.first,opened)
-        element(opened).tap();outcome();back()
+        // The last row sits behind the tab bar, where a tap reaches only its thumbnail (which opens the image viewer): scroll first.
+        app.swipeUp();element(opened).tap();outcome();back();app.swipeDown()
         expectation(for:NSPredicate{_,_ in self.rows.first == opened},evaluatedWith:nil);waitForExpectations(timeout:5);try shot("photos-recently-viewed")
         tab("tab.identify","识别");expectation(for:NSPredicate{_,_ in self.rows.first == opened},evaluatedWith:nil);waitForExpectations(timeout:5);try shot("home-recently-viewed")
     }
