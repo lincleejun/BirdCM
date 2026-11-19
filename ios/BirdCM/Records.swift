@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 /// 记录: species grid / all photos / pending subjects (§6).
@@ -206,8 +207,13 @@ struct SpeciesPage: View {
             let label = place == "none" ? String(localized: "地点未知（同日合并）") : model.items.first { $0.placeKey == place }?.placeLabel ?? place
             return (label, list.count)
         }.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0 < $1.0 }
+        // Photo points on one static map (region-only and unknown places stay in the list only).
+        var seen = Set<String>()
+        let points = model.ledger.photos(of: key).compactMap { i in i.lat.map { CLLocationCoordinate2D(latitude: $0, longitude: i.lon!) } }
+            .filter { seen.insert(String(format: "%.3f,%.3f", $0.latitude, $0.longitude)).inserted }
         VStack(alignment: .leading, spacing: 6) {
             Text("地点").font(.subheadline.bold())
+            if !points.isEmpty { PlaceSnapshot(points: points, label: String(localized: "\(points.count) 个拍摄位置"), height: 150) }
             ForEach(rows, id: \.0) { r in LabeledContent(r.0, value: "\(r.1) 次").font(.subheadline) }
         }
     }

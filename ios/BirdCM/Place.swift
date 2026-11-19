@@ -25,6 +25,12 @@ struct Place: Codable, Equatable {
     var regionCode:String?
     var regionEnglish:String?
     var sourceLabel:String { if source=="region" {return "按整个"+(label.components(separatedBy:" · ").last ?? label)+"估计"};return ["photo":"用了照片自带的位置","device":"当前位置","map":"按地图上选的位置","region":"按整个地区估计"][source] ?? source }
+    /// The label without a trailing "lat, lon" (photo GPS and device labels are only coordinates; map picks append them).
+    /// Coordinates are shown on a map snapshot and as a caption instead.
+    var name:String {
+        let s=label.replacingOccurrences(of:#"(^| · )-?\d+(\.\d+)?, -?\d+(\.\d+)?$"#,with:"",options:.regularExpression)
+        return s.isEmpty ? ["photo":String(localized:"照片拍摄位置"),"device":String(localized:"当前位置")][source] ?? String(localized:"地图选点"):s
+    }
     var stableCode:String {regionCode ?? String(format:"%.4f,%.4f",lat,lon)}
     var valid: Bool { lat.isFinite && lon.isFinite && (-90...90).contains(lat) && (-180...180).contains(lon) }
     static func resolve(photo: Place?, device: Place?, manual: Place?) -> Place? {

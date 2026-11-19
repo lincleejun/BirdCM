@@ -52,10 +52,10 @@ struct ResultView: View {
                         VStack(alignment:.leading,spacing:12) {
                             Text("拍摄地点").font(.headline).accessibilityIdentifier("result.place")
                             if let p=r.place {
-                                Text(p.label)
+                                // A region choice is an area, never a pin (its lat/lon is only a representative point).
+                                if p.source=="region" {Text(p.label);Text("按地区统计，不是具体坐标。").font(.caption).foregroundStyle(Palette.secondary)}
+                                else {PlaceSnapshot(points:[CLLocationCoordinate2D(latitude:p.lat,longitude:p.lon)],label:p.name).id("\(p.lat),\(p.lon)")}
                                 Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)
-                                if p.source=="region" {Text("按地区统计，不是具体坐标。").font(.caption).foregroundStyle(Palette.secondary)}
-                                else {Map(initialPosition:.region(MKCoordinateRegion(center:CLLocationCoordinate2D(latitude:p.lat,longitude:p.lon),latitudinalMeters:100000,longitudinalMeters:100000))) {Marker(p.label,coordinate:CLLocationCoordinate2D(latitude:p.lat,longitude:p.lon))}.id("\(p.lat),\(p.lon)").frame(height:140).allowsHitTesting(false).accessibilityLabel("识别使用的地点地图")}
                             } else {Text("没有地点，当前仅按图像识别；统计时同日地点未知的记录合并。") .foregroundStyle(Palette.secondary)}
                             if let gps=r.shooting.photoPlace,r.place != gps {Button("改回照片自带的位置",systemImage:"location"){Task{await model.setPlace(gps)}}.accessibilityIdentifier("result.photoPlace").frame(minHeight:44)}
                         }
@@ -165,7 +165,7 @@ struct ResultView: View {
             }.buttonStyle(.bordered).controlSize(.large)
             ViewThatFits(in:.horizontal) {HStack{actions};VStack(alignment:.leading){actions}}.font(.subheadline).disabled(e.subject == nil || model.busy)
             VStack(alignment:.leading,spacing:8) {
-                Text("\(r.place?.label ?? "没有地点") · \(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline)
+                Text("\(r.place?.name ?? "没有地点") ·\(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline)
                 if let p=r.place {Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)}
             }
             if let result=e.model {
@@ -306,6 +306,70 @@ struct MapPlacePicker: View {
                 if let initial {pin=CLLocationCoordinate2D(latitude:initial.lat,longitude:initial.lon);label=initial.label}
 
             }
+        }
+    }
+}
+
+/// A static map of one or more points (MKMapSnapshotter, redrawn for dark mode), the place label and the coordinates as a
+/// caption. Tap: full map with the pins; long-press: copy coordinates. Offline or failed: the label and caption stay, quietly.
+struct PlaceSnapshot: View {
+    let points:[CLLocationCoordinate2D]
+    let label:String
+    var height:CGFloat=160
+    @Environment(\.colorScheme) private var scheme
+    @State private var image:UIImage?
+    @State private var failed=false
+    @State private var full=false
+    var coordinates:String {points.map{String(format:"%.4f, %.4f",$0.latitude,$0.longitude)}.joined(separator:"；")}
+    var caption:String {points.count>3 ? points.prefix(3).map{String(format:"%.4f, %.4f",$0.latitude,$0.longitude)}.joined(separator:"；")+" …":coordinates}
+    var region:MKCoordinateRegion {
+        let lats=points.map(\.latitude),lons=points.map(\.longitude)
+        return MKCoordinateRegion(center:CLLocationCoordinate2D(latitude:(lats.max()!+lats.min()!)/2,longitude:(lons.max()!+lons.min()!)/2),
+                                  span:MKCoordinateSpan(latitudeDelta:min(170,max(0.3,(lats.max()!-lats.min()!)*1.4)),longitudeDelta:min(360,max(0.3,(lons.max()!-lons.min()!)*1.4))))
+    }
+    func render(_ width:CGFloat) async {
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey:"mapOffline") {failed=true;return}
+        #endif
+        guard width>0,!points.isEmpty else{return}
+        let o=MKMapSnapshotter.Options();o.region=region;o.size=CGSize(width:width,height:height)
+        o.traitCollection=UITraitCollection(userInterfaceStyle:scheme == .dark ? .dark:.light);o.pointOfInterestFilter = .excludingAll
+        do {
+            let shot=try await MKMapSnapshotter(options:o).start()
+            image=UIGraphicsImageRenderer(size:o.size).image {_ in
+                shot.image.draw(at:.zero)
+                for p in points {
+                    let c=shot.point(for:p),dot=UIBezierPath(ovalIn:CGRect(x:c.x-8,y:c.y-8,width:16,height:16))
+                    UIColor(Palette.button).setFill();UIColor.white.setStroke();dot.lineWidth=3;dot.fill();dot.stroke()
+                }
+            }
+        } catch {failed=true}
+    }
+    var body:some View {
+        VStack(alignment:.leading,spacing:6) {
+            if !failed {
+                GeometryReader {g in
+                    ZStack {if let image {Image(uiImage:image).resizable()} else {Palette.surface;ProgressView()}}
+                        .task(id:"\(Int(g.size.width))-\(scheme)") {await render(g.size.width)}
+                }
+                .frame(height:height).clipShape(RoundedRectangle(cornerRadius:12)).contentShape(RoundedRectangle(cornerRadius:12))
+                .onTapGesture {full=true}
+                .contextMenu {Button("复制坐标",systemImage:"doc.on.doc") {UIPasteboard.general.string=coordinates}}
+                .accessibilityElement().accessibilityLabel("地图：\(label)").accessibilityHint("打开大地图").accessibilityAddTraits(.isButton)
+                .accessibilityAction(named:"复制坐标") {UIPasteboard.general.string=coordinates}
+                .accessibilityIdentifier("place.snapshot")
+            }
+            Text(label)
+            Text(caption).font(.caption).monospacedDigit().foregroundStyle(Palette.secondary).textSelection(.enabled).accessibilityIdentifier("place.coordinates")
+        }
+        .sheet(isPresented:$full) {
+            NavigationStack {
+                Map(initialPosition:.region(region)) {ForEach(points.indices,id:\.self) {i in Marker(label,coordinate:points[i])}}
+                    .safeAreaInset(edge:.bottom) {Text(coordinates).font(.caption).monospacedDigit().textSelection(.enabled).padding(8).frame(maxWidth:.infinity).background(Palette.paper)}
+                    .navigationTitle(label).navigationBarTitleDisplayMode(.inline)
+                    .toolbar {Button("完成") {full=false}.accessibilityIdentifier("sheet.done")}
+                    .accessibilityIdentifier("place.fullMap")
+            }.debugAppearance()
         }
     }
 }
