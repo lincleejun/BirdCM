@@ -171,7 +171,7 @@ Use complete-until-first-user-authentication file protection. Remove the old bla
 
 ## 6. iOS interaction contract
 
-Use a native four-item TabView, each with its own NavigationStack and preserved scroll/filter state. Launch to 识别; an identification result pushes on the initiating tab. Switching tabs preserves an unfinished correction/editor; no swipe paging between tabs. Map/calendar drilldowns keep the selected period; species pages default to the invoking scope and offer All records. Settings is a toolbar gear sheet from all four roots, not a fifth “我的” tab. Back returns to the source/filter/scroll position. Cross-tab “开始识别” selects 识别.
+Use a native five-item TabView (识别 · 探索 · 记录 · 统计 · 设置; owner 2026-11-18, superseding four tabs plus a gear), each with its own NavigationStack and preserved scroll/filter state. Launch to 识别; an identification result pushes on the initiating tab. Switching tabs preserves an unfinished correction/editor; no swipe paging between tabs. Map/calendar drilldowns keep the selected period; species pages default to the invoking scope and offer All records. Settings is the fifth tab (设置), with no gear on any root. Back returns to the source/filter/scroll position. Cross-tab “开始识别” selects 识别.
 
 | Tab (SF Symbol) | First screen and navigation | Empty/offline behavior |
 |---|---|---|

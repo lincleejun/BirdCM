@@ -105,7 +105,7 @@ UI 测试模式（`-uiTesting YES`，仅 Debug）关闭 UIKit / SwiftUI 动画�
 
 再次执行需换 resultBundlePath（Xcode 不覆盖现有 xcresult；脚本按时间命名）。测试会生成来源明确的 UI 夹具截图，以及 `testRealInferenceEagle` / `testRealInferenceEgret` 的真实推理截图；这两项没有 `-modelDir`，会加载 App 内模型。每个普通等待最多 10 秒，真实模型加载/识别各最多 45 秒，失败立即结束当前测试。多状态与真实推理拆成独立测试，便于直接定位失败。
 
-如果只需要逻辑测试可用 `-only-testing:BirdCMTests`，只截图用 `-only-testing:BirdCMUITests`。真实模型测试默认使用 App 内资源；可选 `TEST_RUNNER_MODELDIR` / `TEST_RUNNER_GEOMODEL` 覆盖。UI fixtures 是 Debug-only，入口在“设置（齿轮）→ 诊断”，不是首页；多鸟夹具使用 photo-1 的两只鹈鹕，历史过滤测试用 `-historyFixtureCount 8` 一次播种八条。`locationFixture=allowed|denied` 用于确定性测试；另有真正系统权限弹窗流程。普通 pick helper 只等待最终结果，不等待短暂的识别中状态；加载截图 `loading-preview` 由快照测试按固定 loading 状态渲染。
+如果只需要逻辑测试可用 `-only-testing:BirdCMTests`，只截图用 `-only-testing:BirdCMUITests`。真实模型测试默认使用 App 内资源；可选 `TEST_RUNNER_MODELDIR` / `TEST_RUNNER_GEOMODEL` 覆盖。UI fixtures 是 Debug-only，入口在“设置”标签 → 诊断，不是首页；多鸟夹具使用 photo-1 的两只鹈鹕，历史过滤测试用 `-historyFixtureCount 8` 一次播种八条。`locationFixture=allowed|denied` 用于确定性测试；另有真正系统权限弹窗流程。普通 pick helper 只等待最终结果，不等待短暂的识别中状态；加载截图 `loading-preview` 由快照测试按固定 loading 状态渲染。
 
 Mac 共享逻辑与脚本检查（不能替代 iOS 测试）：
 
@@ -148,7 +148,7 @@ Python 参考已重新生成：`tools/regenerate_crop_references.py ../BirdCM` �
 
 历史改存 `Application Support/History/library.sqlite`（系统 SQLite3，无新依赖），原图仍是文件：旧 `<UUID>.photo` 原地不动，新原图写 `assets/<sha256>.photo`。首次启动新版本时在后台把旧 `*.json` 逐条迁入并核对（记录数 + 待修复数 = 文件数、`integrity_check`），完成前显示“正在整理旧记录”、不能改记录；旧 JSON 一律保留，读不了的原样存进 `ll_legacy_issue` 并在“设置 → 备份与恢复”列出。同一字节的照片只算一张（旧的重复记录作为别名保留）。
 
-识别 / 记录 / 统计 / 探索 四个标签页各有自己的导航；设置是每个首页右上角的齿轮。结果页可“更正鸟种”（离线搜索全部 11,172 种）、改数量、排除主体、改日期和地点；名称、GBIF 稀有度、IUCN 都在显示时按当前资源查。统计口径：同一鸟种 × 同一天 × 同一地点格 = 一次观察，估计数量取单张最大值。备份是一个 `.birdcm` SQLite 文件（含原图），通过“文件”导出 / 导入，合并或替换。
+识别 / 探索 / 记录 / 统计 / 设置 五个标签页各有自己的导航（2026-11-18 所有者：设置做第五个标签，不再有齿轮）。结果页可“更正鸟种”（离线搜索全部 11,172 种）、改数量、排除主体、改日期和地点；名称、GBIF 稀有度、IUCN 都在显示时按当前资源查。统计口径：同一鸟种 × 同一天 × 同一地点格 = 一次观察，估计数量取单张最大值。备份是一个 `.birdcm` SQLite 文件（含原图），通过“文件”导出 / 导入，合并或替换。
 
 Debug 启动参数：`-legacyFixture N`（启动前写一个旧格式历史，测迁移）、`-maskFixture success|none|unsupported`、`-cameraFixture YES`、`-historyFixtureCount N`（不同字节、日期、鸟种）。与规格的出入见 `docs/deviations.md` 第 43 条起。
 
