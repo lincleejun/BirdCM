@@ -453,7 +453,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const dateRange = days.length ? (days[0] === days[days.length - 1] ? days[0] : `${days[0]} – ${days[days.length - 1].slice(5)}`) : "";
   const folderName = scan.folder.split("/").filter(Boolean).pop() ?? scan.folder;
   const state = complete ? `${c.total} 张${c.failed ? `（${c.failed} 张失败）` : ""}`
-    : `${phase === "paused" ? (scan.state === "failed" ? "出错已停" : "已停止") : scan.state === "stopping" ? "正在停止" : scan.state === "finalizing" ? "正在汇总" : scan.state === "queued" ? "排队中" : "扫描中"} ${finished} / ${c.total}`;
+    : `${phase === "paused" ? (scan.state === "failed" ? "出错已停" : "已停止") : scan.state === "stopping" ? "正在停止" : scan.state === "finalizing" ? "正在汇总" : scan.state === "queued" ? (engine === "loading" ? "等模型加载完" : engine === "error" ? "模型出错，等重试" : "排队中") : "扫描中"} ${finished} / ${c.total}`;
 
   const key = (p: PhotoRow) => { const r = p.result, sp = r?.species; return !r || r.rejected || !sp ? "x" : `${sp.level}:${sp.label?.sci ?? ""}`; };
   const changes = complete && prevRows ? (() => {
