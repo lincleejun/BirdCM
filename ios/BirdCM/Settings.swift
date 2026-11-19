@@ -1,10 +1,9 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings gear sheet shared by all four tab roots (§6).
+/// 设置: the fifth tab root (owner 2026-11-18), replacing the gear sheet that sat on every tab.
 struct SettingsView: View {
     @Environment(AppModel.self) var model
-    @Environment(\.dismiss) var dismiss
     @State private var about = false
     @State private var diagnostics = false
     @State private var place = false
@@ -21,47 +20,45 @@ struct SettingsView: View {
     }
     var body: some View {
         let all = model.ledger.summary(nil)
-        NavigationStack {
-            List {
-                Section("数据") {
-                    NavigationLink("备份与恢复") { BackupView() }.accessibilityIdentifier("settings.backup")
-                    LabeledContent("照片", value: "\(all.photos)")
-                    LabeledContent("鸟种 · 观察记录", value: "\(all.species) · \(all.observations)")
-                    LabeledContent("本机占用", value: disk.map { ByteCountFormatter.string(fromByteCount: Int64($0.storage), countStyle: .file) } ?? "…")
-                    if let disk, !disk.redundant.isEmpty {
-                        Button("清理旧版本副本（\(disk.redundant.count) 个，\(ByteCountFormatter.string(fromByteCount: Int64(disk.redundantBytes), countStyle: .file))）") { cleanup = true }.accessibilityIdentifier("settings.cleanup")
-                    }
+        List {
+            Section("数据") {
+                NavigationLink("备份与恢复") { BackupView() }.accessibilityIdentifier("settings.backup")
+                LabeledContent("照片", value: "\(all.photos)")
+                LabeledContent("鸟种 · 观察记录", value: "\(all.species) · \(all.observations)")
+                LabeledContent("本机占用", value: disk.map { ByteCountFormatter.string(fromByteCount: Int64($0.storage), countStyle: .file) } ?? "…")
+                if let disk, !disk.redundant.isEmpty {
+                    Button("清理旧版本副本（\(disk.redundant.count) 个，\(ByteCountFormatter.string(fromByteCount: Int64(disk.redundantBytes), countStyle: .file))）") { cleanup = true }.accessibilityIdentifier("settings.cleanup")
                 }
-                Section("地点") {
-                    Button { place = true } label: { LabeledContent("默认地点", value: model.homePlace?.label ?? String(localized: "未设置")) }.accessibilityIdentifier("settings.place")
-                }
-                Section("关于") {
-                    Button("关于与数据来源") { about = true }.accessibilityIdentifier("home.about")
-                    Button("诊断") { diagnostics = true }.accessibilityIdentifier("home.diagnostics")
-                }
-                Section {
-                    Button("清空本机记录", role: .destructive) { clear = true }.accessibilityIdentifier("history.clear").disabled(model.items.isEmpty)
-                } footer: { Text("清空前可以先在“备份与恢复”导出一份备份。") }
             }
-            .navigationTitle("设置")
-            .task(id: model.items.count) { await scanDisk() }
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() }.accessibilityIdentifier("settings.done") } }
-            .sheet(isPresented: $about) { AboutView() }
-            .sheet(isPresented: $diagnostics) { DiagnosticsView() }
-            .sheet(isPresented: $place) { PlacePicker(onChoose: { p in model.chooseHome(p) }) }
-            .confirmationDialog("删除旧版本的 JSON 副本？", isPresented: $cleanup, titleVisibility: .visible) {
-                Button("删除副本", role: .destructive) {
-                    for u in disk?.redundant ?? [] { try? FileManager.default.removeItem(at: u) }
-                    model.refresh(); Task { await scanDisk() }
-                }.accessibilityIdentifier("settings.confirmCleanup")
-                Button("取消", role: .cancel) {}
-            } message: { Text("这些是升级前每条记录的 JSON 文件，内容已逐字节保存在记录库里（也会随备份导出）。不删除任何原图。") }
-            .confirmationDialog("清空本机 \(all.photos) 张照片、\(all.observations) 条观察记录？", isPresented: $clear, titleVisibility: .visible) {
-                Button("清空", role: .destructive) { model.edit { try $0.deleteAll() } }.accessibilityIdentifier("history.confirmClear")
-                Button("取消", role: .cancel) {}
-            } message: { Text("记录从观羽中移除，无法在应用里撤销；相册或文件里的原图不受影响。建议先导出备份。") }
+            Section("地点") {
+                Button { place = true } label: { LabeledContent("默认地点", value: model.homePlace?.label ?? String(localized: "未设置")) }.accessibilityIdentifier("settings.place")
+            }
+            Section {
+                Button("关于与数据来源") { about = true }.accessibilityIdentifier("home.about")
+                Button("诊断") { diagnostics = true }.accessibilityIdentifier("home.diagnostics")
+            } header: { Text("关于") } footer: { Text("系统选片无需相册访问授权；仅读取你选择的照片。") }
+            Section {
+                Button("清空本机记录", role: .destructive) { clear = true }.accessibilityIdentifier("history.clear").disabled(model.items.isEmpty)
+            } footer: { Text("清空前可以先在“备份与恢复”导出一份备份。") }
         }
-    }
+        .scrollContentBackground(.hidden).background(Palette.paper)
+        .navigationTitle("设置").navigationBarTitleDisplayMode(.large)
+        .task(id: model.items.count) { await scanDisk() }
+        .sheet(isPresented: $about) { AboutView().debugAppearance() }
+        .sheet(isPresented: $diagnostics) { DiagnosticsView().debugAppearance() }
+        .sheet(isPresented: $place) { PlacePicker(onChoose: { p in model.chooseHome(p) }).debugAppearance() }
+        .confirmationDialog("删除旧版本的 JSON 副本？", isPresented: $cleanup, titleVisibility: .visible) {
+            Button("删除副本", role: .destructive) {
+                for u in disk?.redundant ?? [] { try? FileManager.default.removeItem(at: u) }
+                model.refresh(); Task { await scanDisk() }
+            }.accessibilityIdentifier("settings.confirmCleanup")
+            Button("取消", role: .cancel) {}
+        } message: { Text("这些是升级前每条记录的 JSON 文件，内容已逐字节保存在记录库里（也会随备份导出）。不删除任何原图。") }
+        .confirmationDialog("清空本机 \(all.photos) 张照片、\(all.observations) 条观察记录？", isPresented: $clear, titleVisibility: .visible) {
+            Button("清空", role: .destructive) { model.edit { try $0.deleteAll() } }.accessibilityIdentifier("history.confirmClear")
+            Button("取消", role: .cancel) {}
+        } message: { Text("记录从观羽中移除，无法在应用里撤销；相册或文件里的原图不受影响。建议先导出备份。") }
+}
 }
 
 /// Manual single-file backup through Files; a user-granted document, not an iCloud capability (§2).

@@ -32,7 +32,7 @@ struct DiagnosticsView: View {
         // First, so UI flows reach it without scrolling past the timings.
         if UserDefaults.standard.string(forKey:"fixtureImage") != nil {
             Section("验收夹具 · 仅 Debug") {
-                Button("载入 CC0 验收照片") {dismiss();model.settings=false;Task{await model.pickFixture()}}.accessibilityIdentifier("diagnostics.fixture")
+                Button("载入 CC0 验收照片") {dismiss();model.tab = .identify;Task{await model.pickFixture()}}.accessibilityIdentifier("diagnostics.fixture")
             }
         }
         #endif

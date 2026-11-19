@@ -69,11 +69,10 @@ func title(_ r: Identification) -> String {
     var photo: Photo?
     var preview: UIImage?
     enum Route: Hashable { case result(UUID), species(String) }
-    enum Tab: Hashable { case identify, records, stats, explore }
+    enum Tab: Hashable { case identify, explore, records, stats, settings }
     var tab=Tab.identify
     var paths=[Tab:[Route]]()
     var recordsMode="species"
-    var settings=false
     /// Push a result on the initiating tab (identification always on 识别).
     func show(_ id:UUID,on t:Tab?=nil) {
         let t=t ?? tab;tab=t
@@ -459,7 +458,7 @@ func title(_ r: Identification) -> String {
     }
 }
 
-/// Four native tabs, each with its own NavigationStack; settings is a gear sheet on every root (§6).
+/// Five native tabs, each with its own NavigationStack: 识别 · 探索 · 记录 · 统计 · 设置 (owner 2026-11-18: no gear button).
 struct RootView: View {
     @Environment(AppModel.self) var model
     @Environment(\.scenePhase) private var phase
@@ -471,7 +470,6 @@ struct RootView: View {
                 case .species(let key): SpeciesPage(key:key)
                 }
             }
-            .toolbar {ToolbarItem(placement:.topBarTrailing) {Button {model.settings=true} label:{Image(systemName:"gearshape").frame(width:44,height:44)}.accessibilityLabel("设置").accessibilityIdentifier("home.more")}}
         }
     }
     var body: some View {
@@ -481,16 +479,16 @@ struct RootView: View {
             else {
                 TabView(selection:$model.tab) {
                     stack(.identify){IdentifyView()}.tabItem{Label("识别",systemImage:"camera.viewfinder").accessibilityIdentifier("tab.identify")}.tag(AppModel.Tab.identify)
+                    stack(.explore){ExploreView()}.tabItem{Label("探索",systemImage:"magnifyingglass").accessibilityIdentifier("tab.explore")}.tag(AppModel.Tab.explore)
                     stack(.records){RecordsView()}.tabItem{Label("记录",systemImage:"books.vertical").accessibilityIdentifier("tab.records")}.tag(AppModel.Tab.records)
                     stack(.stats){StatsView()}.tabItem{Label("统计",systemImage:"chart.bar").accessibilityIdentifier("tab.stats")}.tag(AppModel.Tab.stats)
-                    stack(.explore){ExploreView()}.tabItem{Label("探索",systemImage:"magnifyingglass").accessibilityIdentifier("tab.explore")}.tag(AppModel.Tab.explore)
+                    stack(.settings){SettingsView()}.tabItem{Label("设置",systemImage:"gearshape").accessibilityIdentifier("tab.settings")}.tag(AppModel.Tab.settings)
                 }
                 // First launch after the library upgrade: browsing and identifying go on; edits (and saving a result) wait.
                 .safeAreaInset(edge:.top) {if let progress=model.migration {MigrationView(progress:progress)}}
             }
         }
         .background(Palette.paper)
-        .sheet(isPresented:$model.settings) {SettingsView().debugAppearance()}
         .onChange(of:phase) {_,p in if p == .active && model.migration == nil {Task{await FolderBackup.shared.runIfDue(model.library)}}}
         .sheet(isPresented:$model.needsPlace) {
             NavigationStack {VStack(alignment:.leading,spacing:20) {
@@ -576,7 +574,6 @@ struct IdentifyView: View {
                 }
                 if !model.items.isEmpty {Button("查看全部 \(model.items.count) 张") {model.recordsMode="photos";model.tab = .records}.accessibilityIdentifier("home.allRecords").frame(minHeight:44)}
             }
-            if typeSize.isAccessibilitySize {Text("系统选片无需相册访问授权；仅读取你选择的照片。").font(.caption).foregroundStyle(Palette.secondary).listRowBackground(Color.clear)}
             if let cameraNote {
                 Section {
                     Text(cameraNote).accessibilityIdentifier(cameraDenied ? "camera.denied":"camera.unavailable")
@@ -589,14 +586,15 @@ struct IdentifyView: View {
         .navigationTitle("观羽").navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge:.bottom) {
             // Always usable: a photo picked while the models load waits on the identifying screen.
-            VStack(spacing:6) {
-                // At accessibility sizes the note moves into the list so the fixed bar stays short.
-                if !typeSize.isAccessibilitySize {Text("系统选片无需相册访问授权；仅读取你选择的照片。").font(.caption).foregroundStyle(Palette.secondary).fixedSize(horizontal:false,vertical:true)}
-                PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current) { Label("从相册选择",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:54) }
-                    .accessibilityIdentifier("home.photos").buttonStyle(PrimaryActionStyle()).disabled(model.busy)
-                Button("拍照",systemImage:"camera"){takePhoto()}.accessibilityIdentifier("home.camera").frame(maxWidth:.infinity,minHeight:44).buttonStyle(.bordered).disabled(model.busy)
+            // One row (owner 2026-11-18: the stacked bar was too tall); the photo-access note lives in 设置 → 关于.
+            let photos=PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current) { Label("从相册选择",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:50) }
+                .accessibilityIdentifier("home.photos").buttonStyle(PrimaryActionStyle(height:50)).disabled(model.busy)
+            let camera=Button{takePhoto()} label:{Label("拍照",systemImage:"camera").frame(maxWidth:.infinity,minHeight:50)}
+                .accessibilityIdentifier("home.camera").buttonStyle(SecondaryActionStyle()).disabled(model.busy)
+            VStack(spacing:4) {
+                if typeSize.isAccessibilitySize {VStack(spacing:8) {photos;camera}} else {HStack(spacing:10) {photos;camera}}
                 ModelStatusLine()
-            }.padding(.horizontal).padding(.vertical,8).background(Palette.paper)
+            }.padding(.horizontal).padding(.vertical,6).background(Palette.paper)
         }
         .overlay { if model.busy || model.queued != nil { IdentifyingView() } }
         .sheet(isPresented:$place) {PlacePicker(onChoose:{p in model.chooseHome(p)}).debugAppearance()}
@@ -639,12 +637,22 @@ struct CameraPicker: UIViewControllerRepresentable {
 struct PrimaryActionStyle: ButtonStyle {
     @Environment(\.isEnabled) var enabled
     @Environment(\.colorSchemeContrast) var contrast
+    var height:CGFloat=54
     func makeBody(configuration:Configuration) -> some View {
         configuration.label.font(.headline).foregroundStyle(Color.white)
-            .padding(.horizontal,16).frame(minHeight:54)
+            .padding(.horizontal,16).frame(minHeight:height)
             .background(enabled ? Palette.button:Color(white:0.35),in:RoundedRectangle(cornerRadius:16))
             .overlay {if contrast == .increased {RoundedRectangle(cornerRadius:16).stroke(.white,lineWidth:2)}}
             .overlay {if configuration.isPressed {RoundedRectangle(cornerRadius:16).fill(.black.opacity(0.18))}}
+    }
+}
+/// The tinted partner of PrimaryActionStyle (same shape and height), for a second action in the same row.
+struct SecondaryActionStyle: ButtonStyle {
+    @Environment(\.isEnabled) var enabled
+    func makeBody(configuration:Configuration) -> some View {
+        configuration.label.font(.headline).foregroundStyle(enabled ? Palette.green:Palette.secondary)
+            .padding(.horizontal,16).frame(minHeight:50)
+            .background(Palette.green.opacity(configuration.isPressed ? 0.25:0.14),in:RoundedRectangle(cornerRadius:16))
     }
 }
 /// Quiet one-line model state on home: 准备中 / 就绪 / 出错 with 重试. Never an overlay, never disables anything.
