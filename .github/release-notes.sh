@@ -21,7 +21,7 @@ cat <<EOF
 - 仅支持 **Apple Silicon（M 系列）Mac、macOS 15 或更高版本**。
 - **未经 Apple 公证**（没有付费开发者账号，只做了 ad-hoc 签名），第一次打开会被 macOS 拦下。把 观羽.app 拖进“应用程序”后，打开一次，再到 系统设置 → 隐私与安全性 → 点“仍要打开”；或在终端运行 \`xattr -dr com.apple.quarantine /Applications/观羽.app\`。
 - 模型文件不在安装包里：第一次使用时从 [bioclip-bird](https://github.com/lincleejun/bioclip-bird/releases) 和 [bioclip-bird-heads](https://github.com/lincleejun/bioclip-bird-heads/releases) 的 Releases（以及 BirdNET 地理模型的发布页）下载，约 0.8 GB，逐个做 sha256 校验。
-- iOS 版不分发：免费签名的安装包无法给别人安装。
+- iOS 版：\`GuanYu-$v-iOS-unsigned.ipa\`（iOS 17+，**未签名**），用 AltStore / Sideloadly 等以自己的 Apple ID 签名后安装；模型已在包内，离线可用。公开包不含 IUCN 数据。
 - 许可：代码 MIT；眼/喙与飞行两个模型头**仅限非商业用途**；其余模型与数据各有许可，见 [NOTICE.md]($notice)。
 
 ## Notes
@@ -29,7 +29,7 @@ cat <<EOF
 - **Apple Silicon (M-series) Macs with macOS 15 or later only.**
 - **Not notarised** (no paid Apple developer account; ad-hoc signed), so macOS blocks the first launch. After dragging 观羽.app to Applications, open it once, then System Settings → Privacy & Security → "Open Anyway"; or run \`xattr -dr com.apple.quarantine /Applications/观羽.app\` in Terminal.
 - Models are not in the app: they are downloaded on first use from the [bioclip-bird](https://github.com/lincleejun/bioclip-bird/releases) and [bioclip-bird-heads](https://github.com/lincleejun/bioclip-bird-heads/releases) releases (plus the BirdNET geo model's release), about 0.8 GB, each sha256-checked.
-- The iOS app is not distributed: a free-signed build cannot be shared for others to install.
+- iOS: \`GuanYu-$v-iOS-unsigned.ipa\` (iOS 17+, **unsigned**): sign it with your own Apple ID via AltStore / Sideloadly to install; models are inside, works offline. The public build carries no IUCN data.
 - Licences: code MIT; the eye/beak and flight heads are **non-commercial use only**; other models and data have their own terms, see [NOTICE.md]($notice).
 
 ## 改动 / Changes ($since)

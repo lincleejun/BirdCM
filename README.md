@@ -1,73 +1,61 @@
-# BirdCM · 观羽
+# 观羽 · BirdCM
 
-Local web app for bird photographers: cull a shoot of ~1,500 RAW photos (find the bird, name it, eye / beak,
-flying or not) on your own Mac. Photos never leave the computer and the photo folder is only read.
+**本地、私密的鸟类摄影助手。** 照片不离开你的设备。
 
-Status: batch culling (find, name, eye / beak, flying, clear-bird gate, head sharpness, aesthetic, stars, CSV / JSON
-export), the location prior (BirdNET geo, anywhere in the world: photo GPS, a map pin, the device's location or a
-country / first-level division), burst consensus, rarity (US / CA / CN for now) and IUCN, the single-photo view
-with history, and `birdcm eval` work end to end. Star defaults are the recorded strategy, not yet validated on the
-owner's keeps. The map dialog is the app's only network use (OpenStreetMap tiles, loaded when it is opened).
+A local, private assistant for bird photographers. Your photos never leave your device.
 
-## Run
+![观羽 BirdCM](docs/promo/promo.gif)
 
-Needs macOS, [uv](https://docs.astral.sh/uv/), Node 20+, and `exiftool` (`brew install exiftool`).
+## 能做什么
 
-```
+**Mac 版**（网页界面，在本机运行）：一次拍了上千张 RAW，帮你筛片。
+
+- 找鸟、认种（全球 11,000+ 种，按拍摄地点和季节修正），看眼睛和嘴是否清晰、是不是在飞、头部锐度，打星
+- 连拍取一致结果；当地稀有度与 IUCN（数据表暂未发布，见下方许可）
+- 鸟种清单、统计、日历、地图；导出 CSV / JSON 和 [eBird 文件](docs/ebird.md)
+- 照片文件夹只读，不改、不上传
+
+**iPhone 版**（iOS 17+）：单张照片离线识别。
+
+- 拍照或从相册选图，识别鸟种并给出当地稀有度
+- 记录、鸟种、统计、探索；维基百科简介与参考图（可在设置里关掉）
+
+名称统一两行显示：中文名在上，英文名 · *学名* 在下。
+
+## 下载
+
+[GitHub Releases](https://github.com/lincleejun/BirdCM/releases)：
+
+- **Mac**：`GuanYu-<版本>-arm64.dmg`，需要 Apple Silicon 和 macOS 15 或更高版本。安装包没有经过 Apple 公证，第一次打开的方法见发布说明。模型在第一次使用时下载，约 0.8 GB。
+- **iPhone**：`GuanYu-<版本>-iOS-unsigned.ipa`，没有签名，要用 AltStore 或 Sideloadly 以你自己的 Apple ID 签名后安装。模型已经打包在里面。
+
+## 从源码运行（Mac）
+
+需要 macOS、[uv](https://docs.astral.sh/uv/)、Node 20+ 和 `exiftool`（`brew install exiftool`）。
+
+```sh
 cd web && npm install && npm run build && cd ..
 cd engine
-uv run birdcm models fetch        # downloads + sha256-checks the models into ~/Library/Caches/BirdCM/models
-uv run birdcm serve               # http://127.0.0.1:8765/ (add --no-open to skip opening the browser)
-uv run birdcm scan /path/to/photos --limit 20 [--json]    # command line, no database
-uv run birdcm eval --photos /path/to/eval/photos --kinds bird,mammal   # docs/eval.md
-uv run pytest                     # tests (the real-model smoke test is skipped without models)
+uv run birdcm models fetch   # 下载并校验模型
+uv run birdcm serve          # http://127.0.0.1:8765/
+uv run pytest
 ```
 
-**Not released yet** (so a fresh `models fetch` reports them missing): `clear.safetensors` (clear-bird gate),
-`aesthetic.safetensors` (aesthetic head) and `rarity-us-ca-cn.sqlite` (rarity + IUCN table). They will be attached to
-the model repositories' releases once their data licences are settled; see `NOTICE.md`. The home-page photo and the
-prototype's sample crops are the author's own pictures and are not in this repository.
+iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs/release.md](docs/release.md)。设计文档在 [docs/design.md](docs/design.md)。
 
-Development with local model copies: `BIRDCM_MODEL_DIR=/…/bioclip-bird/release:/…/bioclip-bird/heads-repo-release`.
-`BIRDCM_DATA_DIR` (SQLite) and `BIRDCM_CACHE_DIR` (thumbnails, models) move BirdCM's own files; it refuses to scan a
-folder that contains either. UI development: `birdcm serve --no-open` plus `cd web && npm run dev`.
+## 联网
 
-Docs: `docs/design.md` (design), `docs/perf.md` (speed), `docs/eval.md` (accuracy), `docs/deviations.md` (where the code differs), `NOTICE.md` (model licences).
+只有下面三种情况会联网，都可以关掉：
 
-## Releases
+- 打开地图时加载 OpenStreetMap 图块
+- 用 Nominatim 显示地名，只发送取整到约 1 km 的坐标
+- 物种页的维基百科资料，只发送物种的条目名
 
-The macOS app (`观羽-<version>-arm64.dmg`, Apple Silicon, macOS 15+, ad-hoc signed and **not notarised**: see the
-release notes for how to open it the first time) is on [GitHub Releases](https://github.com/lincleejun/BirdCM/releases).
-A release is built by `.github/workflows/release.yml` only when a `release/v<version>` tag is pushed; how to cut one,
-rehearse it and fix a failed one: [docs/release.md](docs/release.md). The iOS app is not distributed.
+照片、路径和你输入的文字从不上传。
 
-## Export to eBird
+## 许可
 
-Export → choose the birds → "导出 eBird 文件" writes `ebird-record-format.csv` in eBird's **Record Format** (no header
-row, one row per species per checklist; a checklist is one day at one place). Format followed: eBird Help Center,
-"Upload Spreadsheet Data to eBird", and its "Appendix A (eBird Data Fields)" PDF and Record Format sample sheet (all
-read 2026-11-18): the 19 columns in Appendix A's order, its field lengths and ranges, MM/dd/yyyy dates, 24 h times,
-duration in minutes, Y/N, X for present. Protocol names follow the current upload page (Incidental, Stationary); the
-older Appendix A lists casual / stationary / traveling / area.
+代码使用 MIT 许可。模型和数据各有自己的许可，见 [NOTICE.md](NOTICE.md)：
 
-To import (nothing is uploaded by BirdCM):
-1. On ebird.org: Submit → Import Data → choose **eBird Record Format** → Import File, pick the CSV.
-2. **Fix Species**: names are AviList v2026 scientific names with the Clements v2026 English name from AviList's own
-   table; the dialog marks the species whose eBird name differs or that eBird does not list. Choose them by hand.
-3. **Fix Locations**: a scan placed by a chosen region (a state or country) carries no coordinates — pick the real
-   site. Photos with GPS (or a map / device point) carry coordinates.
-4. Click **Apply Fixes**, then review the checklists in My eBird.
-
-Checklists are submitted as **Incidental**, "all observations reported: N" (photos show what was photographed, not a
-complete count); counts default to X (present). "Stationary" (duration = first to last photo) can be chosen.
-
-## Licences
-
-Code: MIT. Models are downloaded, not in this repository, and keep their own licences (`models.toml`):
-BioCLIP 2.5 (MIT), OWLv2 (Apache-2.0), AviList names (CC BY 4.0). **The eye/beak and flight heads are for
-non-commercial use only**; the aesthetic head's training-image licence is not established. Details in `NOTICE.md`.
-
-## 原生 iOS（观羽）
-
-[ios/README.md](ios/README.md)：SwiftUI / iOS 17+ 单张离线识别、地点先验、当地稀有度/IUCN 与本机历史；
-所有模型随安装包提供，地点在首页设置；眼嘴/飞行权重仅限非商用。构建、开发模型覆盖和真机验收限制见该文档及 [验证记录](ios/VALIDATION.md)。
+- 眼/喙模型头和飞行模型头**仅限非商业用途**。
+- 清晰度门槛、美学模型头和稀有度表的数据许可还在确认，暂未发布。
