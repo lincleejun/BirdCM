@@ -24,6 +24,7 @@ struct Paths: Decodable { let config, data, cache, models, db, log: String; let 
 struct EngineInfo: Decodable { let pid: Int?; let port: Int?; let exe: String? }
 struct Health: Decodable { let running, ready: Bool; let engine: EngineInfo?; let port: Int }
 struct Reply: Decodable { let error: String?; let message: String?; let suggest: Int?; let port: Int?; let engine: EngineInfo? }
+struct Loaded: Decodable { let engine: String?; let loadError: String? }   // GET /api/models: the models in memory
 struct Progress: Decodable { let file: String?; let state: String?; let done: Int64?; let total: Int64?; let error: String?; let finished: Bool? }
 
 func decode<T: Decodable>(_ t: T.Type, _ line: String) -> T? {
@@ -43,6 +44,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
     @Published var suggestPort: Int? { didSet { snapshot() } }   // the configured port is busy: offer this one
     @Published var foreign: EngineInfo?             // an engine from another copy of the app holds the lock
     @Published var models: ModelsStatus? { didSet { snapshot() } }
+    @Published var loaded: Loaded? { didSet { snapshot() } }   // the running engine loads its models in the background
 
     /// Testing: the menu's status lines as text (BIRDCM_SNAPSHOT=dir), since a menu cannot be captured.
     private func snapshot() {
@@ -159,13 +161,24 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
                 if state != .starting { return }
                 if let (_, r) = try? await URLSession.shared.data(from: url), (r as? HTTPURLResponse)?.statusCode == 200 {
                     state = .running(port)
-                    if openWhenReady { openWhenReady = false; openUI() }
+                    if openWhenReady { openWhenReady = false; openUI() }   // the page is usable while the models load
                     watch()
+                    await followLoad(port)
                     return
                 }
                 try? await Task.sleep(nanoseconds: 300_000_000)
             }
             if state == .starting { state = .failed("引擎 3 分钟内没有就绪，详情见日志") }
+        }
+    }
+
+    /// Every second until the models are in memory (or failed): 模型加载中 → 就绪 in the menu.
+    private func followLoad(_ port: Int) async {
+        let url = URL(string: "http://127.0.0.1:\(port)/api/models")!
+        while self.port == port {
+            if let (d, _) = try? await URLSession.shared.data(from: url) { loaded = decode(Loaded.self, String(decoding: d, as: UTF8.self)) }
+            if loaded?.engine != "loading" { return }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
     }
 
@@ -186,6 +199,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
     func stop() async {
         guard state != .stopped else { return }
         stopping = true
+        loaded = nil
         state = .stopping
         _ = await admin(["stop"])
         proc = nil
@@ -245,7 +259,9 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
         switch state {
         case .stopped: return "已停止"
         case .starting: return "启动中…"
-        case .running(let p): return "运行中 · 端口 \(p)"
+        case .running(let p):
+            let m = loaded?.engine == "loading" ? " · 模型加载中…" : loaded?.engine == "error" ? " · 模型出错（页面顶栏可重试）" : loaded?.engine == "ready" ? " · 模型就绪" : ""
+            return "运行中 · 端口 \(p)\(m)"
         case .stopping: return "正在停止…"
         case .failed(let why): return "出错：\(why)"
         }
