@@ -34,6 +34,13 @@ folder that contains either. UI development: `birdcm serve --no-open` plus `cd w
 
 Docs: `docs/design.md` (design), `docs/perf.md` (speed), `docs/eval.md` (accuracy), `docs/deviations.md` (where the code differs), `NOTICE.md` (model licences).
 
+## Releases
+
+The macOS app (`观羽-<version>-arm64.dmg`, Apple Silicon, macOS 15+, ad-hoc signed and **not notarised**: see the
+release notes for how to open it the first time) is on [GitHub Releases](https://github.com/lincleejun/BirdCM/releases).
+A release is built by `.github/workflows/release.yml` only when a `release/v<version>` tag is pushed; how to cut one,
+rehearse it and fix a failed one: [docs/release.md](docs/release.md). The iOS app is not distributed.
+
 ## Export to eBird
 
 Export → choose the birds → "导出 eBird 文件" writes `ebird-record-format.csv` in eBird's **Record Format** (no header

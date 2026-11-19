@@ -111,13 +111,19 @@ developer.apple.com), then
 ```sh
 SIGN_ID="Developer ID Application: NAME (TEAMID)" macos/build.sh
 xcrun notarytool store-credentials birdcm-notary --apple-id YOU@EXAMPLE.COM --team-id TEAMID   # app-specific password
-xcrun notarytool submit "macos/dist/观羽-0.1.0-arm64.dmg" --keychain-profile birdcm-notary --wait
-xcrun stapler staple "macos/dist/观羽-0.1.0-arm64.dmg"
-spctl -a -t open --context context:primary-signature -vv "macos/dist/观羽-0.1.0-arm64.dmg"
+xcrun notarytool submit "macos/dist/观羽-<version>-arm64.dmg" --keychain-profile birdcm-notary --wait
+xcrun stapler staple "macos/dist/观羽-<version>-arm64.dmg"
+spctl -a -t open --context context:primary-signature -vv "macos/dist/观羽-<version>-arm64.dmg"
 ```
 
 (`notarytool` and `stapler` are in the Command Line Tools too; if notarization reports problems, `xcrun notarytool log <id>
 --keychain-profile birdcm-notary` lists them file by file.)
+
+## Releases
+
+Pushing a `release/v<version>` tag runs `.github/workflows/release.yml`: engine tests and web build, then this
+`build.sh` (ad-hoc, as above) on GitHub's Apple Silicon `macos-15` runner, then a GitHub Release with the dmg (also as
+`GuanYu-<version>-arm64.dmg`) and its sha256. Nothing is notarised. Steps, rehearsal and recovery: `docs/release.md`.
 
 ## Uninstall
 
