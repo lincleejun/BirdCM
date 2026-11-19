@@ -764,22 +764,34 @@ struct SecondaryActionStyle: ButtonStyle {
     }
 }
 /// Quiet one-line model state on home: 准备中 / 就绪 / 出错 with 重试. Never an overlay, never disables anything.
+/// 就绪 shows for a few seconds, then the line goes (owner 2026-11-19: 不要一直展示); a missing rarity table stays.
 struct ModelStatusLine: View {
     @Environment(AppModel.self) var model
+    @State private var readyShown = true
+    static let readyFor: Duration = .seconds(3)
     var body:some View {
+        let ready = model.modelReady || model.previewing
+        let rarity = FileManager.default.fileExists(atPath:Models.rarityURL.path)
         HStack(spacing:6) {
             if let e=model.modelError {
                 Image(systemName:"exclamationmark.triangle").foregroundStyle(Palette.warning)
                 Text(e).lineLimit(2).accessibilityIdentifier("home.modelStatus")
                 Button("重试"){model.retry()}.font(.caption.bold()).frame(minHeight:44).accessibilityIdentifier("home.modelRetry")
-            } else if model.modelReady || model.previewing {
+            } else if ready && !readyShown && rarity {
+                EmptyView()
+            } else if ready {
                 Image(systemName:"checkmark.circle")
-                Text(FileManager.default.fileExists(atPath:Models.rarityURL.path) ? "离线模型就绪":"离线模型就绪 · 稀有度表未安装，显示数据不足").accessibilityIdentifier("home.modelStatus")
+                Text(rarity ? "离线模型就绪":"离线模型就绪 · 稀有度表未安装，显示数据不足").accessibilityIdentifier("home.modelStatus")
             } else {
                 ProgressView().controlSize(.mini)
                 Text("正在准备离线模型，可以先选照片").accessibilityIdentifier("home.modelStatus")
             }
         }.font(.caption).foregroundStyle(Palette.secondary).frame(maxWidth:.infinity)
+        .task(id: ready) {
+            readyShown = true
+            guard ready, (try? await Task.sleep(for: Self.readyFor)) != nil else { return }
+            withAnimation { readyShown = false }
+        }
     }
 }
 /// The result page while it is being made: the photo at once (no letterbox bars), boxes when detection finishes, then the

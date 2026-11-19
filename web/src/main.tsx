@@ -141,8 +141,17 @@ function EngineBadge() {
   const s = useEngine();
   const [asked, setAsked] = useState(false);
   useEffect(() => setAsked(false), [s]);             // every poll answers the click (a failed reload is quick)
-  if (!s) return null;
-  if (s.engine === "ready") return <span className="engine ok" role="status" title="模型已加载，识别会立刻开始">模型就绪</span>;
+  // 模型就绪 shows for a few seconds, then goes (owner 2026-11-19: 不要一直展示)
+  const ready = s?.engine === "ready";
+  const [readyShown, setReadyShown] = useState(true);
+  useEffect(() => {
+    setReadyShown(true);
+    if (!ready) return;
+    const t = setTimeout(() => setReadyShown(false), 3000);
+    return () => clearTimeout(t);
+  }, [ready]);
+  if (!s || (ready && !readyShown)) return null;
+  if (ready) return <span className="engine ok" role="status" title="模型已加载，识别会立刻开始">模型就绪</span>;
   if (s.engine === "loading" || asked) return <span className="engine busy" role="status" title="页面可以照常使用；这时开始的识别会排队，加载完自动开始">模型准备中…</span>;
   return (
     <span className="engine bad" role="alert" title={s.load_error ?? ""}>模型出错

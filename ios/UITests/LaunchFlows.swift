@@ -94,7 +94,9 @@ final class LaunchFlows: XCTestCase {
     /// Home's bottom action area (picker, camera, status line) stays short (owner 2026-11-18: 当前太高太丑).
     func testHomeActionAreaHeight() throws {
         launch(["-fixtureState","normal"]);wait("home.photos",20)
-        let top=min(element("home.photos").frame.minY,element("home.camera").frame.minY),bottom=element("home.modelStatus").frame.maxY
+        let top=min(element("home.photos").frame.minY,element("home.camera").frame.minY)
+        // the ready line goes after a few seconds (ModelStatusLine.readyFor)
+        let bottom=element("home.modelStatus").exists ? element("home.modelStatus").frame.maxY:max(element("home.photos").frame.maxY,element("home.camera").frame.maxY)
         let note=app.staticTexts["系统选片无需相册访问授权；仅读取你选择的照片。"].firstMatch
         let height=bottom-(note.exists && note.frame.minY<top ? note.frame.minY:top)+16
         print(String(format:"PERF home action area %.0f pt",height));shot("home-action-area")
