@@ -32,6 +32,8 @@ DERIVATION_VERSION = "1"
 PENDING = ("genus", "uncertain", "unclassified", "unresolved", "needs_match")
 THREATENED = ("VU", "EN", "CR")
 MAX_COUNT = 999998
+PROVISIONAL_BYTES = 1 << 30   # more originals than this to hash (~4 s from a USB disk): a stand-in generation first
+HASH_SAVE_S = 2.0             # new digests are saved this often during a rebuild (a restart resumes, not restarts)
 ZONE: timezone | None = None      # the zone a missing capture date's identification time is read in; None = this Mac's
 TIERS = {0: "无记录", 1: "罕见", 2: "少见", 3: "不常见", 4: "常见"}
 
@@ -406,6 +408,7 @@ class Library:
         self.lock = threading.Lock()
         self.thread: threading.Thread | None = None
         self.error: str | None = None
+        self.hashing: dict | None = None            # {files, of, bytes, of_bytes} while originals are being hashed
         self._memo: tuple | None = None
 
     # ---- refresh ----------------------------------------------------------------------------------------------
@@ -414,7 +417,7 @@ class Library:
         db = self.store._db()
         running = bool(self.thread and self.thread.is_alive())
         return {"generation": int(meta(db, "generation") or 0), "updating": running or meta(db, "dirty") == "1",
-                "error": self.error}
+                "error": self.error, "hashing": self.hashing}
 
     def refresh(self, wait: bool = False) -> dict:
         """Dirty -> rebuild in the background (wait=True: here). Returns the status the reader is looking at."""
@@ -436,21 +439,28 @@ class Library:
             self.error = f"{type(e).__name__}: {e}"[:300]
 
     def rebuild(self) -> int:
+        """Read, hash, derive, swap. With more than PROVISIONAL_BYTES of originals not hashed yet (a first rebuild over a
+        USB disk: minutes), a generation with stand-in keys is published first, so the pages count the photos at once;
+        it stays dirty (edits wait) until the real one replaces it. Hashes are saved as they come: a restart resumes."""
         with self.lock:
             src = self._read()
-            hashes, new_rows = self._hashes(src)
-            rows = self._derive(src, hashes)
+            sigs = self._sigs(src)
+            if sum(k[1] for k in sigs if k not in src["hash"] and k[1] > 0) > PROVISIONAL_BYTES:
+                self._swap(src, self._derive(src, self._hashes(src, sigs, provisional=True)[0]), [], final=False)
+            hashes, new_rows = self._hashes(src, sigs)
+            return self._swap(src, self._derive(src, hashes), new_rows)
 
-            def swap(db):
-                gen = bump(db)
-                db.executemany("INSERT OR IGNORE INTO ll_hash VALUES (?,?,?,?,?,?,?)", new_rows)
-                db.execute("DELETE FROM ll_evidence")
-                db.executemany(f"INSERT INTO ll_evidence ({','.join(EV_COLS)}) VALUES ({','.join('?' * len(EV_COLS))})",
-                               [tuple(r[c] for c in EV_COLS) for r in rows])
-                if meta(db, "mutations") == src["mutations"]:          # nothing changed since the read
-                    db.execute("UPDATE ll_meta SET value = '0' WHERE key = 'dirty'")
-                return gen
-            return self.store._write(swap)
+    def _swap(self, src: dict, rows: list[dict], new_rows: list, final: bool = True) -> int:
+        def swap(db):
+            gen = bump(db)
+            db.executemany("INSERT OR IGNORE INTO ll_hash VALUES (?,?,?,?,?,?,?)", new_rows)
+            db.execute("DELETE FROM ll_evidence")
+            db.executemany(f"INSERT INTO ll_evidence ({','.join(EV_COLS)}) VALUES ({','.join('?' * len(EV_COLS))})",
+                           [tuple(r[c] for c in EV_COLS) for r in rows])
+            if final and meta(db, "mutations") == src["mutations"]:          # nothing changed since the read
+                db.execute("UPDATE ll_meta SET value = '0' WHERE key = 'dirty'")
+            return gen
+        return self.store._write(swap)
 
     def _read(self) -> dict:
         """Every source, from one read transaction."""
@@ -488,10 +498,8 @@ class Library:
         finally:
             db.execute("COMMIT")
 
-    def _hashes(self, src: dict) -> tuple[dict, list]:
-        """(path, size, mtime) -> {hash, first_identified_utc, fallback_wall, fallback_offset_min, missing}, and the
-        new ll_hash rows. Files are read here, outside every transaction; a file that cannot be read keeps its cached
-        digest, or gets a namespaced unresolved key (not stored, retried next time)."""
+    def _sigs(self, src: dict) -> dict[tuple, float]:
+        """(path, size, mtime) of every photo and single -> when it was first identified."""
         import os
         sigs: dict[tuple, float] = {}
         for p in src["photos"]:
@@ -506,30 +514,51 @@ class Library:
                 k = (path, -1, -1)
             s["_sig"] = k
             sigs[k] = min(sigs.get(k, s["created_at"]), s["created_at"])
+        return sigs
+
+    def _hashes(self, src: dict, sigs: dict[tuple, float], provisional: bool = False) -> tuple[dict, list]:
+        """(path, size, mtime) -> {hash, first_identified_utc, fallback_wall, fallback_offset_min, missing}, and the
+        new ll_hash rows. Files are read here, outside every transaction; a file that cannot be read keeps its cached
+        digest, or gets a namespaced unresolved key (not stored, retried next time). provisional: nothing is read, a
+        file without a cached digest gets that stand-in key (the generation published before the hashing)."""
+        import os
         by_hash: dict[str, dict] = {}
         for r in src["hash"].values():
             if r["hash"] not in by_hash or r["first_identified_utc"] < by_hash[r["hash"]]["first_identified_utc"]:
                 by_hash[r["hash"]] = r
-        out, new = {}, []
-        for k, ts in sorted(sigs.items(), key=lambda kv: kv[1]):        # earliest identification first
-            if k in src["hash"]:
-                out[k] = {**src["hash"][k], "missing": not os.path.exists(k[0])}
-                continue
-            digest = file_hash(*k) if k[1] >= 0 else None
-            if digest is None:
-                wall, off = fallback_of(ts)
-                out[k] = {"hash": unresolved_key(*k), "first_identified_utc": utc_text(ts), "fallback_wall": wall,
-                          "fallback_offset_min": off, "missing": True}
-                continue
-            first = by_hash.get(digest)
-            if first is None:
-                wall, off = fallback_of(ts)
-                first = by_hash[digest] = {"hash": digest, "first_identified_utc": utc_text(ts), "fallback_wall": wall,
-                                           "fallback_offset_min": off}
-            row = {"path": k[0], "size": k[1], "mtime_ns": k[2], "hash": digest, "first_identified_utc": first["first_identified_utc"],
-                   "fallback_wall": first["fallback_wall"], "fallback_offset_min": first["fallback_offset_min"]}
-            new.append(tuple(row[c] for c in ("path", "size", "mtime_ns", "hash", "first_identified_utc", "fallback_wall", "fallback_offset_min")))
-            out[k] = {**row, "missing": False}
+        todo = [k for k in sigs if k not in src["hash"] and k[1] >= 0]
+        cols = ("path", "size", "mtime_ns", "hash", "first_identified_utc", "fallback_wall", "fallback_offset_min")
+        out, new, saved, last = {}, [], 0, time.monotonic()
+        if not provisional:
+            self.hashing = {"files": 0, "of": len(todo), "bytes": 0, "of_bytes": sum(k[1] for k in todo)}
+        try:
+            for k, ts in sorted(sigs.items(), key=lambda kv: kv[1]):        # earliest identification first
+                if k in src["hash"]:
+                    out[k] = {**src["hash"][k], "missing": not os.path.exists(k[0])}
+                    continue
+                digest = file_hash(*k) if k[1] >= 0 and not provisional else None
+                if k[1] >= 0 and not provisional:
+                    self.hashing = {**self.hashing, "files": self.hashing["files"] + 1, "bytes": self.hashing["bytes"] + k[1]}
+                if digest is None:
+                    wall, off = fallback_of(ts)
+                    out[k] = {"hash": unresolved_key(*k), "first_identified_utc": utc_text(ts), "fallback_wall": wall,
+                              "fallback_offset_min": off, "missing": not provisional}
+                    continue
+                first = by_hash.get(digest)
+                if first is None:
+                    wall, off = fallback_of(ts)
+                    first = by_hash[digest] = {"hash": digest, "first_identified_utc": utc_text(ts), "fallback_wall": wall,
+                                               "fallback_offset_min": off}
+                row = {"path": k[0], "size": k[1], "mtime_ns": k[2], "hash": digest, "first_identified_utc": first["first_identified_utc"],
+                       "fallback_wall": first["fallback_wall"], "fallback_offset_min": first["fallback_offset_min"]}
+                new.append(tuple(row[c] for c in cols))
+                out[k] = {**row, "missing": False}
+                if time.monotonic() - last > HASH_SAVE_S:            # a cache row, the same whenever it is written
+                    batch, saved, last = new[saved:], len(new), time.monotonic()
+                    self.store._write(lambda db: db.executemany("INSERT OR IGNORE INTO ll_hash VALUES (?,?,?,?,?,?,?)", batch))
+        finally:
+            if not provisional:
+                self.hashing = None
         return out, new
 
     def _derive(self, src: dict, hashes: dict) -> list[dict]:
@@ -829,21 +858,24 @@ class Index:
         return out
 
     def observations(self, frm=None, to=None, sci=None, day=None, rare=None) -> list[dict]:
-        out = []
-        for g in sorted(self.groups_in(frm, to, sci, day), key=lambda g: (g["day"], g["key"]), reverse=True):
-            if rare is not None and self.rare(g) != rare:
-                continue
-            r0 = g["rows"][0]
-            pts = sorted({(r["lat"], r["lon"]) for r in g["rows"] if r["lat"] is not None})
-            out.append({"key": g["key"], "sci": g["sci"], **names_of(g["sci"]), "day": g["day"], "place_key": g["place_key"],
-                        "place": {"label": place_text(r0), "source": r0["place_source"], "region_code": r0["region_code"],
-                                  "points": [list(p) for p in pts[:20]]},
-                        "estimate": g["estimate"], "estimate_source": g["estimate_source"], "max_in_photo": g["max"],
-                        "photo_count": len(g["frames"]), "contexts": self.contexts(g), "rare": self.rare(g),
-                        "first_seen": self.first_day.get(g["sci"]) == g["day"],
-                        "fallback_date": any(r["date_source"].startswith("identified") for r in g["rows"]),
-                        "source_refs": [ref(r) for r in sorted(g["rows"], key=lambda r: (r["capture_wall"] or "", r["asset_hash"], r["subject_id"]))[:6]]})
-        return out
+        return [self.observation(g) for g in self.observation_groups(frm, to, sci, day, rare)]
+
+    def observation_groups(self, frm=None, to=None, sci=None, day=None, rare=None) -> list[dict]:
+        gs = sorted(self.groups_in(frm, to, sci, day), key=lambda g: (g["day"], g["key"]), reverse=True)
+        return gs if rare is None else [g for g in gs if self.rare(g) == rare]
+
+    def observation(self, g: dict) -> dict:
+        """One observation for the page (its place names a region: a polygon lookup, so only for the rows shown)."""
+        r0 = g["rows"][0]
+        pts = sorted({(r["lat"], r["lon"]) for r in g["rows"] if r["lat"] is not None})
+        return {"key": g["key"], "sci": g["sci"], **names_of(g["sci"]), "day": g["day"], "place_key": g["place_key"],
+                "place": {"label": place_text(r0), "source": r0["place_source"], "region_code": r0["region_code"],
+                          "points": [list(p) for p in pts[:20]]},
+                "estimate": g["estimate"], "estimate_source": g["estimate_source"], "max_in_photo": g["max"],
+                "photo_count": len(g["frames"]), "contexts": self.contexts(g), "rare": self.rare(g),
+                "first_seen": self.first_day.get(g["sci"]) == g["day"],
+                "fallback_date": any(r["date_source"].startswith("identified") for r in g["rows"]),
+                "source_refs": [ref(r) for r in sorted(g["rows"], key=lambda r: (r["capture_wall"] or "", r["asset_hash"], r["subject_id"]))[:6]]}
 
     def calendar(self, year: int) -> dict:
         """Photo-first calendar (owner, 2026-11-18): per day and per month the observation and species counts and

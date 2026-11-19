@@ -6,7 +6,8 @@ import LocationPicker, { type Country } from "./Location";
 import type { Place } from "./types";
 
 export interface Ref { kind: "photo" | "single" | "import"; id: string; subject_id: string; asset_hash: string; thumb: string; day?: string; sci?: string }
-interface Status { generation: number; updating: boolean; error?: string | null }
+interface Status { generation: number; updating: boolean; error?: string | null;
+  hashing?: { files: number; of: number; bytes: number; of_bytes: number } | null }
 interface Metrics {
   species: number; observations: number; estimated_count: number; photos: number; pending_subjects: number; pending_photos: number;
   no_bird_photos: number; active_days: number; new_species: number; rare_observations: number; threatened_species: number;
@@ -69,6 +70,10 @@ function Updating({ s, err }: { s: Status | null; err: string }) {
   if (err) return <p className="error-text" role="alert">统计读不出来：{err}</p>;
   if (!s) return <p className="hint" role="status">正在读取…</p>;
   if (s.error) return <p className="error-text" role="alert">更新统计出错：{s.error}（显示的是上一次完整的结果）</p>;
+  const h = s.hashing;
+  // a first rebuild reads every original once (one fingerprint per photo); the counts below are usable meanwhile
+  if (h && h.of > 0) return <p className="hint" role="status">正在给照片做指纹 {h.files} / {h.of} 张（{(h.bytes / 1e9).toFixed(1)} / {(h.of_bytes / 1e9).toFixed(1)} GB）·
+    数字先按文件算，同一张照片在两处出现时可能暂时多算；做完自动刷新，改动要等做完</p>;
   return s.updating ? <p className="hint" role="status">更新统计中…（第 {s.generation} 版，完成后自动刷新）</p> : null;
 }
 

@@ -205,6 +205,39 @@ def test_unmounted_volume_keeps_cached_hashes(tmp_path, monkeypatch):
     assert lib.index().summary()["metrics"] == before
 
 
+def test_long_first_hashing_publishes_a_stand_in_generation_and_resumes(tmp_path, monkeypatch):
+    """Hashing many GB of originals (the first rebuild over a USB disk) must not leave the pages empty for minutes: a
+    generation with stand-in keys comes first (still updating, edits wait), progress is reported, digests are saved as
+    they come, so an interrupted rebuild resumes; the final generation is exactly the fixture's."""
+    fx = load()
+    store, lib, _ = native(tmp_path, monkeypatch)
+    monkeypatch.setattr(library, "PROVISIONAL_BYTES", 0)
+    monkeypatch.setattr(library, "HASH_SAVE_S", 0)
+    real, seen, mid = library.file_hash, [], []
+
+    def hashing(*k):
+        if len(seen) == 3:                                               # mid-way: what the pages see now
+            st = lib.status()
+            mid.append((lib.index().generation, lib.index().summary()["metrics"]["photos"], st["updating"], dict(st["hashing"])))
+        if len(seen) == 10 and not mid[1:]:
+            mid.append("quit")
+            raise KeyboardInterrupt                                      # the app quits during the hashing
+        seen.append(k)
+        return real(*k)
+    monkeypatch.setattr(library, "file_hash", hashing)
+    with pytest.raises(KeyboardInterrupt):
+        lib.rebuild()
+    gen, photos, updating, progress = mid[0]
+    assert gen == 1 and photos > 0 and updating and progress["files"] == 3 and progress["of"] > 10
+    saved = store._db().execute("SELECT count(*) FROM ll_hash").fetchone()[0]
+    assert saved >= 9                                                    # kept although the rebuild never finished
+    seen.clear()
+    lib.rebuild()
+    assert len(seen) == progress["of"] - saved                           # only the rest is hashed this time
+    assert lib.status()["hashing"] is None and not lib.status()["updating"]
+    check_expected(lib.index(), fx)
+
+
 def test_originals_untouched(tmp_path, monkeypatch):
     store, lib, folder = native(tmp_path, monkeypatch, rescan=False)
     before = {f.name: (f.stat().st_mtime_ns, f.read_bytes()) for f in folder.iterdir()}
