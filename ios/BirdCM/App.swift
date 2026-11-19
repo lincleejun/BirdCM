@@ -5,6 +5,12 @@ import UniformTypeIdentifiers
 
 @main struct BirdCMApp: App {
     @State private var model = AppModel()
+    init() {
+        #if DEBUG
+        Perf.log("LAUNCH"); Perf.watchMainThread()
+        #endif
+        Perf.mark("app.init")
+    }
     var body: some Scene { WindowGroup { RootView().environment(model).tint(Palette.green)
         .onReceive(NotificationCenter.default.publisher(for:UIApplication.didReceiveMemoryWarningNotification)) { _ in
             if let engine=model.engine { Task.detached { engine.releaseBioCLIP() } }
@@ -173,7 +179,9 @@ func title(_ r: Identification) -> String {
         guard let library, migration == nil else {return}
         // A cleared/restored library must not leave a tombstoned record open in any tab.
         if let id=current?.id,(try? library.query("SELECT 1 FROM ll_record WHERE id=? AND deleted_utc IS NULL",[id.uuidString.lowercased()]).isEmpty) ?? false {showing=false;current=nil;photo=nil}
+        let t0=Date()
         do { items=try library.items(); ledger=Ledger(items:items,edits:try library.groupEdits(),known:catalogue.contains) } catch { self.error=error.localizedDescription }
+        Perf.mark("refresh",Date().timeIntervalSince(t0))
     }
     /// One shared commit path for every edit: write, reload the open record, refresh counts. False leaves the editor open.
     @discardableResult func edit(_ body:(Library) throws -> Void) -> Bool {
@@ -227,7 +235,9 @@ func title(_ r: Identification) -> String {
         busy=true; status="正在检查并加载离线模型…"
         defer{busy=false}
         do {
+            let t0=Date()
             let invalid=try await Task.detached {try Models.invalidRequiredAssets()}.value
+            Perf.mark("models.integrity",Date().timeIntervalSince(t0))
             guard invalid.isEmpty else {
                 status="安装包损坏，请重新安装："+invalid.joined(separator:"、")
                 return
@@ -235,6 +245,7 @@ func title(_ r: Identification) -> String {
             engine=nil
             engine=try await Task.detached { try Engine(dir:Models.dir) }.value
             loadSeconds=engine!.loadSeconds
+            Perf.mark("models.load",loadSeconds);Perf.mark("models.ready")
             status=engine?.rarity == nil ? "稀有度表未安装，当前显示数据不足" : ""
             #if DEBUG
             if let path=UserDefaults.standard.string(forKey:"debugImage") { busy=false; await identify(try Data(contentsOf:URL(fileURLWithPath:path))) }
@@ -269,6 +280,7 @@ func title(_ r: Identification) -> String {
             UIImpactFeedbackGenerator(style:.light).impactOccurred()
             current=record; photo=made.1; preview=UIImage(cgImage:made.1.frame.cgImage()); showing=true; refresh()
             sessionSeconds=Date().timeIntervalSince(started); status=""
+            Perf.mark("identify.session",sessionSeconds)
         } catch { self.error=String(localized:"识别失败：\(error.localizedDescription)"); status="" }
     }
     /// Open a record, optionally at one subject (pending list), on the current tab.
@@ -473,6 +485,7 @@ struct IdentifyView: View {
             }
         }
         .scrollContentBackground(.hidden).background(Palette.paper)
+        .onAppear{Perf.mark("home.visible",once:true)}
         .navigationTitle("观羽").navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge:.bottom) {
             if model.ready {

@@ -34,3 +34,51 @@ final class MemorySample: @unchecked Sendable {
     func stop() -> UInt64 { timer.cancel(); sample(); lock.lock(); defer{lock.unlock()}; return peak }
     deinit { timer.cancel() }
 }
+
+/// Launch and stage timings measured from process start (kernel start time, so dyld and static init count).
+/// Shown in 诊断; Debug builds also append them to Caches/perf.log so simulator runs can be read from the host.
+enum Perf {
+    static let processStart: Date = {
+        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.size
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0 else { return Date() }
+        let t = info.kp_proc.p_un.__p_starttime
+        return Date(timeIntervalSince1970: Double(t.tv_sec) + Double(t.tv_usec) / 1e6)
+    }()
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var values = [String: Double]()
+    static var marks: [String: Double] { lock.lock(); defer { lock.unlock() }; return values }
+    static func since() -> Double { Date().timeIntervalSince(processStart) }
+    /// Records `name` = seconds (default: now since process start); with `once` the first value wins.
+    static func mark(_ name: String, _ seconds: Double? = nil, once: Bool = false) {
+        let v = seconds ?? since()
+        lock.lock(); defer { lock.unlock() }
+        if once, values[name] != nil { return }
+        values[name] = v
+        log(String(format: "PERF %@ %.3f", name, v))
+    }
+    static func log(_ line: String) {
+        #if DEBUG
+        print(line)
+        let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("perf.log")
+        let data = Data((line + "\n").utf8)
+        if let h = try? FileHandle(forWritingTo: url) { _ = try? h.seekToEnd(); try? h.write(contentsOf: data); try? h.close() } else { try? data.write(to: url) }
+        #endif
+    }
+    #if DEBUG
+    /// Debug-only watchdog: pings the main queue every 50 ms and logs any wait over 100 ms (a visible hitch).
+    static func watchMainThread() {
+        Thread.detachNewThread {
+            let ping = DispatchSemaphore(value: 0)
+            while true {
+                let sent = Date()
+                DispatchQueue.main.async { ping.signal() }
+                ping.wait()
+                let lag = Date().timeIntervalSince(sent)
+                if lag > 0.1 { log(String(format: "HITCH %.3f at %.1f", lag, since())) }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        }
+    }
+    #endif
+}

@@ -80,19 +80,26 @@ final class Engine: @unchecked Sendable {
         cfg.computeUnits = .cpuOnly
         #endif
         modelDir=dir; configuration=cfg
-        detector = try MLModel(contentsOf: try Self.compiled(dir, "Detector"), configuration: cfg)
-        bioclip = try MLModel(contentsOf: try Self.compiled(dir, "BioCLIP"), configuration: cfg)
+        var tick=Date()
+        func lap(_ n:String) { Perf.mark("load."+n,Date().timeIntervalSince(tick)); tick=Date() }
+        detector = try MLModel(contentsOf: try Self.compiled(dir, "Detector"), configuration: cfg); lap("detector")
+        bioclip = try MLModel(contentsOf: try Self.compiled(dir, "BioCLIP"),  configuration: cfg); lap("bioclip")
         heads = FileManager.default.fileExists(atPath: dir.appendingPathComponent("Heads.mlmodelc").path)
             ? try MLModel(contentsOf: try Self.compiled(dir, "Heads"), configuration: cfg) : nil
+        lap("heads")
         let raw = try Data(contentsOf: dir.appendingPathComponent("names.f16"))
         names = raw.withUnsafeBytes { $0.bindMemory(to: Float16.self).map(Float.init) }
+        lap("names.f16")
         let zh = Dictionary(uniqueKeysWithValues: resource("zh-names", as: [[String:String]].self).map{($0["scientific"]!, $0["zh"]!)})
         rows = try String(contentsOf: dir.appendingPathComponent("names.tsv"), encoding: .utf8)
             .split(separator: "\n").map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
         guard names.count == rows.count * 1024, rows.count == 11172, rows.allSatisfy({$0.count >= 5}) else { throw CocoaError(.fileReadCorruptFile) }
         rows = rows.map { r in var row = r; row[2] = zh[row[0]] ?? ""; return row }
+        lap("names.tsv")
         if FileManager.default.fileExists(atPath:Models.geoURL.path) { geo = try Geo(weights:Models.geoURL,scientific:rows.map{$0[0]}) }
+        lap("geo")
         if FileManager.default.fileExists(atPath:Models.rarityURL.path) { rarity = try Rarity(path:Models.rarityURL) }
+        lap("rarity")
         loadSeconds = Date().timeIntervalSince(started); loadPeakBytes = memory.stop()
     }
 

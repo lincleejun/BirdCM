@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		002A5BCB61E66B6F597F8046 /* NOTICE.md in Resources */ = {isa = PBXBuildFile; fileRef = B39535F38A0EE6F535D65138 /* NOTICE.md */; };
+		005E90D7DC7FFA5B62F6F495 /* LaunchFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = B89F3C9F14B2B2C9DB551141 /* LaunchFlows.swift */; };
 		01B8A5B33EB0B27CA9B1C798 /* DisplayCrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85FFEB2A1D6949CEC034BEFC /* DisplayCrop.swift */; };
 		05F9F7DD0B7AFB16A33E9B03 /* PhotoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8171929D21E7139FA08AF9 /* PhotoView.swift */; };
 		130E9932A5461B7185438C94 /* Stats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006A90032792584A5C2E4B49 /* Stats.swift */; };
@@ -116,6 +117,7 @@
 		A10C1720395468417D71FB48 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
 		A4668201A11936E9A1AF6313 /* PipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineTests.swift; sourceTree = "<group>"; };
 		B39535F38A0EE6F535D65138 /* NOTICE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = NOTICE.md; sourceTree = "<group>"; };
+		B89F3C9F14B2B2C9DB551141 /* LaunchFlows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchFlows.swift; sourceTree = "<group>"; };
 		BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */ = {isa = PBXFileReference; path = "clear-training-photos.csv"; sourceTree = "<group>"; };
 		C064BA2F801B919462B1F37A /* Rarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rarity.swift; sourceTree = "<group>"; };
 		C8D7DD89DAFCEA3EDEE2505E /* Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library.swift; sourceTree = "<group>"; };
@@ -145,6 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				A0CF7E248E2F161C963C6FE2 /* Flows.swift */,
+				B89F3C9F14B2B2C9DB551141 /* LaunchFlows.swift */,
 			);
 			path = UITests;
 			sourceTree = "<group>";
@@ -454,6 +457,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7024122ADBB1933352C7B20F /* Flows.swift in Sources */,
+				005E90D7DC7FFA5B62F6F495 /* LaunchFlows.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

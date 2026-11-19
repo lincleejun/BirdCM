@@ -13,6 +13,7 @@ final class Catalogue {
     private let folded: [[String]]
     let rarity: Rarity?
     init(dir: URL = Models.dir) {
+        let started = Date(); defer { Perf.mark("catalogue", Date().timeIntervalSince(started)) }
         let zh = Dictionary((resource("zh-names", as: [[String: String]].self)).compactMap { r in r["scientific"].map { ($0, r["zh"] ?? "") } }, uniquingKeysWith: { a, _ in a })
         let text = (try? String(contentsOf: dir.appendingPathComponent("names.tsv"), encoding: .utf8)) ?? ""
         all = text.split(separator: "\n").map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }.filter { $0.count >= 5 }
