@@ -99,7 +99,7 @@ struct ExploreView: View {
                 if results.isEmpty && !computing { Text(seen == "seen" ? "还没有已见的鸟种。" : "没有匹配的鸟种。").accessibilityIdentifier("explore.empty") }
             }
         }
-        .scrollContentBackground(.hidden).background(Palette.paper)
+        .scrollContentBackground(.hidden).background(Palette.canvas)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: Text("搜索全部鸟种"))
         .task { await model.catalogue.preparePinyin() }
         .task(id: "\(mode)|\(month)|\(model.homePlace?.stableCode ?? "")") {
@@ -154,7 +154,7 @@ struct ExploreView: View {
                 }
                 Spacer()
                 if let code = iucn[sp.sci] { IUCNChip(code: code, small: true) }
-                if model.ledger.allTime[sp.sci] != nil { Label("已见", systemImage: "checkmark.circle.fill").font(.caption.bold()).foregroundStyle(Palette.green) }
+                if model.ledger.allTime[sp.sci] != nil { Label("已见", systemImage: "checkmark.circle.fill").font(.caption.bold()).foregroundStyle(Palette.accent) }
             }.frame(minHeight: 44)
         }.accessibilityIdentifier("explore.row.\(sp.sci)")
     }

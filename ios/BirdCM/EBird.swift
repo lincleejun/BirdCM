@@ -106,7 +106,7 @@ struct EBirdSheet: View {
                             Text("请选择").tag(EBird.Fallback?.none); Text("包含（按首次识别日期）").tag(EBird.Fallback?.some(.include)); Text("排除").tag(EBird.Fallback?.some(.exclude))
                         }.accessibilityIdentifier("ebird.fallback")
                     }
-                    if !unmapped.isEmpty { Text("\(unmapped.count) 种在 eBird 名录里没有对应英文名，只写学名；上传时可能需要在 Fix Species 里手动对应。").font(.footnote).foregroundStyle(Palette.rust) }
+                    if !unmapped.isEmpty { Text("\(unmapped.count) 种在 eBird 名录里没有对应英文名，只写学名；上传时可能需要在 Fix Species 里手动对应。").font(.footnote).foregroundStyle(Palette.warning) }
                     let pending = model.ledger.summary(range).pending
                     if pending > 0 { Text("另有 \(pending) 个待确认主体（属级、不确定、未识别）不导出。").font(.footnote) }
                     Button("导出 eBird 文件") { export(lists) }.buttonStyle(PrimaryActionStyle()).disabled(lists.isEmpty || (fallbackCount > 0 && fallback == nil)).accessibilityIdentifier("ebird.export")

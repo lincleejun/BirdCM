@@ -20,8 +20,8 @@ struct CorrectionSheet: View {
                     Text(sp.sci).font(.caption).italic().foregroundStyle(Palette.secondary)
                 }
                 Spacer()
-                if model.ledger.allTime[sp.sci] != nil { Text("已见").font(.caption.bold()).foregroundStyle(Palette.green) }
-                if picked == sp { Image(systemName: "checkmark").foregroundStyle(Palette.green) }
+                if model.ledger.allTime[sp.sci] != nil { Text("已见").font(.caption.bold()).foregroundStyle(Palette.accent) }
+                if picked == sp { Image(systemName: "checkmark").foregroundStyle(Palette.accent) }
             }.frame(minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("correction.row.\(sp.sci)")
     }

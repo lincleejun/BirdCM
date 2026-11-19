@@ -125,7 +125,7 @@ struct SelfTestView: View {
                 Text("用随 App 附带的 4 张 CC0 照片，逐个模型、逐个计算单元设置（all / CPU+ANE / CPU+GPU / CPU）测加载、首次与预热后单次预测用时和峰值内存，另测 48 MP 照片的预处理。不读写你的记录，不改设置。约需 1–3 分钟（首次用神经网络引擎时系统要编译模型），请保持在本页并截图发给开发者。").font(.caption)
                 Button(running ? "正在测：\(progress)" : "开始性能自测") { start() }
                     .disabled(running || model.busy).accessibilityIdentifier("selfTest.start")
-                if let error { Text(error).font(.caption).foregroundStyle(Palette.rust) }
+                if let error { Text(error).font(.caption).foregroundStyle(Palette.warning) }
             }
             if let result {
                 Section("\(Self.device) · iOS \(UIDevice.current.systemVersion)") {

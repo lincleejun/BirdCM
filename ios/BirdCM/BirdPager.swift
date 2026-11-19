@@ -40,7 +40,7 @@ struct CropThumbnail:View {
     }
     var body:some View {
         // Fill whatever frame the caller proposes, then clip to it (not to the image's own fill size).
-        Rectangle().fill(Palette.paper).overlay {if let image {Image(decorative:image,scale:displayScale).resizable().scaledToFill()}}
+        Rectangle().fill(Palette.canvas).overlay {if let image {Image(decorative:image,scale:displayScale).resizable().scaledToFill()}}
             .clipped().onGeometryChange(for:CGSize.self) {$0.size} action:{frame=CGSize(width:$0.width.rounded(),height:$0.height.rounded())}
             .task(id:"\(id)-\(index)-\(original)-\(boxes)-\(frame)") {
                 guard let url,frame.width>0,frame.height>0 else{return}
@@ -117,7 +117,7 @@ struct BirdPager:View {
                             PhotoView(image:UIImage(cgImage:removeBackground ? lifted ?? image:image),record:CropCoordinates(window:window(s,i)).record(record,index:i),marks:marks,drawing:false,neutral:true,onSelect:{_ in},onDraw:{_ in})
                                 .aspectRatio(CGSize(width:image.width,height:image.height),contentMode:.fit)
                                 .clipShape(RoundedRectangle(cornerRadius:12)).accessibilityIdentifier("result.crop.\(i)")
-                                .overlay(alignment:.topLeading) {if s.crop(record.boxes[i]).tiny {Text("鸟很小").font(.caption.bold()).foregroundStyle(.white).padding(.horizontal,8).padding(.vertical,3).background(.black.opacity(0.55),in:Capsule()).padding(8).accessibilityIdentifier("result.tiny")}}
+                                .overlay(alignment:.topLeading) {if s.crop(record.boxes[i]).tiny {Text("鸟很小").font(.caption.bold()).foregroundStyle(Palette.onMat).padding(.horizontal,8).padding(.vertical,3).background(Palette.mat,in:Capsule()).padding(8).accessibilityIdentifier("result.tiny")}}
                         } else {ProgressView()}
                     }.frame(maxWidth:.infinity,maxHeight:.infinity).padding(.horizontal,16).tag(i)
                 }
@@ -154,7 +154,7 @@ struct BirdPager:View {
                     CropThumbnail(url:model.url(record.id),record:record,index:i,original:i==count)
                         .frame(width:48,height:38).clipShape(RoundedRectangle(cornerRadius:8))
                     Text(i==count ? "原图":"鸟 \(i+1)").font(.caption.bold())
-                }.padding(4).background(page==i ? Palette.green.opacity(0.15):.clear,in:RoundedRectangle(cornerRadius:12))}
+                }.padding(4).background(page==i ? Palette.accent.opacity(0.15):.clear,in:RoundedRectangle(cornerRadius:12))}
                     .buttonStyle(.plain).accessibilityIdentifier(i==count ? "result.original":"result.subject.\(i)").accessibilityAddTraits(page==i ? .isSelected:[])
             }}
         }.scrollIndicators(.hidden).fixedSize(horizontal:false,vertical:true)
@@ -180,7 +180,7 @@ struct BirdPager:View {
                     let retry=Button("再试一次"){retried=true;maskState="idle";removeBackground=true}.font(.caption).frame(minHeight:44).accessibilityIdentifier("result.maskRetry")
                     if retried {note} else {ViewThatFits(in:.horizontal) {HStack{note;retry};VStack(spacing:0){note;retry}}}
                 case "unsupported": Text("此设备不支持去背景（模拟器不运行 Apple Vision 前景分割）。矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.maskUnsupported")
-                case "fixture": Text("测试夹具蒙版，不是 Apple Vision 结果").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.maskFixture")
+                case "fixture": Text("测试夹具蒙版，不是 Apple Vision 结果").font(.caption).foregroundStyle(Palette.warning).accessibilityIdentifier("result.maskFixture")
                 case "success": Text("轮廓来自 Apple Vision，细腿、羽缘可能被切掉，请核对。").font(.caption2).foregroundStyle(Palette.secondary).multilineTextAlignment(.center)
                 default: EmptyView()
                 }

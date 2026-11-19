@@ -122,19 +122,40 @@ enum Models {
 }
 
 
-/// sRGB tokens shared with the SwiftUI palette; no platform colour conversions in the AA check.
+/// sRGB tokens (light, dark) shared with the SwiftUI palette: docs/design/polish/tokens.json v2 (kingfisher: 0–9 neutral
+/// grays, accent #17646B / #76CFD1, orange only for 新种 numbers). No platform colour conversions in the AA check.
 enum ThemeContrast {
-    static let paper:(UInt32,UInt32)=(0xf4f1e8,0x181f1a), surface:(UInt32,UInt32)=(0xfcfaf3,0x222c24)
-    static let ink:(UInt32,UInt32)=(0x222c24,0xf1eee2), secondary:(UInt32,UInt32)=(0x516053,0xbec9bb)
-    static let accent:(UInt32,UInt32)=(0x254d39,0xb8d6af), warning:(UInt32,UInt32)=(0x815919,0xf0ca83)
-    static let button:(UInt32,UInt32)=(0x254d39,0x254d39)
-    static let iucn:[String:(UInt32,UInt32)] = ["LC":(0xffffff,0x006666),"NT":(0x000000,0x99cc99),"VU":(0x000000,0xffcc00),"EN":(0x000000,0xff6600),"CR":(0xffffff,0xcc3333),"EX":(0xffffff,0x000000),"EW":(0xffffff,0x000000),"DD":(0x000000,0xdddddd),"NE":(0x000000,0xdddddd)]
-    static let rarity:[String:(UInt32,UInt32)] = ["常见":(0xffffff,0x245c45),"不常见":(0xffffff,0x375d75),"少见":(0x000000,0xe6c65c),"罕见":(0x000000,0xf4ac7e),"无记录":(0xffffff,0x805100)]
+    typealias Pair = (UInt32,UInt32)
+    /// A semantic state: foreground on its own background, per mode.
+    struct Semantic { let fg:Pair; let bg:Pair }
+    static let canvas:Pair=(0xFAFAFA,0x0A0A0A), surface:Pair=(0xFFFFFF,0x141414)
+    static let inset:Pair=(0xF5F5F5,0x1F1F1F), surface3:Pair=(0xEBEBEB,0x292929)
+    static let ink:Pair=(0x171717,0xEDEDED), secondary:Pair=(0x606060,0xB5B5B5), tertiary:Pair=(0x666666,0xA3A3A3)
+    static let border:Pair=(0xD4D4D4,0x3D3D3D), borderStrong:Pair=(0x858585,0x858585)
+    static let accent:Pair=(0x17646B,0x76CFD1), accentPressed:Pair=(0x124E55,0xA2E2DF), onAccent:Pair=(0xFFFFFF,0x0A0A0A)
+    static let newSpecies:Pair=(0x854015,0xFFBC87)
+    static let mat:Pair=(0x171717,0x0A0A0A), onMat:Pair=(0xEDEDED,0xEDEDED), onMatMuted:Pair=(0xB5B5B5,0xB5B5B5)
+    static let success=Semantic(fg:(0x245D52,0xA5D8C1),bg:(0xDCF0E7,0x1B413A))
+    static let warning=Semantic(fg:(0x76510F,0xEED28C),bg:(0xF6E9BE,0x453917))
+    static let error=Semantic(fg:(0x983F47,0xFFB3BF),bg:(0xFBE4E7,0x4C252E))
+    static let unavailable=Semantic(fg:(0x4D6062,0xC3D0D2),bg:(0xE5EAEA,0x2A3B40))
+    static let rarity:[String:Semantic] = [
+        "常见":success, "不常见":Semantic(fg:(0x2D596E,0xB0D7E9),bg:(0xE2EEF4,0x203D4A)), "少见":warning,
+        "罕见":Semantic(fg:(0x854015,0xFFBC87),bg:(0xF9E4D2,0x4A3021)), "无记录":Semantic(fg:(0x67552B,0xDACEA9),bg:(0xEEE8D8,0x3E382B))]
+    static let iucn:[String:Semantic] = [
+        "LC":success, "NT":Semantic(fg:(0x4F621D,0xCDDB98),bg:(0xEAF0D5,0x353F20)), "VU":warning, "EN":rarity["罕见"]!, "CR":error,
+        "EW":Semantic(fg:(0x654666,0xDDC1E2),bg:(0xEEE5EF,0x3C2E42)), "EX":Semantic(fg:(0x35474E,0xCDDCDF),bg:(0xE1E7E9,0x28383F)),
+        "DD":unavailable, "NE":unavailable]
+    /// contrast.md: text roles ≥ 4.5 on every surface, control borders and focus ≥ 3, each state on its own background;
+    /// plus warning / error / success text on the plain surfaces (inline notes).
     static var pairs:[(UInt32,UInt32,Double)] {
-        let text=[ink,secondary,accent,warning]
-        var out=text.flatMap {fg in [paper,surface].flatMap{bg in [(fg.0,bg.0,4.5),(fg.1,bg.1,4.5)]}}
-        out += [(0xffffff,button.0,4.5),(0xffffff,0x1e3f2f,4.5),(0xffffff,0x595959,4.5),(0xffffff,0x000000,4.5)]
-        out += (Array(iucn.values)+Array(rarity.values)).map{($0.0,$0.1,4.5)}
+        func both(_ fg:Pair,_ bg:Pair,_ min:Double) -> [(UInt32,UInt32,Double)] {[(fg.0,bg.0,min),(fg.1,bg.1,min)]}
+        let surfaces=[canvas,surface,inset,surface3]
+        var out=[ink,secondary,tertiary,accent,newSpecies].flatMap {fg in surfaces.flatMap {both(fg,$0,4.5)}}
+        out += [borderStrong,accent].flatMap {fg in surfaces.flatMap {both(fg,$0,3)}}
+        out += [warning.fg,error.fg,success.fg].flatMap {fg in [canvas,surface].flatMap {both(fg,$0,4.5)}}
+        out += both(onAccent,accent,4.5)+both(onAccent,accentPressed,4.5)+both(onMat,mat,4.5)+both(onMatMuted,mat,4.5)
+        out += (Array(iucn.values)+Array(rarity.values)).flatMap {both($0.fg,$0.bg,4.5)}
         return out
     }
     static func contrast(_ a:UInt32,_ b:UInt32) -> Double {

@@ -85,7 +85,7 @@ struct StatsView: View {
                 Text("照片 \(s.photos) 张 · 待确认 \(s.pending) 个（\(s.pendingPhotos) 张）· 没找到鸟 \(s.noBird) 张").font(.subheadline).accessibilityIdentifier("stats.coverage")
                 Text("观察记录 = 同一鸟种、同一天、同一地点合为一次；估计数量取同日同地点单张照片的最大值，可能重复见到同一只鸟；地点未知的同日记录合并，可能低估次数。新种 = 这段时间里第一次记录到的鸟种。").font(.caption).foregroundStyle(Palette.secondary)
                 let future = model.ledger.observations.filter { $0.day > today && Ledger.inRange($0.day, period.range) }.count
-                if future > 0 { Label("\(future) 条观察记录的日期在今天之后，请检查相机时间", systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Palette.rust) }
+                if future > 0 { Label("\(future) 条观察记录的日期在今天之后，请检查相机时间", systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Palette.warning) }
                 if s.species == 0 {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("这段时间还没有确定到种的记录。").accessibilityIdentifier("stats.empty")
@@ -118,7 +118,7 @@ struct StatsView: View {
                 }
             }.padding(16).padding(.bottom, 24)
         }
-        .background(Palette.paper)
+        .background(Palette.canvas)
         .navigationTitle("统计")
         .sheet(isPresented: $ebird) { EBirdSheet(title: period.title, range: period.range).debugAppearance() }
         .navigationDestination(item: $day) { d in SightingList(title: d, range: (d, d), day: d) }
@@ -153,7 +153,8 @@ struct StatsView: View {
 }
 
 struct NewBadge: View {
-    var body: some View { Text("新种").font(.caption.bold()).padding(.horizontal, 6).padding(.vertical, 2).foregroundStyle(.white).background(Palette.button, in: Capsule()) }
+    /// polish.md: orange is kept for 新种 alone, as text.
+    var body: some View { Text("新种").font(.caption.bold()).foregroundStyle(Palette.newSpecies) }
 }
 
 /// Photo-first calendar (owner, 2026-11-18): month grid of cover crops with a species badge; year = 12 month tiles.
@@ -166,12 +167,12 @@ struct PhotoCalendar: View {
     func cell(_ d: Ledger.Day?, _ n: Int) -> some View {
         ZStack(alignment: .topLeading) {
             if let d, let c = d.cover {
-                if c.item.missing { RoundedRectangle(cornerRadius: 6).fill(Palette.green.opacity(0.35)).overlay(Text("\(d.species.count)").font(.caption.bold())) }
+                if c.item.missing { RoundedRectangle(cornerRadius: 6).fill(Palette.accent.opacity(0.35)).overlay(Text("\(d.species.count)").font(.caption.bold())) }
                 else { CropThumbnail(url: model.url(c.item.id), id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal).clipShape(RoundedRectangle(cornerRadius: 6)) }
             } else { Color.clear }
             Text("\(n)").font(.caption2.bold()).padding(2).foregroundStyle(d == nil ? Palette.secondary : .white).shadow(color: d == nil ? .clear : .black, radius: 1)
             if let d, d.species.count > 1 {
-                Text("\(d.species.count)").font(.caption2.bold()).padding(.horizontal, 4).foregroundStyle(.white).background(Palette.button, in: Capsule()).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(2)
+                Text("\(d.species.count)").font(.caption2.bold()).monospacedDigit().padding(.horizontal, 4).foregroundStyle(Palette.onAccent).background(Palette.accent, in: Capsule()).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(2)
             }
         }.aspectRatio(1, contentMode: .fit)
     }
@@ -357,7 +358,7 @@ struct SightingMap: View {
                         ForEach(clusters(pts)) { pin in
                             Annotation("", coordinate: CLLocationCoordinate2D(latitude: pin.lat, longitude: pin.lon)) {
                                 Button { picked = pin.sightings } label: {
-                                    Text("\(pin.sightings.count)").font(.caption.bold()).foregroundStyle(.white).frame(minWidth: 30, minHeight: 30).background(Palette.button, in: Circle()).overlay(Circle().stroke(.white, lineWidth: 2))
+                                    Text("\(pin.sightings.count)").font(.caption.bold()).monospacedDigit().foregroundStyle(Palette.onAccent).frame(minWidth: 30, minHeight: 30).background(Palette.accent, in: Circle()).overlay(Circle().stroke(Palette.surface, lineWidth: 2))
                                 }.accessibilityLabel("\(pin.sightings.count) 条观察记录的照片位置")
                             }
                         }

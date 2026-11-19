@@ -80,7 +80,7 @@ class SnapshotCase: XCTestCase {
     }
     func sheet(_ m: AppModel, _ content: some View) -> some View {
         // The app's window carries the tint for sheets presented above RootView; this host has no such window.
-        RootView().environment(m).sheet(isPresented: .constant(true)) { content.environment(m).tint(Palette.green).debugAppearance() }
+        RootView().environment(m).sheet(isPresented: .constant(true)) { content.environment(m).tint(Palette.accent).debugAppearance() }
     }
 
 }
@@ -145,14 +145,14 @@ final class Step4Snapshots: SnapshotCase {
             let o = try XCTUnwrap(m.ledger.observations.first { $0.species == "Haliaeetus leucocephalus" && $0.day == day })
             m.tab = .stats
             try await shot("stats", RootView().environment(m))
-            let calendar = { (p: Period) in NavigationStack { ScrollView { PhotoCalendar(period: .constant(p), open: { _ in }).padding(16) }.background(Palette.paper).navigationTitle("统计") }.environment(m) }
+            let calendar = { (p: Period) in NavigationStack { ScrollView { PhotoCalendar(period: .constant(p), open: { _ in }).padding(16) }.background(Palette.canvas).navigationTitle("统计") }.environment(m) }
             try await shot("calendar-month", calendar(now))
             try await shot("calendar-day", NavigationStack { SightingList(title: day, range: (day, day), day: day) }.environment(m))
             try await shot("calendar-year", calendar(.year(year)))
             // Map tiles keep streaming in: a bounded wait.
             try await shot("map", wait: 3, NavigationStack { SightingMap(range: now.range) }.environment(m))
             try await shot("observation-editor", NavigationStack { SightingList(title: now.title, range: now.range, day: nil) }.environment(m)
-                .sheet(isPresented: .constant(true)) { SightingSheet(sighting: o).environment(m).tint(Palette.green).debugAppearance() })
+                .sheet(isPresented: .constant(true)) { SightingSheet(sighting: o).environment(m).tint(Palette.accent).debugAppearance() })
             try await shot("ebird", sheet(m, EBirdSheet(title: now.title, range: now.range)))
             m.tab = .explore
             try await shot("explore-local", wait: 20, RootView().environment(m))

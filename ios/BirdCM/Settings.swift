@@ -45,7 +45,7 @@ struct SettingsView: View {
                 Button("清空本机记录", role: .destructive) { clear = true }.accessibilityIdentifier("history.clear").disabled(model.items.isEmpty)
             } footer: { Text("清空前可以先在“备份与恢复”导出一份备份。") }
         }
-        .scrollContentBackground(.hidden).background(Palette.paper)
+        .scrollContentBackground(.hidden).background(Palette.canvas)
         .navigationTitle("设置")
         .task(id: model.items.count) { await scanDisk() }
         .sheet(isPresented: $about) { AboutView().debugAppearance() }
@@ -285,7 +285,7 @@ struct FolderBackupSection: View {
                 LabeledContent("文件夹", value: backup.folderName ?? "测试文件夹")
                 LabeledContent("上次成功", value: backup.lastSuccess.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? String(localized: "还没有"))
                 LabeledContent("预计大小", value: storage.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "…")
-                if let e = backup.lastError { Text(e).font(.footnote).foregroundStyle(Palette.rust).accessibilityIdentifier("backup.folderError") }
+                if let e = backup.lastError { Text(e).font(.footnote).foregroundStyle(Palette.warning).accessibilityIdentifier("backup.folderError") }
                 else if backup.lastSuccess != nil { Text("备份文件已写入；云端上传由文件提供方处理。").font(.footnote).accessibilityIdentifier("backup.folderOK") }
                 if backup.running { ProgressView("正在备份…") }
                 Button("立即备份", systemImage: "arrow.clockwise") { Task { await backup.runIfDue(model.library, force: true) } }.disabled(backup.running || model.migration != nil).accessibilityIdentifier("backup.now").frame(minHeight: 44)
