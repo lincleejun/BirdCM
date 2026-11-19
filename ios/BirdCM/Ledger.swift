@@ -139,7 +139,17 @@ struct Ledger {
         }
         return out
     }
+    /// Views ask for the same summary on every render (≈30 ms for 10k photos on a Mac simulator): computed once per ledger.
+    private final class Memo: @unchecked Sendable { let lock = NSLock(); var summaries = [String: Summary]() }
+    private let memo = Memo()
     func summary(_ range: (String, String)?) -> Summary {
+        let key = range.map { $0.0 + "|" + $0.1 } ?? "all"
+        if let s = memo.lock.withLock({ memo.summaries[key] }) { return s }
+        let s = compute(range)
+        memo.lock.withLock { memo.summaries[key] = s }
+        return s
+    }
+    private func compute(_ range: (String, String)?) -> Summary {
         var s = Summary()
         let obs = observations.filter { Self.inRange($0.day, range) }
         let scoped = Self.stats(items: items, observations: obs, known: known, range: range)

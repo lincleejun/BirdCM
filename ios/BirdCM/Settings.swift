@@ -10,8 +10,15 @@ struct SettingsView: View {
     @State private var place = false
     @State private var clear = false
     @State private var cleanup = false
-    @State private var redundant = [URL]()
-    func scanRedundant() async { if let lib = model.library { redundant = await Task.detached { lib.redundantLegacyFiles() }.value } }
+    /// Directory size and the legacy-copy scan read every file: computed off the main actor, not in `body`.
+    @State private var disk: (storage: Int, redundant: [URL], redundantBytes: Int)?
+    func scanDisk() async {
+        guard let library = model.library else { return }
+        disk = await Task.detached {
+            let redundant = library.redundantLegacyFiles()
+            return (library.storageBytes(), redundant, redundant.compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }.reduce(0, +))
+        }.value
+    }
     var body: some View {
         let all = model.ledger.summary(nil)
         NavigationStack {
@@ -20,10 +27,9 @@ struct SettingsView: View {
                     NavigationLink("备份与恢复") { BackupView() }.accessibilityIdentifier("settings.backup")
                     LabeledContent("照片", value: "\(all.photos)")
                     LabeledContent("鸟种 · 观察记录", value: "\(all.species) · \(all.observations)")
-                    LabeledContent("本机占用", value: ByteCountFormatter.string(fromByteCount: Int64(model.library?.storageBytes() ?? 0), countStyle: .file))
-                    if !redundant.isEmpty {
-                        let bytes = redundant.compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }.reduce(0, +)
-                        Button("清理旧版本副本（\(redundant.count) 个，\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))）") { cleanup = true }.accessibilityIdentifier("settings.cleanup")
+                    LabeledContent("本机占用", value: disk.map { ByteCountFormatter.string(fromByteCount: Int64($0.storage), countStyle: .file) } ?? "…")
+                    if let disk, !disk.redundant.isEmpty {
+                        Button("清理旧版本副本（\(disk.redundant.count) 个，\(ByteCountFormatter.string(fromByteCount: Int64(disk.redundantBytes), countStyle: .file))）") { cleanup = true }.accessibilityIdentifier("settings.cleanup")
                     }
                 }
                 Section("地点") {
@@ -38,15 +44,15 @@ struct SettingsView: View {
                 } footer: { Text("清空前可以先在“备份与恢复”导出一份备份。") }
             }
             .navigationTitle("设置")
-            .task { await scanRedundant() }
+            .task(id: model.items.count) { await scanDisk() }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() }.accessibilityIdentifier("settings.done") } }
             .sheet(isPresented: $about) { AboutView() }
             .sheet(isPresented: $diagnostics) { DiagnosticsView() }
             .sheet(isPresented: $place) { PlacePicker(onChoose: { p in model.chooseHome(p) }) }
             .confirmationDialog("删除旧版本的 JSON 副本？", isPresented: $cleanup, titleVisibility: .visible) {
                 Button("删除副本", role: .destructive) {
-                    for u in redundant { try? FileManager.default.removeItem(at: u) }
-                    redundant = []; model.refresh()
+                    for u in disk?.redundant ?? [] { try? FileManager.default.removeItem(at: u) }
+                    model.refresh(); Task { await scanDisk() }
                 }.accessibilityIdentifier("settings.confirmCleanup")
                 Button("取消", role: .cancel) {}
             } message: { Text("这些是升级前每条记录的 JSON 文件，内容已逐字节保存在记录库里（也会随备份导出）。不删除任何原图。") }
@@ -70,13 +76,14 @@ struct BackupView: View {
     @State private var staged: Staged?
     @State private var confirmRestore = false
     @State private var message = ""
+    @State private var storage: Int?
     func bytes(_ n: Int) -> String { ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file) }
     var body: some View {
         List {
             Section {
                 Text("备份是一个 .birdcm 文件，含全部原图、识别结果、更正、日期与地点，未加密。只保存到你信任的位置，如“我的 iPhone”或 iCloud 云盘。").font(.footnote).foregroundStyle(Palette.secondary)
                 LabeledContent("照片", value: "\(model.ledger.summary(nil).photos)")
-                LabeledContent("本机占用", value: bytes(model.library?.storageBytes() ?? 0))
+                LabeledContent("本机占用", value: storage.map(bytes) ?? "…")
                 Button("导出备份…", systemImage: "square.and.arrow.up") { Task { await export() } }.accessibilityIdentifier("backup.export").frame(minHeight: 44)
                 Button("从备份导入…", systemImage: "square.and.arrow.down") { importing = true }.accessibilityIdentifier("backup.import").frame(minHeight: 44)
                 #if DEBUG
@@ -84,7 +91,7 @@ struct BackupView: View {
                 #endif
                 if !working.isEmpty { ProgressView(working) }
                 if !message.isEmpty { Text(message).accessibilityIdentifier("backup.message") }
-            }.disabled(!working.isEmpty)
+            }.disabled(!working.isEmpty || model.migration != nil)
             if let s = staged {
                 Section("备份内容") {
                     LabeledContent("创建时间", value: String(s.info.created.prefix(19)).replacingOccurrences(of: "T", with: " ") + " UTC")
@@ -95,7 +102,7 @@ struct BackupView: View {
                     Button("用备份替换本机记录…", role: .destructive) { confirmRestore = true }.accessibilityIdentifier("backup.restore").frame(minHeight: 44)
                 }.disabled(!working.isEmpty)
             }
-            FolderBackupSection()
+            FolderBackupSection(storage: storage)
             let issues = model.library?.issues() ?? []
             if !issues.isEmpty {
                 Section {
@@ -105,6 +112,7 @@ struct BackupView: View {
             }
         }
         .navigationTitle("备份与恢复")
+        .task(id: model.items.count) { if let library = model.library { storage = await Task.detached { library.storageBytes() }.value } }
         .sheet(item: $exported) { f in
             DocumentExporter(url: f.url) { ok in
                 message = ok ? String(localized: "备份文件已写入；云端上传由文件提供方处理。") : String(localized: "已取消，未写入。")
@@ -265,6 +273,7 @@ struct FolderPicker: UIViewControllerRepresentable {
 struct FolderBackupSection: View {
     @Environment(AppModel.self) var model
     @State private var choosing = false
+    var storage: Int?
     var backup = FolderBackup.shared
     var body: some View {
         Section {
@@ -274,7 +283,7 @@ struct FolderBackupSection: View {
             } else {
                 LabeledContent("文件夹", value: backup.folderName ?? "测试文件夹")
                 LabeledContent("上次成功", value: backup.lastSuccess.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? String(localized: "还没有"))
-                LabeledContent("预计大小", value: ByteCountFormatter.string(fromByteCount: Int64(model.library?.storageBytes() ?? 0), countStyle: .file))
+                LabeledContent("预计大小", value: storage.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "…")
                 if let e = backup.lastError { Text(e).font(.footnote).foregroundStyle(Palette.rust).accessibilityIdentifier("backup.folderError") }
                 else if backup.lastSuccess != nil { Text("备份文件已写入；云端上传由文件提供方处理。").font(.footnote).accessibilityIdentifier("backup.folderOK") }
                 if backup.running { ProgressView("正在备份…") }

@@ -121,10 +121,14 @@ final class Engine: @unchecked Sendable {
     func warmUp() throws -> Double {
         let started = Date(), grey = RGB(w: 224, h: 224, px: [UInt8](repeating: 128, count: 224 * 224 * 3))
         let species = try speciesModel(), heads = try headsModel()
-        try inference.withLock {
-            _ = try detector.prediction(from: try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: grey.resized(640, 640, .bilinear).pixelBuffer())]))
-            let out = try species.prediction(from: try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: grey.pixelBuffer())]))
-            if let heads { _ = try heads.prediction(from: try MLDictionaryFeatureProvider(dictionary: ["tokens15": out.featureValue(for: "tokens15")!])) }
+        // Locked per prediction, so a real photo can go between the steps.
+        let image = try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: grey.resized(640, 640, .bilinear).pixelBuffer())])
+        _ = try inference.withLock { try detector.prediction(from: image) }
+        let crop = try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: grey.pixelBuffer())])
+        let out = try inference.withLock { try species.prediction(from: crop) }
+        if let heads {
+            let tokens = try MLDictionaryFeatureProvider(dictionary: ["tokens15": out.featureValue(for: "tokens15")!])
+            _ = try inference.withLock { try heads.prediction(from: tokens) }
         }
         return Date().timeIntervalSince(started)
     }

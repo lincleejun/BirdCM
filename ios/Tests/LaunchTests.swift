@@ -59,6 +59,7 @@ final class LaunchTests: XCTestCase {
         await until(60) {m.current != nil}
         XCTAssertNil(m.modelError);XCTAssertNil(m.queued);XCTAssertNil(m.picked);XCTAssertFalse(m.busy)
         XCTAssertEqual(m.current?.result?.top5.first?.scientific,"Haliaeetus leucocephalus")
+        await until(5) {m.items.count == 1}
         XCTAssertTrue(m.modelReady);XCTAssertEqual(m.items.count,1)
     }
     /// Cancel while waiting: nothing is saved when the models arrive later.

@@ -85,7 +85,7 @@ final class Rarity {
         let global = !rows("SELECT name FROM sqlite_master WHERE name='shapes'",[]).isEmpty
         var code:String?
         if global {
-            let point=regionAt(lat:place.lat,lon:place.lon);code=place.regionCode ?? point.division ?? point.country
+            if let known=place.regionCode {code=known} else {let point=regionAt(lat:place.lat,lon:place.lon);code=point.division ?? point.country}
         } else {
             // Read-only migration support for historical test tables; production uses only shapes.
             let key=place.legacyRegionKey

@@ -48,6 +48,8 @@ func title(_ r: Identification) -> String {
     /// A photo picked before the models were ready; kept through a load failure so 重试 continues it.
     var queued: Data?
     var picked: UIImage?
+    /// Boxes (0..1 of the picked photo) as soon as detection finishes, before the names.
+    var found: [[Double]]?
     var warmUpSeconds: Double?
     static let preparing=String(localized:"正在准备模型…")
     private var loading=false
@@ -57,7 +59,8 @@ func title(_ r: Identification) -> String {
     var busy=false
     var items=[PhotoItem]()
     var ledger=Ledger()
-    let catalogue=Catalogue.shared
+    /// Parsed off the main actor at launch (see init); the first frame never needs names (items arrive with refresh).
+    var catalogue: Catalogue {Catalogue.shared}
     var migration: Double?
     var libraryError: String?
     var current: Record?
@@ -113,6 +116,7 @@ func title(_ r: Identification) -> String {
     var error: String?
     /// `history`: a separate store name for unit tests.
     init(previewState:String? = nil,history:String? = nil) {
+        Task.detached(priority:.userInitiated) {_=Catalogue.shared}
         var historyName="History"
         #if DEBUG
         if previewState != nil {historyName="PreviewHistory"}
@@ -127,7 +131,9 @@ func title(_ r: Identification) -> String {
             for k in ["backupFolderBookmark","backupFolderName","backupFolderOwn","backupFolderLast","backupFolderRevision","backupFolderError"] {UserDefaults.standard.removeObject(forKey:k)}}
         if let legacy=UserDefaults.standard.string(forKey:"legacyFixture") {Self.seedLegacy(dir,count:Int(legacy) ?? 3)}
         #endif
+        Perf.mark("model.init.start")
         openLibrary(dir)
+        Perf.mark("model.init")
         #if DEBUG
         if let previewState {
             items=[];homePlace=nil
@@ -192,13 +198,26 @@ func title(_ r: Identification) -> String {
         guard let library, migration == nil else {return}
         // A cleared/restored library must not leave a tombstoned record open in any tab.
         if let id=current?.id,(try? library.query("SELECT 1 FROM ll_record WHERE id=? AND deleted_utc IS NULL",[id.uuidString.lowercased()]).isEmpty) ?? false {showing=false;current=nil;photo=nil}
-        let t0=Date()
-        do { items=try library.items(); ledger=Ledger(items:items,edits:try library.groupEdits(),known:catalogue.contains) } catch { self.error=error.localizedDescription }
-        Perf.mark("refresh",Date().timeIntervalSince(t0))
+        // Reading every record and aggregating them scales with the library (≈0.15 s for 10k photos on a Mac simulator):
+        // off the main actor; the newest request wins.
+        refreshes+=1;let n=refreshes,t0=Date()
+        Task {
+            let loaded=await Task.detached(priority:.userInitiated) {
+                Result {let items=try library.items();return (items,Ledger(items:items,edits:try library.groupEdits(),known:Catalogue.shared.contains))}
+            }.value
+            guard n == refreshes else {return}
+            switch loaded {
+            case .success(let v): items=v.0;ledger=v.1
+            case .failure(let e): self.error=e.localizedDescription
+            }
+            Perf.mark("refresh",Date().timeIntervalSince(t0))
+        }
     }
+    @ObservationIgnored private var refreshes=0
     /// One shared commit path for every edit: write, reload the open record, refresh counts. False leaves the editor open.
     @discardableResult func edit(_ body:(Library) throws -> Void) -> Bool {
-        guard let library, migration == nil else{return false}
+        guard let library else{return false}
+        guard migration == nil else {self.error=String(localized:"旧记录还在整理，完成后再修改。");return false}
         do {
             try body(library)
             if let id=current?.id,let r=try library.record(id) {var v=r;v.selected=current?.selected ?? r.selected;if let s=v.results[String(v.selected)] {v.result=s};current=v}
@@ -303,7 +322,7 @@ func title(_ r: Identification) -> String {
         guard !busy, !(previewing && engine == nil) else { return }
         run+=1;let job=run
         if let source=CGImageSourceCreateWithData(data as CFData,nil),let thumbnail=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:1024] as CFDictionary) {picked=UIImage(cgImage:thumbnail)} else {picked=nil}
-        queued=data;busy=true;status=String(localized:"找鸟")
+        queued=data;found=nil;busy=true;status=String(localized:"找鸟")
         let started=Date()
         defer { if job == run {busy=false} }
         guard let engine=await waitForEngine(job) else {
@@ -320,11 +339,12 @@ func title(_ r: Identification) -> String {
             let made = try await Task.detached { () async throws -> (Record,Photo) in
                 guard let photo=Photo(data:data) else { throw NSError(domain:"BirdCM",code:4,userInfo:[NSLocalizedDescriptionKey:"无法读取这张图。支持 JPEG、HEIC、PNG（含截图）；ProRAW/DNG 请先在照片中导出为 JPEG 或 HEIC。请换一张重试。"]) }
                 let tick=Date(), boxes=try engine.detect(photo), detection=Date().timeIntervalSince(tick)
+                let rel=boxes.map { [$0[0]/Double(photo.frame.w),$0[1]/Double(photo.frame.h),$0[2]/Double(photo.frame.w),$0[3]/Double(photo.frame.h)] }
                 let stage=engine.hasSpeciesModel ? String(localized:"认种"):String(localized:"认种（认种模型还在载入）")
-                await MainActor.run {if job == self.run {self.status=stage}}
+                // Progressive: the boxes go on the waiting photo now; names follow when BioCLIP is done.
+                await MainActor.run {if job == self.run {self.status=stage;self.found=rel}}
                 var result: Identification?
                 if let box=boxes.first { result=try engine.identify(photo,box:box,place:place,shooting:shooting); result?.diagnostics?.stages["检测"]=detection }
-                let rel=boxes.map { [$0[0]/Double(photo.frame.w),$0[1]/Double(photo.frame.h),$0[2]/Double(photo.frame.w),$0[3]/Double(photo.frame.h)] }
                 var record=Record(boxes:rel,selected:0,result:result,shooting:shooting,place:place)
                 if let result { record.results["0"]=result }
                 return (record,photo)
@@ -453,8 +473,7 @@ struct RootView: View {
     var body: some View {
         @Bindable var model=model
         Group {
-            if let progress=model.migration {MigrationView(progress:progress)}
-            else if model.library == nil,let e=model.libraryError {ContentUnavailableView("本机记录不可用",systemImage:"exclamationmark.triangle",description:Text(e))}
+            if model.library == nil,let e=model.libraryError {ContentUnavailableView("本机记录不可用",systemImage:"exclamationmark.triangle",description:Text(e))}
             else {
                 TabView(selection:$model.tab) {
                     stack(.identify){IdentifyView()}.tabItem{Label("识别",systemImage:"camera.viewfinder").accessibilityIdentifier("tab.identify")}.tag(AppModel.Tab.identify)
@@ -462,6 +481,8 @@ struct RootView: View {
                     stack(.stats){StatsView()}.tabItem{Label("统计",systemImage:"chart.bar").accessibilityIdentifier("tab.stats")}.tag(AppModel.Tab.stats)
                     stack(.explore){ExploreView()}.tabItem{Label("探索",systemImage:"magnifyingglass").accessibilityIdentifier("tab.explore")}.tag(AppModel.Tab.explore)
                 }
+                // First launch after the library upgrade: browsing and identifying go on; edits (and saving a result) wait.
+                .safeAreaInset(edge:.top) {if let progress=model.migration {MigrationView(progress:progress)}}
             }
         }
         .background(Palette.paper)
@@ -632,7 +653,7 @@ struct ModelStatusLine: View {
                 Button("重试"){model.retry()}.font(.caption.bold()).frame(minHeight:44).accessibilityIdentifier("home.modelRetry")
             } else if model.modelReady || model.previewing {
                 Image(systemName:"checkmark.circle")
-                Text("离线模型就绪").accessibilityIdentifier("home.modelStatus")
+                Text(FileManager.default.fileExists(atPath:Models.rarityURL.path) ? "离线模型就绪":"离线模型就绪 · 稀有度表未安装，显示数据不足").accessibilityIdentifier("home.modelStatus")
             } else {
                 ProgressView().controlSize(.mini)
                 Text("正在准备离线模型，可以先选照片").accessibilityIdentifier("home.modelStatus")
@@ -645,7 +666,18 @@ struct IdentifyingView: View {
     var body:some View {
         let failed = !model.busy && model.queued != nil
         VStack(spacing:16) {
-            if let image=model.picked ?? model.preview {Image(uiImage:image).resizable().scaledToFit().frame(maxHeight:280).background(.black)}
+            if let image=model.picked ?? model.preview {
+                Image(uiImage:image).resizable().scaledToFit()
+                    .overlay {if model.picked != nil, let found=model.found {GeometryReader {g in
+                        ForEach(found.indices,id:\.self) {i in let b=found[i]
+                            Rectangle().stroke(Color.white,lineWidth:2).shadow(radius:1)
+                                .frame(width:(b[2]-b[0])*g.size.width,height:(b[3]-b[1])*g.size.height)
+                                .position(x:(b[0]+b[2])/2*g.size.width,y:(b[1]+b[3])/2*g.size.height)
+                        }
+                    }}}
+                    .frame(maxHeight:280).background(.black)
+            }
+            if model.picked != nil, let found=model.found {Text(found.isEmpty ? "没找到鸟":"找到 \(found.count) 只鸟").font(.subheadline).accessibilityIdentifier("identifying.found")}
             if failed {
                 Label("模型没有加载成功",systemImage:"exclamationmark.triangle").font(.headline).foregroundStyle(Palette.rust)
                 Text(model.modelError ?? "").font(.footnote).multilineTextAlignment(.center)
@@ -681,11 +713,11 @@ struct MigrationView: View {
     @Environment(AppModel.self) var model
     let progress: Double
     var body: some View {
-        VStack(spacing:16) {
-            Text("正在整理旧记录").font(.title2.bold())
+        VStack(alignment:.leading,spacing:6) {
+            Text("正在整理旧记录 \(Int(progress*100))%").font(.subheadline.bold())
             ProgressView(value:progress).accessibilityIdentifier("migration.progress")
-            Text("原图与旧文件都保留，完成并核对后才会启用新记录。期间不能修改记录。").font(.footnote).foregroundStyle(Palette.secondary)
-            if let e=model.libraryError {Text(e).foregroundStyle(Palette.rust);Button("重试"){Task{await model.migrate()}}.frame(minHeight:44)}
-        }.padding(24).accessibilityIdentifier("migration")
+            Text("可以继续浏览和识别；旧记录核对完成后显示，期间修改会等它完成。原图与旧文件都保留。").font(.caption).foregroundStyle(Palette.secondary)
+            if let e=model.libraryError {Text(e).font(.caption).foregroundStyle(Palette.rust);Button("重试"){Task{await model.migrate()}}.frame(minHeight:44)}
+        }.padding(.horizontal).padding(.vertical,8).background(Palette.surface).accessibilityElement(children:.contain).accessibilityIdentifier("migration")
     }
 }

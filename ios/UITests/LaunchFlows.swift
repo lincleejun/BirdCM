@@ -54,33 +54,39 @@ final class LaunchFlows: XCTestCase {
         element("home.modelRetry").tap();status("就绪",90)
     }
 
-    /// Cold launch → picker usable → models ready → first and second real identification.
+    /// First launch after install, then a relaunch: picker usable → models ready; then first and second real identification.
     func testPerfLaunchAndIdentify() throws {
-        var t=Date();launch()
-        wait("home.photos",120);print(String(format:"PERF ui home.photos %.2f s",Date().timeIntervalSince(t)))
-        expectation(for:NSPredicate(format:"enabled == YES"),evaluatedWith:element("home.photos"));waitForExpectations(timeout:120)
-        print(String(format:"PERF ui picker enabled %.2f s",Date().timeIntervalSince(t)))
-        if element("home.modelStatus").exists {status("就绪",120);print(String(format:"PERF ui models ready %.2f s",Date().timeIntervalSince(t)))}
-        sleep(8)
+        var t=Date()
+        for pass in ["first","again"] {
+            t=Date();launch(reset:pass=="first")
+            wait("home.photos",120);print(String(format:"PERF ui %@ home.photos %.2f s",pass,Date().timeIntervalSince(t)))
+            expectation(for:NSPredicate(format:"enabled == YES"),evaluatedWith:element("home.photos"));waitForExpectations(timeout:120)
+            print(String(format:"PERF ui %@ picker enabled %.2f s",pass,Date().timeIntervalSince(t)))
+            if element("home.modelStatus").exists {status("就绪",120);print(String(format:"PERF ui %@ models ready %.2f s",pass,Date().timeIntervalSince(t)))}
+            sleep(8)
+        }
         t=Date();pickFixture();wait("result.name",120);print(String(format:"PERF ui first identification %.2f s",Date().timeIntervalSince(t)))
         back();t=Date();pickFixture();wait("result.name",120);print(String(format:"PERF ui second identification %.2f s",Date().timeIntervalSince(t)))
     }
     /// 10,000 synthetic photos: browse records and statistics; the app logs main-thread waits > 100 ms as HITCH lines.
     func testPerfTenThousandBrowse() throws {
         launch(["-fixtureState","normal","-seedSynthetic","10000"]);wait("home.photos",300)
-        var t=Date();launch(["-fixtureState","normal"],reset:false);wait("home.photos",120)
-        print(String(format:"PERF ui 10k cold launch to home %.2f s",Date().timeIntervalSince(t)))
-        t=Date();app.tabBars.buttons["记录"].firstMatch.tap()
-        XCTAssertTrue(app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'records.species.'")).firstMatch.waitForExistence(timeout:60))
-        print(String(format:"PERF ui 10k records %.2f s",Date().timeIntervalSince(t)))
-        for _ in 0..<3 {app.swipeUp()}
-        app.segmentedControls.buttons["照片"].firstMatch.tap();wait("history.sort",60)
-        for _ in 0..<4 {app.swipeUp()}
-        t=Date();app.tabBars.buttons["统计"].firstMatch.tap();wait("stats.species",60)
-        print(String(format:"PERF ui 10k statistics %.2f s",Date().timeIntervalSince(t)))
-        for _ in 0..<3 {app.swipeUp()}
-        element("stats.period").buttons["本年"].tap();sleep(1)
-        element("stats.period").buttons["全部"].firstMatch.tap();sleep(1)
-        app.tabBars.buttons["识别"].firstMatch.tap();sleep(2)
+        let start=Date();launch(["-fixtureState","normal"],reset:false);wait("home.photos",120)
+        print(String(format:"PERF ui 10k cold launch to home %.2f s",Date().timeIntervalSince(start)))
+        // Each step, then 3 s with no queries: HITCH lines in perf.log inside a step's window belong to it, not to the test runner.
+        func step(_ name:String,_ body:() -> Void) {print(String(format:"STEP %@ at %.1f s",name,Date().timeIntervalSince(start)));body();sleep(3)}
+        step("records") {app.tabBars.buttons["记录"].firstMatch.tap()}
+        XCTAssertTrue(app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'records.species.'")).firstMatch.exists)
+        step("records scroll") {for _ in 0..<3 {app.swipeUp()}}
+        step("photos") {app.segmentedControls.buttons["照片"].firstMatch.tap()}
+        step("photos scroll") {for _ in 0..<4 {app.swipeUp()}}
+        step("pending") {app.segmentedControls.buttons["待确认"].firstMatch.tap()}
+        step("statistics") {app.tabBars.buttons["统计"].firstMatch.tap()}
+        XCTAssertTrue(element("stats.species").exists)
+        step("statistics year") {element("stats.period").buttons["本年"].tap()}
+        step("statistics all") {element("stats.period").buttons["全部"].firstMatch.tap()}
+        step("statistics scroll") {for _ in 0..<3 {app.swipeUp()}}
+        step("settings") {element("home.more").tap()}
+        step("home") {element("settings.done").tap();app.tabBars.buttons["识别"].firstMatch.tap()}
     }
 }

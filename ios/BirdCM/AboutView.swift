@@ -28,6 +28,14 @@ struct DiagnosticsView: View {
     var body: some View {NavigationStack{List{
         let marks = Perf.marks
         let seconds = { (key: String) in marks[key].map { String(format: "%.2f s", $0) } ?? "—" }
+        #if DEBUG
+        // First, so UI flows reach it without scrolling past the timings.
+        if UserDefaults.standard.string(forKey:"fixtureImage") != nil {
+            Section("验收夹具 · 仅 Debug") {
+                Button("载入 CC0 验收照片") {dismiss();model.settings=false;Task{await model.pickFixture()}}.accessibilityIdentifier("diagnostics.fixture")
+            }
+        }
+        #endif
         Section("本次启动 · 从进程启动算起") {
             LabeledContent("首页可操作", value: seconds("home.interactive"))
             LabeledContent("可以开始找鸟（名录 + 检测）", value: seconds("models.detector"))
@@ -61,13 +69,6 @@ struct DiagnosticsView: View {
                 Text("每 20 ms 采样 phys_footprint；可能漏掉瞬时峰值。已有历史里的指标来自识别当时。") .font(.caption)
             }
         }
-        #if DEBUG
-        Section("验收夹具 · 仅 Debug") {
-            if UserDefaults.standard.string(forKey:"fixtureImage") != nil {
-                Button("载入 CC0 验收照片") {dismiss();model.settings=false;Task{await model.pickFixture()}}.accessibilityIdentifier("diagnostics.fixture")
-            }
-        }
-        #endif
         Section("真机验收") {Text("测冷/热启动、每图耗时、峰值内存、连续 50 张、断网、相册/定位权限与 HEIC，并在完整评测集上测准确率。启动参数 -computeUnits all / cpuAndGPU / cpuAndNeuralEngine / cpuOnly。")}
     }.navigationTitle("诊断") .toolbar{ToolbarItem(placement:.confirmationAction){Button("完成"){dismiss()}.accessibilityIdentifier("sheet.done")}}}}
 }

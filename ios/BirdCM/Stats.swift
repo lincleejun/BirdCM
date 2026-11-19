@@ -101,7 +101,8 @@ struct StatsView: View {
                     Button { ebird = true } label: { Label("导出 eBird 文件", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity, minHeight: 44) }.buttonStyle(.bordered).accessibilityIdentifier("stats.ebird")
                     rarity(s)
                     Text("鸟种 · \(s.list.count)").font(.headline)
-                    ForEach(s.list) { st in
+                    // Lazy: “全部” can list hundreds of species; only rows near the screen are built.
+                    LazyVStack(alignment: .leading, spacing: 16) { ForEach(s.list) { st in
                         NavigationLink(value: AppModel.Route.species(st.id)) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -114,7 +115,7 @@ struct StatsView: View {
                             }.frame(minHeight: 44).contentShape(Rectangle())
                         }.buttonStyle(.plain).accessibilityIdentifier("stats.row.\(st.id)")
                         Divider()
-                    }
+                    } }
                 }
             }.padding(16).padding(.bottom, 24)
         }
