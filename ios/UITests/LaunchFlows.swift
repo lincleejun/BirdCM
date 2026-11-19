@@ -78,7 +78,8 @@ final class LaunchFlows: XCTestCase {
     }
     /// 10,000 synthetic photos: browse records and statistics; the app logs main-thread waits > 100 ms as HITCH lines.
     func testPerfTenThousandBrowse() throws {
-        launch(["-fixtureState","normal","-seedSynthetic","10000"]);wait("home.photos",300)
+        // Every synthetic record points at one CC0 12 MP original, so grid covers are real downsampled decodes.
+        launch(["-fixtureState","normal","-seedSynthetic","10000","-syntheticPhoto",image.replacingOccurrences(of:"photo-0.jpg",with:"photo-4.png")]);wait("home.photos",300)
         let start=Date();launch(["-fixtureState","normal"],reset:false);wait("home.photos",120)
         print(String(format:"PERF ui 10k cold launch to home %.2f s",Date().timeIntervalSince(start)))
         // Each step, then 3 s with no queries: HITCH lines in perf.log inside a step's window belong to it, not to the test runner.

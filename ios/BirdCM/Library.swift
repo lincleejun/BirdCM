@@ -697,8 +697,10 @@ final class Library {
         }
     }
     #if DEBUG
-    /// Synthetic library for performance measurement: n photos × 3 subjects, invented days/points, no original bytes.
-    func seedSynthetic(_ n: Int, species: [String]) throws {
+    /// Synthetic library for performance measurement: n photos × 3 subjects, invented days/points; no original bytes,
+    /// or every record pointing at one copy of `photo` (thumbnail memory with real 12 MP decodes).
+    func seedSynthetic(_ n: Int, species: [String], photo: URL? = nil) throws {
+        if let photo { try? FileManager.default.removeItem(at: dir.appendingPathComponent("synthetic.photo")); try FileManager.default.copyItem(at: photo, to: dir.appendingPathComponent("synthetic.photo")) }
         try locked {
             try db.transaction {
                 let stamp = Self.utc(Date()), start = Date(timeIntervalSince1970: 1_700_000_000)
@@ -706,7 +708,7 @@ final class Library {
                     let hash = sha256(Data("synthetic photo \(i)".utf8)), id = Self.stableUUID("synthetic record/\(i)")
                     let wall = Self.wall(start.addingTimeInterval(Double(i % 900) * 86400 + Double(i % 600) * 60), zone: TimeZone(identifier: "UTC")!).0
                     let lat = 20 + Double(i % 40) * 0.37, lon = 100 + Double(i % 23) * 0.53
-                    try db.run("INSERT OR IGNORE INTO ll_asset VALUES(?,0,'image/jpeg',NULL,NULL,NULL,'{}',0)", [hash])
+                    try db.run("INSERT OR IGNORE INTO ll_asset VALUES(?,0,'image/jpeg',?,NULL,NULL,'{}',0)", [hash, photo == nil ? nil : "synthetic.photo"])
                     try db.run("INSERT INTO ll_record(\(Self.recordColumns)) VALUES(?,?,1,?,?,?,NULL,'ios',NULL,?,0,NULL,'second',?,0,'photo',?,NULL,?,?,'Synthetic','map',NULL,NULL,'{}',1)",
                                [id, hash, stamp, stamp, stamp, wall, wall, String(wall.prefix(10)), lat, lon])
                     for k in 0..<3 {

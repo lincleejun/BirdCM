@@ -182,7 +182,7 @@ func title(_ r: Identification) -> String {
             let library=try Library(dir:dir);self.library=library
             #if DEBUG
             let seed=UserDefaults.standard.integer(forKey:"seedSynthetic")
-            if seed>0,!library.needsMigration,(try? library.query("SELECT count(*) FROM ll_record").first?.n(0)) == 0 {try library.seedSynthetic(seed,species:Array(catalogue.all.prefix(800).map(\.sci)))}
+            if seed>0,!library.needsMigration,(try? library.query("SELECT count(*) FROM ll_record").first?.n(0)) == 0 {try library.seedSynthetic(seed,species:Array(catalogue.all.prefix(800).map(\.sci)),photo:UserDefaults.standard.string(forKey:"syntheticPhoto").map{URL(fileURLWithPath:$0)})}
             #endif
             if library.needsMigration {migration=0;Task{await migrate()}} else {refresh()}
         } catch {libraryError=String(localized:"无法打开本机记录：\(error.localizedDescription)。旧文件未改动。")}
