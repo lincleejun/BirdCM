@@ -13,7 +13,7 @@ ascii="GuanYu-$v-arm64.dmg"
 since=${prev:+"since $prev"}; since=${since:-"since the first commit"}
 notice="https://github.com/lincleejun/BirdCM/blob/release/v$v/NOTICE.md"
 cat <<EOF
-**下载 / Download:** \`$ascii\`（列表里若还有 \`$dmg\`，是同一个文件 / \`$dmg\`, if listed, is the same file）
+**下载 / Download:** \`$ascii\`（列表里若还有 \`$dmg\`，是同一个文件 / if also listed, the same file）
 **校验 / Verify:** \`shasum -a 256 -c --ignore-missing $ascii.sha256\`
 
 ## 须知
