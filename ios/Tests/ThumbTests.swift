@@ -33,6 +33,7 @@ final class ThumbTests: XCTestCase {
         }
         for code in ["cc-by-nd", "cc-by-nc-nd", "", "pd", nil] { XCTAssertNil(Thumb.licence(code), code ?? "nil") }
         XCTAssertEqual(Thumb.credit(.init(state: "ok", licence: "CC0", author: "A")), "A · CC0 · iNaturalist")
+        XCTAssertEqual(Thumb.credit(.init(state: "ok", licence: "CC BY", author: "(c) A", attribution: "(c) A")), "(c) A · CC BY · iNaturalist")
     }
 
     func testSizeVariantAndPhotoURL() {

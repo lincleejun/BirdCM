@@ -56,9 +56,10 @@ enum Thumb {
         return out
     }
 
-    /// "© author · licence · iNaturalist" (no © on CC0).
+    /// "© author · licence · iNaturalist" (no © on CC0, nor on the full attribution line, which carries its own "(c)").
     static func credit(_ c: Reference.Card) -> String {
-        [c.licence == "CC0" ? c.author : c.author.map { "© " + $0 }, c.licence, "iNaturalist"].compactMap { $0 }.joined(separator: " · ")
+        let own = c.licence == "CC0" || c.author == c.attribution
+        return [own ? c.author : c.author.map { "© " + $0 }, c.licence, "iNaturalist"].compactMap { $0 }.joined(separator: " · ")
     }
 
     static func kind(_ variant: String) -> String { "inat-" + variant }
@@ -89,7 +90,7 @@ enum Thumb {
 
         /// The cached picture, fetched first when `network` and the entry is missing or due (30 days; 1 day when none).
         func image(_ sci: String, variant: String, network: Bool) async -> (url: URL, card: Reference.Card)? {
-            let key = Thumb.kind(variant) + "|" + sci
+            let key = Thumb.kind(variant) + "|" + sci + (network ? "|net" : "")
             if let t = inflight[key] { return await t.value }
             let t = Task { await load(sci, variant, network) }
             inflight[key] = t
@@ -162,19 +163,20 @@ struct SpeciesThumb: View {
 
     var body: some View {
         Group {
-            if let shown {
-                Image(uiImage: shown.image).resizable().scaledToFill()
-                    .accessibilityLabel("网络参考图").accessibilityHint(Thumb.hint)
-                    .contextMenu {
-                        Text(Thumb.credit(shown.card))
-                        if shown.card.nc == true { Text("非商业许可（NC）") }
-                        if let s = shown.card.sourceURL, let u = URL(string: s) { Link("在 iNaturalist 查看", destination: u) }
-                    }
-            } else {
-                Image(systemName: "bird").font(.system(size: size * 0.45)).foregroundStyle(Palette.tertiary).accessibilityHidden(true)
+            if let shown { Image(uiImage: shown.image).resizable().scaledToFill() }
+            else { Image(systemName: "bird").font(.system(size: size * 0.45)).foregroundStyle(Palette.tertiary) }
+        }
+        .frame(width: size, height: size).background(Palette.inset)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.2)).contentShape(RoundedRectangle(cornerRadius: size * 0.2))
+        .accessibilityElement().accessibilityLabel(shown == nil ? "" : "网络参考图").accessibilityHint(shown == nil ? "" : Thumb.hint)
+        .accessibilityHidden(shown == nil)
+        .contextMenu {
+            if let c = shown?.card {
+                Text(Thumb.credit(c))
+                if c.nc == true { Text("非商业许可（NC）") }
+                if let s = c.sourceURL, let u = URL(string: s) { Link("在 iNaturalist 查看", destination: u) }
             }
         }
-        .frame(width: size, height: size).background(Palette.inset).clipShape(RoundedRectangle(cornerRadius: size * 0.2))
         .task(id: key) { await load() }
     }
 
