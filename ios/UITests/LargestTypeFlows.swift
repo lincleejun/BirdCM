@@ -12,6 +12,8 @@ final class LargestTypeFlows: FlowCase {
         try? FileManager.default.createDirectory(atPath:folder,withIntermediateDirectories:true)
         launch("photo-gps",extra:["-largestType","YES","-historyFixtureCount","3","-locationFixture","allowed","-backupFolderFixture",folder])
         reveal("home.locate").tap()
+        // On a small screen at this size the place row sits above the list's visible part (not built): scroll back up.
+        for _ in 0..<4 where !element("home.place").exists {app.swipeDown()}
         label(element("home.place"),contains:"Bolsa Chica")
         pick();back()
         tab("tab.stats","统计");outcome("stats.species");try shot("stats"+mode)

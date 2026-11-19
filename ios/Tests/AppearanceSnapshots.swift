@@ -7,7 +7,7 @@ import SwiftUI
 /// names the old UI matrix used, e.g. `-[Flows testDarkLargestAndLoading]-result-light.png`.
 /// Largest type alone is still shot in the running app (`LargestTypeFlows`), which also checks reachability,
 /// scrolling and the bars. Sheets and pushed pages that only private view state opens are rendered on their own.
-final class AppearanceSnapshots: XCTestCase {
+class SnapshotCase: XCTestCase {
     struct Mode { let suffix: String; let dark: Bool; let largest: Bool }
     static let light = Mode(suffix: "-light", dark: false, largest: false)
     static let dark = Mode(suffix: "--darkModeYES", dark: true, largest: false)
@@ -17,7 +17,7 @@ final class AppearanceSnapshots: XCTestCase {
 
     override func tearDown() async throws {
         await MainActor.run { FolderBackup.shared.stop() }
-        for k in Self.keys { UserDefaults.standard.removeObject(forKey: k) }
+        for k in SnapshotCase.keys { UserDefaults.standard.removeObject(forKey: k) }
         for d in dirs { try? FileManager.default.removeItem(at: d) }
     }
     @MainActor func model(_ state: String?) -> AppModel {
@@ -69,9 +69,13 @@ final class AppearanceSnapshots: XCTestCase {
         RootView().environment(m).sheet(isPresented: .constant(true)) { content.environment(m).debugAppearance() }
     }
 
+}
+
+/// The old `testDarkLargestAndLoading` matrix.
+final class AppearanceSnapshots: SnapshotCase {
     /// Result, its correction and place sheets, then every tab root, the species page, settings and backup.
     @MainActor func testDarkLargestAndLoading() async throws {
-        for mode in [Self.light, Self.dark, Self.darkLargest] {
+        for mode in [SnapshotCase.light, SnapshotCase.dark, SnapshotCase.darkLargest] {
             let m = model("normal"), r = try XCTUnwrap(m.current)
             await until { !m.items.isEmpty }
             try await shot("result", mode, RootView().environment(m))
@@ -104,6 +108,10 @@ final class AppearanceSnapshots: XCTestCase {
         try await shot("loading-preview", nil, wait: 0.5, RootView().environment(model("loading")))
     }
 
+}
+
+/// The old `testStep4Screens` matrix (its own class so parallel testing runs it beside the other).
+final class Step4Snapshots: SnapshotCase {
     /// Step 4 surfaces (photo calendar month/day/year, map, observation editor, eBird, 这里这个月, folder backup) with
     /// three photos and a device place, in light and dark.
     @MainActor func testStep4Screens() async throws {
@@ -112,7 +120,7 @@ final class AppearanceSnapshots: XCTestCase {
         defer { try? FileManager.default.removeItem(at: folder) }
         let d = UserDefaults.standard, now = Period.current(), day = "2026-11-14"
         guard case let .month(year, _) = now else { return }
-        for mode in [Self.light, Self.dark] {
+        for mode in [SnapshotCase.light, SnapshotCase.dark] {
             func shot(_ name: String, wait: Double = 10, _ view: some View) async throws { try await self.shot(name, mode, test: "testStep4Screens", wait: wait, view) }
             d.set(fixtures.appendingPathComponent("photo-0.jpg").path, forKey: "fixtureImage"); d.set("photo-gps", forKey: "fixtureState"); d.set(3, forKey: "historyFixtureCount")
             let m = model(nil)
@@ -138,7 +146,7 @@ final class AppearanceSnapshots: XCTestCase {
             XCTAssertNil(FolderBackup.shared.lastError); XCTAssertNotNil(FolderBackup.shared.lastSuccess)
             try await shot("backup-folder-ok", sheet(m, NavigationStack { BackupView() }))
             FolderBackup.shared.stop()
-            for k in Self.keys { d.removeObject(forKey: k) }
+            for k in SnapshotCase.keys { d.removeObject(forKey: k) }
         }
         let m = model(nil)
         d.set("/nonexistent/birdcm", forKey: "backupFolderFixture")
