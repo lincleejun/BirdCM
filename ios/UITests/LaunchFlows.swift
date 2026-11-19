@@ -13,7 +13,7 @@ final class LaunchFlows: XCTestCase {
     func launch(_ extra:[String]=[],reset:Bool=true) {
         app.terminate();app.launchArguments=["-uiTesting","YES","-resetHistory",reset ? "YES":"NO","-fixtureImage",image]+extra;app.launch()
     }
-    func wait(_ id:String,_ timeout:Double,file:StaticString=#filePath,line:UInt=#line) {XCTAssertTrue(element(id).waitForExistence(timeout:timeout),"missing \(id)",file:file,line:line)}
+    func wait(_ id:String,_ timeout:Double,file:StaticString=#filePath,line:UInt=#line) {XCTAssertTrue(element(id).appears(timeout:timeout),"missing \(id)",file:file,line:line)}
     /// Settings → 诊断 → CC0 fixture: the real receive path with the bundled engine.
     func pickFixture() {
         element("home.more").tap();wait("settings.done",5);element("home.diagnostics").tap()
@@ -24,7 +24,12 @@ final class LaunchFlows: XCTestCase {
     func back() {app.navigationBars.buttons.allElementsBoundByIndex.first{$0.isHittable && $0.identifier != "home.more" && $0.label != "结果操作"}?.tap()}
 
     func status(_ text:String,_ timeout:Double) {
-        expectation(for:NSPredicate(format:"label CONTAINS %@",text),evaluatedWith:element("home.modelStatus"));waitForExpectations(timeout:timeout)
+        until(timeout) {self.element("home.modelStatus").exists && self.element("home.modelStatus").label.contains(text)}
+    }
+    /// Polls every 0.1 s (a predicate expectation re-checks about once a second, which also blurred the PERF lines).
+    func until(_ timeout:Double,file:StaticString=#filePath,line:UInt=#line,_ done:()->Bool) {
+        let end=Date().addingTimeInterval(timeout)
+        while !done() {if Date()>end {XCTFail("timed out",file:file,line:line);return};usleep(100_000)}
     }
     /// While the models load, home, its place controls, picker, camera and all four tabs work; the state is one quiet line.
     func testHomeUsableWhileModelsLoad() throws {
@@ -33,7 +38,7 @@ final class LaunchFlows: XCTestCase {
         XCTAssertTrue(element("home.modelStatus").label.contains("正在准备"));XCTAssertFalse(element("identifying").exists);shot("home-preparing")
         for (label,id) in [("记录","records.mode"),("统计","stats.period"),("探索","explore.mode")] {app.tabBars.buttons[label].firstMatch.tap();wait(id,10)}
         app.tabBars.buttons["识别"].firstMatch.tap();wait("home.photos",5)
-        element("home.map").tap();XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout:5))
+        element("home.map").tap();XCTAssertTrue(app.navigationBars.firstMatch.appears(timeout:5))
     }
     /// A photo taken before the models are ready is shown at once with the honest stage, then finishes with no second tap.
     func testPickBeforeReadyContinuesAutomatically() throws {
@@ -63,7 +68,7 @@ final class LaunchFlows: XCTestCase {
         for pass in ["first","again"] {
             t=Date();launch(reset:pass=="first")
             wait("home.photos",120);print(String(format:"PERF ui %@ home.photos %.2f s",pass,Date().timeIntervalSince(t)))
-            expectation(for:NSPredicate(format:"enabled == YES"),evaluatedWith:element("home.photos"));waitForExpectations(timeout:120)
+            until(120) {self.element("home.photos").isEnabled}
             print(String(format:"PERF ui %@ picker enabled %.2f s",pass,Date().timeIntervalSince(t)))
             if element("home.modelStatus").exists {status("就绪",120);print(String(format:"PERF ui %@ models ready %.2f s",pass,Date().timeIntervalSince(t)))}
             sleep(8)

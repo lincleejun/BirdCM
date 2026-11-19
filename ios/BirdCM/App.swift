@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
     init() {
         #if DEBUG
         Perf.log("LAUNCH"); Perf.watchMainThread()
+        // UI tests: no animations to wait out.
+        if UserDefaults.standard.bool(forKey:"uiTesting") {UIView.setAnimationsEnabled(false)}
         #endif
         Perf.mark("app.init")
     }
@@ -159,7 +161,7 @@ func title(_ r: Identification) -> String {
             if state=="no-location",homePlace == nil {pendingFixtureState=state;needsPlace=true;return}
             preview=UIImage(contentsOfFile:path)
             busy=true;status="找鸟 → 认种"
-            try? await Task.sleep(for:.seconds(1))
+            try? await Task.sleep(for:.milliseconds(UserDefaults.standard.bool(forKey:"uiTesting") ? 200:1000))
             preparePreview(state,path:path)
             if let r=current,let data=try? Data(contentsOf:URL(fileURLWithPath:path)) {
                 // Distinct bytes, days and species: the library deduplicates identical originals.
@@ -508,6 +510,7 @@ extension View {
         let largest=UserDefaults.standard.bool(forKey:"largestType")
         self.preferredColorScheme(UserDefaults.standard.bool(forKey:"darkMode") ? .dark:nil)
             .transformEnvironment(\.dynamicTypeSize) {if largest {$0 = .accessibility5}}
+            .transaction {if UserDefaults.standard.bool(forKey:"uiTesting") {$0.disablesAnimations=true;$0.animation=nil}}
         #else
         self
         #endif
