@@ -51,4 +51,15 @@ final class ImageViewerSnapshots: SnapshotCase {
                            ImageViewer(source: .photo(id: r.id, boxes: r.boxes, crops: r.displayCrops, index: 0)).environment(m).tint(Palette.accent))
         }
     }
+
+    func testReferenceSource() {
+        var c=Reference.Card(state:"ok");c.licence="CC BY-SA 4.0";c.author="A";c.file="Bald Eagle (1).jpg";c.sourceURL="https://commons.wikimedia.org/wiki/File:Bald_Eagle"
+        guard case let .web(url,author,_,_,nc,_)? = ImageViewerSource.reference(c) else {return XCTFail()}
+        XCTAssertEqual(url.absoluteString,"https://commons.wikimedia.org/wiki/Special:FilePath/Bald%20Eagle%20(1).jpg?width=1280");XCTAssertEqual(author,"A");XCTAssertFalse(nc)
+        c.file="https://inaturalist-open-data.s3.amazonaws.com/photos/123/square.jpg";c.nc=true
+        guard case let .web(u2,_,_,_,nc2,_)? = ImageViewerSource.reference(c) else {return XCTFail()}
+        XCTAssertEqual(u2.absoluteString,"https://inaturalist-open-data.s3.amazonaws.com/photos/123/large.jpg");XCTAssertTrue(nc2)
+        c.licence=nil;XCTAssertNil(ImageViewerSource.reference(c))
+        c.licence="CC0";c.state="none";XCTAssertNil(ImageViewerSource.reference(c))
+    }
 }

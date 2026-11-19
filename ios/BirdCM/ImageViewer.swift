@@ -136,3 +136,24 @@ struct ImageViewer: View {
         if let out { focus = out.1; image = UIImage(cgImage: out.0) } else { failed = true }
     }
 }
+
+extension ImageViewerSource {
+    /// The viewer for a reference card: iNaturalist photos at their "large" (1024 px) size, Commons files at 1280 px
+    /// via Special:FilePath (redirects stay on the Reference hosts). nil when the card has no licensed picture.
+    static func reference(_ c: Reference.Card) -> ImageViewerSource? {
+        guard ["ok", "stale"].contains(c.state), let licence = c.licence, let file = c.file else { return nil }
+        let big: String? = file.hasPrefix("https://") ? Thumb.photoURL(file, "large")
+            : file.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed).map { "https://commons.wikimedia.org/wiki/Special:FilePath/\($0)?width=1280" }
+        guard let s = big, let url = URL(string: s) else { return nil }
+        return .web(url: url, author: c.author ?? c.attribution ?? "", licence: licence, licenceURL: c.licenceURL.flatMap(URL.init(string:)),
+                    nc: c.nc == true, page: c.sourceURL.flatMap(URL.init(string:)))
+    }
+}
+
+/// `opensImageViewer` only when there is something to open (a placeholder thumbnail stays a plain row tap).
+struct OptionalViewer: ViewModifier {
+    let source: ImageViewerSource?
+    func body(content: Content) -> some View {
+        if let source { content.opensImageViewer(source) } else { content }
+    }
+}

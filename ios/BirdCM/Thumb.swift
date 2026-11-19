@@ -177,6 +177,7 @@ struct SpeciesThumb: View {
                 if let s = c.sourceURL, let u = URL(string: s) { Link("在 iNaturalist 查看", destination: u) }
             }
         }
+        .modifier(OptionalViewer(source: shown.flatMap { .reference($0.card) }))
         .task(id: key) { await load() }
     }
 

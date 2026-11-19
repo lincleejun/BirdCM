@@ -53,6 +53,7 @@ struct SpeciesReferenceSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 Image(uiImage: picture).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: 260).clipShape(RoundedRectangle(cornerRadius: 12))
                     .accessibilityLabel(own ? "网络参考图" : "网络参考图，不是你的观察").accessibilityIdentifier("reference.image")
+                    .modifier(OptionalViewer(source: .reference(image)))
                 Text(own ? "参考图" : "网络参考图，不是你的观察").font(.caption.bold())
                 credit(image).font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("reference.imageCredit")
             }
