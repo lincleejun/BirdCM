@@ -221,7 +221,7 @@ struct PhotoCalendar: View {
         }
     }
     @ViewBuilder func yearTiles(_ y: Int) -> some View {
-        Text("\(y) 年各月").font(.headline).accessibilityIdentifier("stats.calendar")
+        Text(verbatim: "\(y) 年各月").font(.headline).accessibilityIdentifier("stats.calendar")
         LazyVGrid(columns: typeSize.isAccessibilitySize ? [GridItem(.flexible())] : Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
             ForEach(1...12, id: \.self) { m in
                 let days = model.ledger.days(Period.month(y, m).range!)
