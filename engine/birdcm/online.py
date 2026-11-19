@@ -279,6 +279,8 @@ def card(kind: str, sci: str, network: bool, force: bool = False) -> dict:
         lock = _inflight.setdefault((kind, sci), threading.Lock())
     with lock:                                         # one fetch per species and kind, however many requests ask
         e = _read(kind, sci)
+        if e and kind == "image" and e["state"] == "ok" and not _key(kind, sci).with_suffix(".img").is_file():
+            e = None                                   # the image went (cache cap, clean-up): fetch it again
         age = time.time() - e["fetched"] if e else None
         due = e is None or (age > (NEGATIVE if e["state"] == "none" else FRESH)) or force
         if network and due:
@@ -286,6 +288,9 @@ def card(kind: str, sci: str, network: bool, force: bool = False) -> dict:
                 e = (_summary if kind == "summary" else _image)(sci, m)
                 _write(kind, sci, e, e.pop("blob", None))
                 age = 0
+            except NotFound:                           # e.g. the file's rendition is gone: absent for a day
+                e, age = {"state": "none", "fetched": time.time(), "why": "来源上已没有这个文件"}, 0
+                _write(kind, sci, e)
             except Busy:
                 return _shown(e, age, "busy")
             except Offline:

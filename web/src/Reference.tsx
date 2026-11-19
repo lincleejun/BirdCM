@@ -34,7 +34,8 @@ export default function SpeciesReference({ sci, own }: { sci: string; own: numbe
   const [imgOk, setImgOk] = useState(true);
 
   const refresh = (kinds: Kind[], force = false, dead = () => false) =>
-    post<Reference>("/api/species/reference", { sci, kinds, force }).then((x) => !dead() && setR((old) => ({ ...(old ?? x), ...x }))).catch(() => {});
+    post<Reference>("/api/species/reference", { sci, kinds, force }).then((x) => !dead() && setR((old) => ({ ...(old ?? x), ...x })))
+      .catch(() => !dead() && setR((old) => old && { ...old, ...Object.fromEntries(kinds.map((k) => [k, { state: "unavailable" }])) }));
 
   useEffect(() => {
     let dead = false;
@@ -56,9 +57,11 @@ export default function SpeciesReference({ sci, own }: { sci: string; own: numbe
   const clearCache = async () => {
     await del("/api/online/cache");
     setR(await get<Reference>(`/api/species/reference?sci=${encodeURIComponent(sci)}`));
+    if (s?.enabled) refresh(["summary", "image"]);
   };
 
-  const img = r?.image, sum = r?.summary;
+  const off = (c?: Card): Card | undefined => c && c.state === "missing" && s && !s.enabled ? { ...c, state: "off" } : c;
+  const img = off(r?.image), sum = off(r?.summary);
   const shown = (c?: Card) => c && (c.state === "ok" || c.state === "stale") && (c.text || c.licence);
   return (
     <div className="result-section ref-section" aria-labelledby="h-ref">

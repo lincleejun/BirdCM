@@ -230,6 +230,22 @@ COMMONS = "https://commons.wikimedia.org/w/api.php"
 THUMB = "https://thumb.wikimedia.org/"
 
 
+def test_image_rendition_404_is_absent(net):
+    net.routes[COMMONS] = fixture("commons-imageinfo-cc-by-sa.json")
+    net.routes[THUMB] = urllib.error.HTTPError(THUMB, 404, "not found", {}, None)
+    c = online.card("image", "Passer domesticus", network=True)
+    assert c["state"] == "none" and online._read("image", "Passer domesticus")["state"] == "none"
+
+
+def test_image_entry_without_its_file_is_fetched_again(net):
+    net.routes[COMMONS] = fixture("commons-imageinfo-cc-by-sa.json")
+    net.routes[THUMB] = jpeg()
+    online.card("image", "Passer domesticus", network=True)
+    online.cached_file("Passer domesticus")[0].unlink()
+    assert online.card("image", "Passer domesticus", network=False)["state"] == "missing"
+    assert online.card("image", "Passer domesticus", network=True)["state"] == "ok" and online.cached_file("Passer domesticus")
+
+
 def test_image_ok_cached_and_served(net):
     net.routes[COMMONS] = fixture("commons-imageinfo-cc-by-sa.json")
     net.routes[THUMB] = jpeg()
