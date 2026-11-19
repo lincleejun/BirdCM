@@ -12,14 +12,15 @@ import UIKit
 /// a species without an accepted mapping gets nothing, nothing is guessed. Never photos, places or typed text.
 enum Reference {
     static let userAgent = "BirdCM-iOS/1.0 (https://github.com/lincleejun/BirdCM; open-source local bird photo app)"
-    static let hosts: Set<String> = ["zh.wikipedia.org", "en.wikipedia.org", "commons.wikimedia.org", "upload.wikimedia.org", "thumb.wikimedia.org"]
+    static let hosts: Set<String> = ["zh.wikipedia.org", "en.wikipedia.org", "commons.wikimedia.org", "upload.wikimedia.org", "thumb.wikimedia.org",
+                                         "api.inaturalist.org", "inaturalist-open-data.s3.amazonaws.com"]   // Thumb.swift: taxa API, open-licence photos
     static let accept: Set<String> = ["exact-reviewed", "synonym-reviewed"]
     static let day = 86400.0
     static let fresh = 30 * day, textMax = 180 * day, negative = day            // design §6.2
     static let cacheCap = 200 << 20                                                // iOS budget (desktop engine: 500 MiB)
     static let maxJSON = 1 << 20, maxImage = 2 << 20
     static let bySA = "https://creativecommons.org/licenses/by-sa/4.0/"
-    static let disclosure = "在线资料会把你打开的鸟种对应的 Wikipedia 条目名、Wikidata 编号和 Commons 文件名发送给 Wikipedia / Wikimedia，只在打开物种页时发送。不会发送你的照片、拍摄信息、观察记录、位置或输入的搜索词。网站也会接收到网络连接所需的 IP 地址等信息。关闭后仍可离线搜索、查看自己的记录和已经缓存的资料；可在“设置”里删除网络缓存。"
+    static let disclosure = "在线资料会把你打开的鸟种对应的 Wikipedia 条目名、Wikidata 编号和 Commons 文件名发送给 Wikipedia / Wikimedia，只在打开物种页时发送；列表里的物种缩略图会把该鸟种的 iNaturalist 分类编号发送给 iNaturalist。不会发送你的照片、拍摄信息、观察记录、位置或输入的搜索词。网站也会接收到网络连接所需的 IP 地址等信息。关闭后仍可离线搜索、查看自己的记录和已经缓存的资料；可在“设置”里删除网络缓存。"
 
     // MARK: settings (this device only)
     /// On by default (owner 2026-11-18). UI and unit tests read off unless they pass -referenceOnline YES.

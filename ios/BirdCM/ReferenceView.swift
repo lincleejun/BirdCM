@@ -164,10 +164,10 @@ struct ReferenceSettingsSection: View {
     @State private var size: Int?
     var body: some View {
         Section {
-            Toggle("在线物种资料（Wikipedia / Wikimedia）", isOn: $enabled).accessibilityIdentifier("settings.referenceOnline")
+            Toggle("在线物种资料（Wikipedia / Wikimedia / iNaturalist）", isOn: $enabled).accessibilityIdentifier("settings.referenceOnline")
                 .onChange(of: enabled) { _, v in Reference.enabled = v; Reference.disclosed = true }
             Button("删除网络缓存" + (size.map { "（\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))）" } ?? "")) {
-                Reference.shared.cache.clear(); size = 0
+                Reference.shared.cache.clear(); SpeciesThumb.memory.removeAllObjects(); size = 0
             }.disabled(size == 0).accessibilityIdentifier("settings.referenceClear")
         } header: { Text("物种参考") } footer: { Text(Reference.disclosure) }
         .task { let cache = Reference.shared.cache; size = await Task.detached { cache.size() }.value }

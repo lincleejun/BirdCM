@@ -47,11 +47,12 @@ iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs
 
 ## 联网
 
-只有下面三种情况会联网，都可以关掉：
+只有下面几种情况会联网，都可以关掉：
 
 - 打开地图时加载 OpenStreetMap 图块
 - 用 Nominatim 显示地名，只发送取整到约 1 km 的坐标
 - 物种页的维基百科资料，只发送物种的条目名
+- iOS 列表里的物种缩略图（iNaturalist 默认照片），只发送物种的 iNaturalist 分类编号
 
 照片、路径和你输入的文字从不上传。
 
