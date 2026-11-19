@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { get, post, put } from "./api";
+import { get, post, put, useEngine } from "./api";
 const CHIPS = 3;                                   // species chips shown before "+n", so the bar stays one row at 1440 px
 import CorrectPanel, { type Pick, type Scope } from "./Correct";
 import ExportDialog from "./Export";
@@ -192,6 +192,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   scanId: number; onBack: () => void; onOpen: (id: number) => void; catalogue: Country[]; brand: ReactNode; nav: ReactNode }) {
   const [changesOff, setChangesOff] = useState(() => { try { return localStorage.getItem(`birdcm.changesOff.${scanId}`) === "1"; } catch { return false; } });
   const [changesOpen, setChangesOpen] = useState(false);
+  const engine = useEngine()?.engine;
   const [scan, setScan] = useState<Scan | null>(null);
   const [raw, setPhotos] = useState<PhotoRow[]>([]);
   // what the page shows: a burst's majority species replaces a frame's own (kept as species_own) when stars.py says so
@@ -447,7 +448,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   }
   const rareNames = [...rare.values()].join("、");
   const stepText = complete ? "" : scan.state === "failed" ? ` · ${scan.error ?? ""}` : phase === "paused" ? " · 等待继续"
-    : scan.state === "stopping" ? " · 这一批做完就停" : scan.state === "queued" ? " · 等前一个扫描完成" : scan.state === "finalizing" ? " · 分连拍组" : " · 找鸟、认种、看眼睛和姿态";
+    : scan.state === "stopping" ? " · 这一批做完就停" : scan.state === "queued" ? (engine === "loading" ? " · 模型加载完自动开始" : engine === "error" ? " · 模型出错，在顶栏重试后开始" : " · 等前一个扫描完成") : scan.state === "finalizing" ? " · 分连拍组" : " · 找鸟、认种、看眼睛和姿态";
   const days = photos.map((p) => p.result?.exif.taken_at?.slice(0, 10)).filter(Boolean).sort() as string[];
   const dateRange = days.length ? (days[0] === days[days.length - 1] ? days[0] : `${days[0]} – ${days[days.length - 1].slice(5)}`) : "";
   const folderName = scan.folder.split("/").filter(Boolean).pop() ?? scan.folder;

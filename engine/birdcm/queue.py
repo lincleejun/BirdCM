@@ -22,7 +22,37 @@ class Scheduler:
         self._quit = threading.Event()
         self.thread: threading.Thread | None = None
         self.engine_error: str | None = None
+        self.state = "loading"                  # the engine: loading | ready | error (load_error says why; retry())
+        self.load_error: str | None = None
         self.singles: queue.SimpleQueue = queue.SimpleQueue()
+
+    def load(self) -> object:
+        """Make the engine and warm it up, on the model thread; it is published only when ready. A failure is kept (state
+        "error": queued scans wait, singles fail at once) until retry(), never retried on every wake."""
+        if self.engine is not None:
+            return self.engine
+        if self.state == "error":
+            raise RuntimeError(self.load_error)
+        try:
+            eng = self.engine_factory()
+        except Exception as e:
+            self.load_error, self.state = f"{type(e).__name__}: {e}"[:500], "error"
+            raise
+        if hasattr(eng, "warm"):
+            try:
+                eng.warm()
+            except Exception:  # noqa: BLE001 - a failed warm-up only costs the first photo its speed
+                traceback.print_exc()
+        self.engine, self.state = eng, "ready"
+        return eng
+
+    def retry(self) -> None:
+        """Load again after an error (models downloaded meanwhile, say)."""
+        if self.state == "error":
+            from birdcm import names
+            names.catalogue.cache_clear()       # it remembered "no name list"
+            self.load_error, self.state = None, "loading"
+            self.wake.set()
 
     def submit(self, fn: Callable[[object], object]) -> Future:
         """Run fn(engine) on the model thread: at once when idle, else at the next batch boundary of the running scan."""
@@ -40,9 +70,7 @@ class Scheduler:
             if not f.set_running_or_notify_cancel():
                 continue
             try:
-                if self.engine is None:
-                    self.engine = self.engine_factory()
-                f.set_result(fn(self.engine))
+                f.set_result(fn(self.load()))
             except Exception as e:  # noqa: BLE001 - the caller gets it
                 f.set_exception(e)
 
@@ -62,6 +90,8 @@ class Scheduler:
     def _loop(self) -> None:
         while not self._quit.is_set():
             try:
+                if self.engine is None and self.state == "loading":
+                    self.load()                                   # at start-up, not at the first photo
                 self.drain()
                 busy = self.run_once()
             except Exception:  # noqa: BLE001 - the one model thread must not die (singles would hang)
@@ -83,12 +113,14 @@ class Scheduler:
         if scan["state"] == "finalizing" or not self.store.queued(sid):
             self.finalize(sid)
             return True
+        try:
+            self.load()
+        except Exception:  # noqa: BLE001 - no engine: the scan stays queued until retry() (state / load_error say why)
+            return False
         if not self.store.set_state(sid, "running", when=("queued", "running")):
             self.store.set_state(sid, "paused", when=("stopping",))    # a stop landed after next_scan read it
             return True
         try:
-            if self.engine is None:
-                self.engine = self.engine_factory()
             fp = self.engine.fingerprint(scan["region"])
             if fp != scan["fp"]:                                  # models, data or settings changed since the scan began:
                 self.store.reset_scan(sid, fp)                    # every result of it is recomputed, none kept under a stale fp

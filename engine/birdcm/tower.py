@@ -42,7 +42,9 @@ class Tower:
     def __init__(self, tower: str, names: str, parts: str, flight: str, device: str, clear: str | None = None,
                  aesthetic: str | None = None) -> None:
         import open_clip
-        model = open_clip.model._build_vision_tower(1024, open_clip.model.CLIPVisionCfg(**VISION))
+        from transformers.initialization import no_init_weights
+        with no_init_weights():                 # every weight is loaded below (strict): skip the random init
+            model = open_clip.model._build_vision_tower(1024, open_clip.model.CLIPVisionCfg(**VISION))
         model.load_state_dict(unpack(load_file(tower)))
         self.dtype = torch.float32 if device == "cpu" else torch.float16
         self.device, self.model = device, model.eval().to(device=device, dtype=self.dtype)

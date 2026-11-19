@@ -213,6 +213,14 @@ details ol { margin: 5px 0 0; padding-left: 24px; }
 .views { display: flex; gap: 4px; }
 .views button { min-height: 38px; padding: 4px 12px; border: 1px solid transparent; border-radius: 7px; background: none; color: var(--muted); font-weight: 650; }
 .views button[aria-current=true] { color: var(--green); border-color: var(--line); background: var(--surface); }
+.engine { align-self: center; display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.engine::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.engine.ok::before { background: var(--green); }
+.engine.busy::before { background: var(--amber); animation: engine-pulse 1.2s ease-in-out infinite; }
+.engine.bad { color: var(--rust); font-weight: 650; }
+.views .engine button { min-height: 0; padding: 1px 8px; border: 1px solid currentColor; border-radius: 5px; color: inherit; font-size: 12px; }
+@keyframes engine-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .engine.busy::before { animation: none; } }
 .single { max-width: 760px; margin: auto; }
 .single h2 { font-size: clamp(32px, 4vw, 48px); }
 .drop { border: 1px dashed var(--line); border-radius: 12px; padding: 28px 18px; text-align: center; background: var(--surface); margin: 18px 0 8px; }

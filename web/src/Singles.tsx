@@ -22,6 +22,8 @@ const pct = (p: number) => `${Math.round(p * 100)}%`;
 const fmtTime = (t: string | null | undefined) => (t ? t.slice(0, 19).replace("T", " ") : "时间未知");
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 
+const queued = (r: { result: unknown; error: string | null }) => !r.result && !r.error;
+
 function spName(sp: Species | null | undefined): string {
   return named(sp).title;
 }
@@ -33,6 +35,17 @@ export default function Singles({ catalogue }: { catalogue: Country[] }) {
   const [err, setErr] = useState("");
   const refresh = () => get<Slim[]>("/api/singles").then(setList).catch((e) => setErr(String(e.message)));
   useEffect(() => { refresh(); }, []);
+  // sent while the models were still loading: queued on the engine (neither answer nor error yet); look again shortly
+  const waiting = !!rec && queued(rec);
+  const listWaiting = list.some(queued);
+  useEffect(() => {
+    if (!waiting && !listWaiting) return;
+    const t = window.setTimeout(() => {
+      if (rec && waiting) get<Single>(`/api/singles/${rec.id}`).then((x) => setRec((cur) => (cur?.id === x.id ? x : cur))).catch(() => {});
+      refresh();
+    }, 700);
+    return () => clearTimeout(t);
+  }, [rec, list, waiting, listWaiting]);
 
   const send = async (file: File) => {
     setBusy("正在识别…"); setErr("");
@@ -79,7 +92,7 @@ export default function Singles({ catalogue }: { catalogue: Country[] }) {
       {list.length === 0 ? <p className="history-empty">识别过的照片会自动出现在这里。</p> : (
         <ol className="history-list" aria-label="识别记录">
           {list.map((h) => {
-            const name = h.error && !h.result ? "识别失败" : h.result?.rejected ? (h.result.reject_reason ?? "没有找到鸟") : spName(h.result?.species);
+            const name = queued(h) ? "排队中" : h.error && !h.result ? "识别失败" : h.result?.rejected ? (h.result.reject_reason ?? "没有找到鸟") : spName(h.result?.species);
             return (
               <li key={h.id} className="history-entry">
                 <button type="button" className="history-open" onClick={() => open(h.id)}>
@@ -126,7 +139,8 @@ function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick, on
   const shot = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
   const noBird = !r || r.rejected;
-  const framing = (noBird && !rec.error) || drawing;
+  const waiting = queued(rec);
+  const framing = (noBird && !rec.error && !waiting) || drawing;
   const i = rec.subject ?? r?.subject ?? null;
   const b: Detection | null = r && i !== null ? r.boxes[i] ?? null : null;
   const own = b?.species ?? null;
@@ -177,6 +191,7 @@ function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick, on
         </div>
       </div>
       {busy && <p className="hint" role="status">{busy}</p>}
+      {waiting && !busy && <p className="hint" role="status">排队中：模型还在加载，加载完会自动识别这张照片。可以先去别的页面，结果会记进历史。</p>}
       {err && <p className="error-text" role="alert">{err}</p>}
       {rec.error && !busy && <p className="error-text" role="alert">识别失败：{rec.error}</p>}
 

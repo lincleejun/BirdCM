@@ -279,8 +279,11 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @contextlib.asynccontextmanager
     async def lifespan(_app):
         if start_scheduler:
-            sched.start()
+            sched.start()                                   # loads the models in the background: the page is up at once
             api.state.library.refresh()                     # a restart with a dirty index rebuilds it (background)
+            for r in store.singles():                       # queued when the last run ended: queued again
+                if r["result"] is None and r["error"] is None:
+                    run_single(r["id"], r["region"], r["boxes"], wait=False)
         yield
         sched.close()
         previews.close()
@@ -303,7 +306,14 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
 
     @api.get("/api/models")
     def models_status():
-        return {**models.status(), "exiftool": decode.ExifTool.available(), "engine_error": sched.engine_error}
+        """ready = the files are here; engine = loading | ready | error (loaded in the background at start-up)."""
+        return {**models.status(), "exiftool": decode.ExifTool.available(), "engine_error": sched.engine_error,
+                "engine": sched.state, "load_error": sched.load_error}
+
+    @api.post("/api/models/retry")
+    def models_retry():
+        sched.retry()
+        return {"engine": sched.state}
 
     @api.get("/api/regions")
     def regions():
@@ -575,15 +585,26 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def stored_path(rec: dict) -> Path:
         return singles_dir / rec["stored"]
 
-    def run_single(sid: int, region: str | None, boxes: list | None) -> dict:
-        rec = store.single(sid)
-        path = str(stored_path(rec))
-        try:
-            res, fp = sched.submit(lambda e: (e.identify(path, region, boxes), e.fingerprint(region))).result(timeout=600)
+    def run_single(sid: int, region: str | None, boxes: list | None, wait: bool = True) -> dict:
+        """Queued on the model thread; the answer is stored with the entry. wait=False returns at once (an entry with
+        neither result nor error is queued: the page polls it), e.g. while the models are still loading."""
+        path = str(stored_path(store.single(sid)))
+
+        def job(e):
+            res, fp = e.identify(path, region, boxes), e.fingerprint(region)
             store.update_single(sid, result=res, subject=res["subject"], boxes=boxes, region=region, error=None, fp=fp)
-        except Exception as e:  # noqa: BLE001 - kept with the entry; the person can retry
+
+        def failed(f):
             # the stored result, region and boxes stay one consistent set (the last success); only the error is new (Codex I6)
-            store.update_single(sid, error=f"{type(e).__name__}: {e}"[:500])
+            if (e := f.exception()) is not None:
+                store.update_single(sid, error=f"{type(e).__name__}: {e}"[:500])
+        try:
+            f = sched.submit(job)
+            f.add_done_callback(failed)
+            if wait:
+                f.result(timeout=600)
+        except Exception:  # noqa: BLE001 - kept with the entry (failed()); the person can retry
+            pass
         rec = store.single(sid)
         return {**rec, "stale": single_stale(rec)}
 
@@ -628,7 +649,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                 (singles_dir / stored).unlink(missing_ok=True)
                 raise HTTPException(400, "位置格式不对") from None
         sid = store.add_single(stored, Path(f.filename or "照片").name[:200], region)
-        return await run_in_threadpool(run_single, sid, region, None)
+        return await run_in_threadpool(run_single, sid, region, None, sched.state == "ready")
 
     @api.post("/api/singles/{sid}/identify")
     def reidentify(sid: int, body: Identify):

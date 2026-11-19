@@ -126,6 +126,18 @@ class Engine:
     def fingerprint(self, region) -> str:
         return fingerprint(region, self.model_digest)
 
+    def warm(self) -> None:
+        """One grey frame through every model (GPU kernels set up before the first real photo) and the decode workers
+        started (each submit starts one while none is idle)."""
+        frame = np.full((decode.FRAME * 2 // 3, decode.FRAME, 3), 128, np.uint8)
+        self.detector([frame])
+        self.tower([Image.fromarray(frame[:448, :448])])
+        self.tower.aesthetic([frame])
+        self._sync()
+        pool = self._pool or self._new_pool()
+        for f in [pool.submit(os.getpid) for _ in range(self.workers)]:
+            f.result(timeout=DECODE_TIMEOUT)
+
     def close(self) -> None:
         if self._pool:
             self._pool.shutdown(cancel_futures=True)

@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 let token: Promise<string> | null = null;
 
 function session(fresh = false): Promise<string> {
@@ -45,6 +47,25 @@ export async function upload<T>(url: string, form: FormData): Promise<T> {
   const r = await withToken((tok) => fetch(url, { method: "POST", headers: { "X-BirdCM-Token": tok }, body: form }));
   if (!r.ok) return fail(r);
   return r.json();
+}
+
+export interface EngineState { engine: "loading" | "ready" | "error"; load_error: string | null }
+
+/** The models load in the background after every start: polled every second until ready, then now and then (a restart
+ *  of the engine shows up again as loading). */
+export function useEngine(): EngineState | null {
+  const [s, setS] = useState<EngineState | null>(null);
+  useEffect(() => {
+    let t = 0, live = true;
+    const load = () => get<EngineState>("/api/models").catch(() => null).then((x) => {
+      if (!live) return;
+      if (x) setS({ engine: x.engine, load_error: x.load_error });
+      t = window.setTimeout(load, x?.engine === "ready" ? 15000 : 1000);
+    });
+    load();
+    return () => { live = false; clearTimeout(t); };
+  }, []);
+  return s;
 }
 
 /** A POST whose answer is text (a file to save), with the same token handling. */

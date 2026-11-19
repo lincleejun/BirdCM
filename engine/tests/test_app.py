@@ -383,3 +383,64 @@ def test_snapshot_is_compressed_and_slim(env):
     assert "look" not in row and "species" not in row["boxes"][0] and row["species"]["label"]["sci"] == "A b"
     full = c.get(f"/api/photos/{r.json()['photos'][0]['id']}", headers=OK).json()["result"]
     assert full["look"] and full["boxes"][0]["species"]
+
+
+def test_requests_before_the_models_are_ready_are_queued_and_complete(tmp_path, monkeypatch):
+    """The server answers while the engine loads in the background (real scheduler thread): a single photo and a scan
+    sent meanwhile are accepted at once and finish when it is ready; a failed load keeps the scan queued until retry."""
+    import io
+    import threading
+    import time
+
+    from PIL import Image
+    monkeypatch.setenv("BIRDCM_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("BIRDCM_CACHE_DIR", str(tmp_path / "cache"))
+    gate, calls = threading.Event(), []
+
+    class Eng(FakeEngine):
+        def identify(self, path, region, boxes):
+            sp = {"level": "species", "label": {"sci": "A b", "en": "A", "zh": None, "p": 0.9}, "top5": [], "geo": False}
+            return {"subject": 0, "rejected": False, "reject_reason": None, "exif": {"taken_at": None, "gps": None},
+                    "boxes": [{"box": [0, 0, 0.5, 0.5], "species": sp}]}
+
+    def factory():
+        calls.append(1)
+        if len(calls) == 1:
+            raise FileNotFoundError("缺模型文件：x.safetensors")
+        assert gate.wait(10)
+        return Eng()
+
+    store = Store(tmp_path / "data" / "t.db")
+    guarded, api = create_app(PORT, token="tok", store=store, engine_factory=factory)
+    h = {**OK, "x-birdcm-token": "tok"}
+    (tmp_path / "shoot").mkdir()
+    for i in range(3):
+        (tmp_path / "shoot" / f"{i}.jpg").write_bytes(b"x")
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 30)).save(buf, "PNG")
+
+    def until(cond, what):
+        end = time.monotonic() + 10
+        while not cond():
+            assert time.monotonic() < end, what
+            time.sleep(0.02)
+
+    with TestClient(guarded, base_url=f"http://127.0.0.1:{PORT}") as c:      # runs the lifespan: the scheduler starts
+        until(lambda: c.get("/api/models", headers=OK).json()["engine"] == "error", "load error reported")
+        assert "缺模型文件" in c.get("/api/models", headers=OK).json()["load_error"]
+        sid = c.post("/api/scans", json={"folder": str(tmp_path / "shoot")}, headers=h).json()["id"]
+        time.sleep(0.3)
+        assert store.state(sid) == "queued"                                 # waits for a retry, is not failed
+        assert c.post("/api/models/retry", headers=h).json()["engine"] == "loading"
+        until(lambda: len(calls) == 2, "loading again")
+        t = time.monotonic()
+        rec = c.post("/api/singles", files={"file": ("a.png", buf.getvalue())}, headers=h).json()
+        assert time.monotonic() - t < 2 and rec["result"] is None and rec["error"] is None     # accepted, queued
+        assert c.get("/api/models", headers=OK).json()["engine"] == "loading"
+        assert c.get("/api/regions", headers=OK).status_code == 200                           # the rest answers meanwhile
+        gate.set()
+        until(lambda: c.get(f"/api/singles/{rec['id']}", headers=OK).json()["result"] is not None, "single done")
+        until(lambda: store.state(sid) == "completed", "scan done")
+        assert c.get("/api/models", headers=OK).json()["engine"] == "ready"
+        rec2 = c.post("/api/singles", files={"file": ("b.png", buf.getvalue())}, headers=h).json()
+        assert rec2["result"]["subject"] == 0                               # ready: answered in the same request

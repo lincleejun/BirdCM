@@ -33,10 +33,12 @@ def unpack(raw: dict) -> dict:
 class Detector:
     def __init__(self, weights: str, device: str, half: bool = False) -> None:
         from transformers import Owlv2Config, Owlv2ForObjectDetection
+        from transformers.initialization import no_init_weights
         cfg = Owlv2Config(text_config={"model_type": "owlv2_text_model"},
                           vision_config={"image_size": SIDE, "model_type": "owlv2_vision_model", "patch_size": 16},
                           projection_dim=512, logit_scale_init_value=2.6592, initializer_factor=1.0)
-        model = Owlv2ForObjectDetection(cfg)
+        with no_init_weights():                 # every weight is loaded below: random init cost 2.4 s of a 5 s start
+            model = Owlv2ForObjectDetection(cfg)
         dtypes = {k: v.dtype for k, v in model.state_dict().items()}
         model.load_state_dict({k: v.to(dtypes[k]) for k, v in unpack(load_file(weights)).items()})
         self.dtype = torch.float16 if half else torch.float32

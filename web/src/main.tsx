@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { get, post } from "./api";
+import { get, post, useEngine } from "./api";
 import Results, { STATE_LABEL } from "./Results";
 import Singles from "./Singles";
 import KeepControl, { DEFAULT_KEEP, type KeepSetting } from "./Keep";
@@ -126,6 +126,21 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
   );
 }
 
+/** Top bar: the models load in the background after a start; work sent meanwhile waits for them, nothing else does. */
+function EngineBadge() {
+  const s = useEngine();
+  const [asked, setAsked] = useState(false);
+  useEffect(() => { if (s?.engine !== "error") setAsked(false); }, [s?.engine]);
+  if (!s) return null;
+  if (s.engine === "ready") return <span className="engine ok" role="status" title="模型已加载，识别会立刻开始">模型就绪</span>;
+  if (s.engine === "loading" || asked) return <span className="engine busy" role="status" title="页面可以照常使用；这时开始的识别会排队，加载完自动开始">模型准备中…</span>;
+  return (
+    <span className="engine bad" role="alert" title={s.load_error ?? ""}>模型出错
+      <button type="button" onClick={() => { setAsked(true); post("/api/models/retry").catch(() => setAsked(false)); }}>重试</button>
+    </span>
+  );
+}
+
 function App() {
   const q = new URLSearchParams(location.search);
   const [scanId, setScanId] = useState<number | null>(() => Number(q.get("scan")) || null);
@@ -160,6 +175,7 @@ function App() {
       <button aria-current={view === "single"} onClick={() => switchTo("single")}>认一张</button>
       <button aria-current={view === "library"} onClick={() => switchTo("library")}>记录</button>
       <button aria-current={view === "stats"} onClick={() => switchTo("stats")}>统计</button>
+      <EngineBadge />
     </nav>
   );
   const results = view === "batch" && scanId;

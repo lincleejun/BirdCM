@@ -32,20 +32,28 @@ def _verified(path: Path, entry: dict) -> bool:
     st = path.stat()
     if st.st_size != entry["bytes"]:
         return False
-    memo = config.cache_dir() / "verified.json"
-    try:
-        seen = json.loads(memo.read_text())
-    except (OSError, ValueError):
-        seen = {}
-    key = f"{path}|{st.st_size}|{st.st_mtime_ns}"
-    if seen.get(key) == entry["sha256"]:
+    if _memo().get(f"{path}|{st.st_size}|{st.st_mtime_ns}") == entry["sha256"]:
         return True
     ok = _sha256(path) == entry["sha256"]
     if ok:
-        seen[key] = entry["sha256"]
-        memo.parent.mkdir(parents=True, exist_ok=True)
-        memo.write_text(json.dumps(seen))
+        remember(path, entry["sha256"])
     return ok
+
+
+def _memo() -> dict:
+    try:
+        return json.loads((config.cache_dir() / "verified.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def remember(path: Path, sha256: str) -> None:
+    """A file whose sha256 was just checked (a download hashes as it writes): the next start does not hash it again."""
+    st = path.stat()
+    seen = {**_memo(), f"{path}|{st.st_size}|{st.st_mtime_ns}": sha256}
+    memo = config.cache_dir() / "verified.json"
+    memo.parent.mkdir(parents=True, exist_ok=True)
+    memo.write_text(json.dumps(seen))
 
 
 def locate(entry: dict) -> Path | None:
@@ -128,6 +136,7 @@ def fetch(log=print) -> int:
             if h.hexdigest() != e["sha256"]:
                 raise ValueError(f"sha256 mismatch: {h.hexdigest()}")
             part.rename(dest / e["name"])
+            remember(dest / e["name"], e["sha256"])
             log(f"ok       {e['name']}")
         except Exception as err:  # noqa: BLE001 - report and go on with the next file
             part.unlink(missing_ok=True)

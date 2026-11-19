@@ -414,6 +414,7 @@ def models_fetch(emit=lambda o: print(json.dumps(o, ensure_ascii=False), flush=T
             if h.hexdigest() != e["sha256"]:
                 raise ValueError("sha256 不符")
             part.rename(dest / name)
+            models.remember(dest / name, e["sha256"])         # the status right after does not hash it again
             emit({"file": name, "state": "present", "done": done, "total": e["bytes"]})
         except urllib.error.HTTPError as err:
             if err.code == 404:
