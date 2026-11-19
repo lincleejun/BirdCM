@@ -163,10 +163,12 @@ jobs:
           echo "assets as GitHub stored them:"; echo "$names"
           if ! grep -qxF "$zh" <<<"$names"; then
             # GitHub renames asset files with "special characters, non-alphanumeric characters" (REST docs, release assets);
-            # a renamed copy would only confuse, so drop it and keep the ASCII alias
-            renamed=$(grep -vxF -e "$ascii" -e "$ascii.sha256" <<<"$names")
-            echo "::warning::GitHub stored $zh as '$renamed'; removed it, $ascii is the download"
-            gh release delete-asset "$tag" "$renamed" --yes
+            # a renamed copy would only confuse, so drop it (by API URL: the name may start with "-"). Best effort: a
+            # leftover duplicate is better than a release stuck as a draft.
+            echo "::warning::GitHub renamed $zh (stored names above); removing the renamed copy, $ascii is the download"
+            gh release view "$tag" --json assets \
+              --jq ".assets[] | select(.name != \"$ascii\" and .name != \"$ascii.sha256\") | .apiUrl" |
+              while read -r u; do gh api -X DELETE "$u" || echo "::warning::could not delete $u"; done || true
           fi
           gh release edit "$tag" --draft=false
           { echo; echo "Published: $(gh release view "$tag" --json url --jq .url)"; echo "Assets:"

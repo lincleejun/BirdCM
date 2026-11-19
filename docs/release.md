@@ -29,7 +29,7 @@ git push origin release/v0.0.2
 
 第一个版本是 `0.0.1`（pyproject 里已经是 0.0.1）：`git tag release/v0.0.1 && git push origin release/v0.0.1`。
 
-然后到 GitHub → Actions → **release** 看进度（约 15–25 分钟），完成后在 Releases 页能看到 `观羽 v0.0.2`。
+然后到 GitHub → Actions → **release** 看进度（估计 15–25 分钟，未实测），完成后在 Releases 页能看到 `观羽 v0.0.2`。
 
 ## 流水线做了什么
 
@@ -89,6 +89,15 @@ workflow 文件进了 main 之后，GitHub → Actions → **release** → **Run
   main，再删掉 tag、在新提交上重新打同名 tag 并推送（命令同上）。若这个 tag 已经有发布了的 release，先在 Releases 页
   删除它（或 `gh release delete release/v0.0.2`）。
 - 不想重新打 tag 时，也可以 Actions → release → Run workflow，选那个 tag，取消 `dry_run`，等于对该 tag 重新发版。
+- **release 这一步本身反复失败**（它是唯一没法预演的一步）：gate 和 build 已经成功的话，dmg 就在那次运行的
+  Artifacts 里，可以手工发布：
+  ```sh
+  V=0.0.2; gh run download <run-id> -n dmg -D out          # run-id 在运行页的地址里
+  cp "out/GuanYu-$V-arm64.dmg" "out/观羽-$V-arm64.dmg"
+  .github/release-notes.sh "$V" > notes.md                  # 在已 checkout 该 tag、带完整历史和 tag 的仓库里
+  gh release create "release/v$V" --verify-tag --title "观羽 v$V" --notes-file notes.md \
+    "out/GuanYu-$V-arm64.dmg" "out/GuanYu-$V-arm64.dmg.sha256" "out/观羽-$V-arm64.dmg"   # 预发布版加 --prerelease
+  ```
 
 ## 不发布什么，为什么
 
