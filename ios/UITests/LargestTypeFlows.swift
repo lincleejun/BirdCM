@@ -17,26 +17,26 @@ final class LargestTypeFlows: FlowCase {
         tab("tab.stats","统计");outcome("stats.species");try shot("stats"+mode)
         let day=app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'calendar.day.'")).firstMatch
         reveal("stats.calendar");try shot("calendar-month"+mode)
-        XCTAssertTrue(day.waitForExistence(timeout:5));reveal(day.identifier).tap();outcome("obs.row.Haliaeetus leucocephalus.2026-11-14");try shot("calendar-day"+mode);back()
+        XCTAssertTrue(day.appears(timeout:5));reveal(day.identifier).tap();outcome("obs.row.Haliaeetus leucocephalus.2026-11-14");try shot("calendar-day"+mode);back()
         element("stats.period").buttons["本年"].tap();reveal("calendar.month.11");try shot("calendar-year"+mode)
         element("calendar.month.11").tap();outcome("stats.range")
         // Map tiles have no accessibility signal; a short settle for the picture.
         reveal("stats.map").tap();_=reveal("map.noPlace");sleep(1);try shot("map"+mode);back()
         reveal("stats.observationList").tap();let row=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'obs.row.'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout:5));row.tap();let field=reveal("obs.count");try shot("observation-editor"+mode)
+        XCTAssertTrue(row.appears(timeout:5));row.tap();let field=reveal("obs.count");try shot("observation-editor"+mode)
         field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"5");reveal("obs.save").tap()
         label(row,contains:"估计 5",5);back()
         reveal("stats.ebird").tap();_=reveal("ebird.export");try shot("ebird"+mode)
         reveal("ebird.export").tap();XCTAssertTrue(reveal("ebird.message").exists);element("ebird.close").tap()
         tab("tab.explore","探索");outcome("explore.mode")
         let likely=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'explore.row.'")).firstMatch
-        for _ in 0..<40 where !likely.waitForExistence(timeout:1) {app.swipeUp()}
-        XCTAssertTrue(likely.waitForExistence(timeout:30));try shot("explore-local"+mode)
+        for _ in 0..<40 where !likely.appears(timeout:1) {app.swipeUp()}
+        XCTAssertTrue(likely.appears(timeout:30));try shot("explore-local"+mode)
         reveal("home.more").tap();reveal("settings.backup").tap()
         let now=element("backup.now");for _ in 0..<30 where !(now.exists && now.isHittable) {app.swipeUp()}
         now.tap();let ok=element("backup.folderOK")
-        for _ in 0..<10 where !ok.waitForExistence(timeout:1) {app.swipeDown()}
-        XCTAssertTrue(ok.waitForExistence(timeout:20));try shot("backup-folder-ok"+mode)
+        for _ in 0..<10 where !ok.appears(timeout:1) {app.swipeDown()}
+        XCTAssertTrue(ok.appears(timeout:20));try shot("backup-folder-ok"+mode)
     }
     /// Every tab root, species page, pending list, correction sheet and settings.
     func tour(_ mode:String) throws {
@@ -79,13 +79,13 @@ final class LayoutFlows: FlowCase {
         let more=element("explore.more");for _ in 0..<40 where !(more.exists && more.isHittable && clear(more,"explore.more")) {app.swipeUp()}
         XCTAssertTrue(more.isHittable && clear(more,"explore.more"));try shot("explore-last-row")
         tab("tab.records","记录");segment("照片");let rows=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'"))
-        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout:5));for _ in 0..<6 {app.swipeUp()}
+        XCTAssertTrue(rows.firstMatch.appears(timeout:5));for _ in 0..<6 {app.swipeUp()}
         let last=rows.allElementsBoundByIndex.last!;XCTAssertTrue(clear(last,last.identifier));try shot("photos-last-row")
         tab("tab.stats","统计");XCTAssertTrue(reveal("stats.row.Haliaeetus leucocephalus").exists);try shot("stats-last-row")
     }
     func testAlaskaRowAtLargestType() throws {
-        launch(extra:["-largestType","YES"]);reveal("home.place").tap();XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout:5));try shot("alaska-sheet-largest");search("Alaska")
-        let row=element("place.region.US-AK");XCTAssertTrue(row.waitForExistence(timeout:5));XCTAssertTrue(row.isHittable);try shot("alaska-largest");row.tap()
+        launch(extra:["-largestType","YES"]);reveal("home.place").tap();XCTAssertTrue(app.searchFields.firstMatch.appears(timeout:5));try shot("alaska-sheet-largest");search("Alaska")
+        let row=element("place.region.US-AK");XCTAssertTrue(row.appears(timeout:5));XCTAssertTrue(row.isHittable);try shot("alaska-largest");row.tap()
         label(element("home.place"),contains:"阿拉斯加",5)
     }
 }

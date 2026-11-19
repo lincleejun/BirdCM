@@ -1,5 +1,15 @@
 import XCTest
 
+extension XCUIElement {
+    /// waitForExistence re-checks only about once a second, so every element that appeared a moment late cost a
+    /// second; poll every 0.1 s instead.
+    func appears(timeout:Double) -> Bool {
+        let end=Date().addingTimeInterval(timeout)
+        while !exists {if Date()>end {return false};usleep(100_000)}
+        return true
+    }
+}
+
 /// Shared helpers for the UI flows. The flows are split into classes by area so parallel testing can spread them over
 /// simulator clones; screenshots keep the old `-[Flows <test>]-<name>.png` names.
 /// UI fixtures exercise presentation; real inference and cached re-ranking have separate engine checks.
@@ -25,7 +35,7 @@ class FlowCase: XCTestCase {
     }
     func launch(_ state:String="normal",extra:[String]=[],reset:Bool=true) {
         app.terminate();app.launchArguments=["-uiTesting","YES","-resetHistory",reset ? "YES":"NO","-fixtureImage",state=="multiple" ? image.replacingOccurrences(of:"photo-0.jpg",with:"photo-1.jpg"):image,"-fixtureState",state]+extra;app.launch()
-        XCTAssertTrue(element("home.photos").waitForExistence(timeout:20))
+        XCTAssertTrue(element("home.photos").appears(timeout:20))
     }
     /// Hittable is not enough: an element under the action/tab bar still reports hittable, so require its frame to clear them.
     func clear(_ e:XCUIElement,_ id:String) -> Bool {
@@ -38,12 +48,17 @@ class FlowCase: XCTestCase {
         let e=element(id)
         for i in 0..<60 {
             if e.exists && e.isHittable && clear(e,id) {return e}
-            // Short slow drags with a hold (no momentum overshoot); alternate start points so neither the bottom bar nor the pager swallows every attempt.
-            let y=[0.62,0.45,0.7,0.35][i%4], x=i%8<4 ? 0.94:0.06, up = !(e.exists && e.frame.maxY < 90)
-            // Every third try a fast system swipe: slow drags that start on a control inside a sheet may not scroll.
-            // Only while the row is not built yet; once it exists, slow drags place it without overshooting.
+            // Drags with a hold (no momentum overshoot); alternate start points so neither the bottom bar nor the pager swallows every attempt.
+            let x=i%8<4 ? 0.94:0.06
+            // Every third try a fast system swipe: drags that start on a control inside a sheet may not scroll.
+            // Only while the row is not built yet; once it exists, drags place it without overshooting.
             if i%3==2 && !e.exists {app.swipeUp();continue}
-            app.coordinate(withNormalizedOffset:CGVector(dx:x,dy:up ? y:y-0.25)).press(forDuration:0.05,thenDragTo:app.coordinate(withNormalizedOffset:CGVector(dx:x,dy:up ? y-0.25:y)),withVelocity:.slow,thenHoldForDuration:0.1)
+            // A built row is dragged by the distance that puts its centre at 40 % of the screen (at most a quarter screen per
+            // drag), so it neither overshoots nor bounces between "too low" and "too high".
+            var shift=0.25
+            if e.exists && e.frame.height>0 {let h=app.frame.height;shift=max(-0.25,min(0.25,(e.frame.midY-h*0.4)/h));if abs(shift)<0.03 {shift=shift<0 ? -0.03:0.03}}
+            let y=shift>0 ? [0.62,0.45,0.7,0.5][i%4]:[0.35,0.3,0.4,0.45][i%4]
+            app.coordinate(withNormalizedOffset:CGVector(dx:x,dy:y)).press(forDuration:0.05,thenDragTo:app.coordinate(withNormalizedOffset:CGVector(dx:x,dy:y-shift)),withVelocity:XCUIGestureVelocity(600),thenHoldForDuration:0.15)
         }
         try? shot("unreachable-"+id);XCTFail("Missing or unreachable: \(id)");return e
     }
@@ -57,14 +72,19 @@ class FlowCase: XCTestCase {
         }
     }
     func fixture() {
-        reveal("home.more").tap();XCTAssertTrue(element("settings.done").waitForExistence(timeout:5));reveal("home.diagnostics").tap()
-        XCTAssertTrue(element("diagnostics.fixture").waitForExistence(timeout:5));element("diagnostics.fixture").tap()
+        reveal("home.more").tap();XCTAssertTrue(element("settings.done").appears(timeout:5));reveal("home.diagnostics").tap()
+        XCTAssertTrue(element("diagnostics.fixture").appears(timeout:5));element("diagnostics.fixture").tap()
     }
-    func outcome(_ id:String="result.name",file:StaticString=#filePath,line:UInt=#line) {XCTAssertTrue(element(id).waitForExistence(timeout:10),"missing \(id)",file:file,line:line)}
+    func outcome(_ id:String="result.name",file:StaticString=#filePath,line:UInt=#line) {XCTAssertTrue(element(id).appears(timeout:10),"missing \(id)",file:file,line:line)}
     /// Polls every 0.1 s; a predicate expectation re-evaluates only about once a second.
     func until(_ what:String,_ timeout:Double=10,file:StaticString=#filePath,line:UInt=#line,_ done:()->Bool) {
+        if !poll(timeout,done) {XCTFail("timed out: \(what)",file:file,line:line)}
+    }
+    /// True as soon as `done`, false after `timeout` (no failure).
+    func poll(_ timeout:Double,_ done:()->Bool) -> Bool {
         let end=Date().addingTimeInterval(timeout)
-        while !done() {if Date()>end {XCTFail("timed out: \(what)",file:file,line:line);return};usleep(100_000)}
+        while !done() {if Date()>end {return false};usleep(100_000)}
+        return true
     }
     func label(_ e:XCUIElement,contains text:String,_ timeout:Double=10,file:StaticString=#filePath,line:UInt=#line) {
         until("label contains \(text)",timeout,file:file,line:line) {e.exists && e.label.contains(text)}
@@ -75,7 +95,7 @@ class FlowCase: XCTestCase {
     }
     func endSearch() {for label in ["取消","Cancel"] {let b=app.navigationBars.buttons[label].firstMatch;if b.exists && b.isHittable {b.tap();return}}}
     func segment(_ label:String) {app.segmentedControls.buttons[label].firstMatch.tap()}
-    func search(_ text:String) {let f=app.searchFields.firstMatch;XCTAssertTrue(f.waitForExistence(timeout:5));f.tap();f.typeText(text);dismissTypingTip()}
+    func search(_ text:String) {let f=app.searchFields.firstMatch;XCTAssertTrue(f.appears(timeout:5));f.tap();f.typeText(text);dismissTypingTip()}
     var rows:[String] {app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'")).allElementsBoundByIndex.filter{$0.isHittable}.map(\.identifier)}
     func pick(){fixture();outcome()}
     func back(){

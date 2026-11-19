@@ -11,7 +11,7 @@ final class ResultFlows: FlowCase {
             element("result.original").tap();try shot("multiple-original")
             let original=element("result.photo")
             original.coordinate(withNormalizedOffset:CGVector(dx:0.55,dy:0.45)).tap()
-            XCTAssertTrue(element("result.crop.1").waitForExistence(timeout:5))
+            XCTAssertTrue(element("result.crop.1").appears(timeout:5))
         }
         reveal("result.marks").tap();try shot(state+"-no-marks")
         // Candidates are collapsed for a settled answer and open for 不确定 (owner rule); capture both states.
@@ -55,10 +55,10 @@ final class ResultFlows: FlowCase {
         try shot("background-unsupported")
         element("result.save").tap()
         let spring=XCUIApplication(bundleIdentifier:"com.apple.springboard")
-        XCTAssertTrue(spring.alerts.firstMatch.waitForExistence(timeout:5))
+        XCTAssertTrue(spring.alerts.firstMatch.appears(timeout:5))
         spring.alerts.firstMatch.buttons.element(boundBy:spring.alerts.firstMatch.buttons.count-1).tap()
         label(element("result.save"),contains:"已保存")
-        element("result.share").tap();XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout:5) || app.buttons["Copy"].exists || app.buttons["拷贝"].exists || app.buttons["AirDrop"].exists);try shot("share")
+        element("result.share").tap();XCTAssertTrue(app.otherElements["ActivityListView"].appears(timeout:5) || app.buttons["Copy"].exists || app.buttons["拷贝"].exists || app.buttons["AirDrop"].exists);try shot("share")
     }
     func testBackgroundMaskFixtures() throws {
         launch(extra:["-maskFixture","success"]);pick();element("result.background").tap();outcome("result.maskFixture");try shot("mask-fixture-success")
