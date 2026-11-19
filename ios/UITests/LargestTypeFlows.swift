@@ -90,10 +90,9 @@ final class LayoutFlows: FlowCase {
     /// The last row of each scrolling root can be brought fully above the floating tab bar.
     func testLastRowsClearTabBar() throws {
         launch(extra:["-historyFixtureCount","8"]);pick();back()
-        tab("tab.explore","探索");segment("全部物种")
-        // Fling until the row is built, then reveal() places it (and fails unless it clears the tab bar).
-        let more=element("explore.more");for _ in 0..<40 where !more.exists {app.swipeUp()}
-        _=reveal("explore.more");XCTAssertTrue(more.isHittable && clear(more,"explore.more"));try shot("explore-last-row")
+        // No paging any more (every row is listed): a search with few hits makes its last row the list's last row.
+        tab("tab.explore","探索");segment("全部物种");search("Haliaeetus");app.typeText("\n")
+        let lastRow="explore.row.Haliaeetus pelagicus";_=reveal(lastRow);XCTAssertTrue(element(lastRow).isHittable && clear(element(lastRow),lastRow));try shot("explore-last-row")
         tab("tab.records","记录");segment("照片");let rows=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'"))
         XCTAssertTrue(rows.firstMatch.appears(timeout:5));for _ in 0..<6 {app.swipeUp()}
         let last=rows.allElementsBoundByIndex.last!;XCTAssertTrue(clear(last,last.identifier));try shot("photos-last-row")

@@ -122,6 +122,23 @@ final class AppearanceSnapshots: SnapshotCase {
         let loading = model("loading"); loading.paths[.identify] = [.identifying]
         try await shot("loading-preview", nil, wait: 0.5, RootView().environment(loading))
     }
+    /// Species page (当地可能性 + 分布图) for an unseen species, so the new sections are on screen; 探索 rows at the same
+    /// place; the result page's link to the species page. Light and dark. (Its own method: the matrix above takes ~80 s.)
+    @MainActor func testSpeciesDetail() async throws {
+        for mode in [SnapshotCase.light, SnapshotCase.dark] {
+            let m = model("normal")
+            await until { !m.items.isEmpty }
+            try await shot("result-species-link", mode, test: "testSpeciesDetail", RootView().environment(m))
+            m.showing = false
+            m.homePlace = Place(lat: 37.77, lon: -122.42, label: "San Francisco", source: "map")
+            m.tab = .explore
+            // The rows sit under the filters: lay the tab out 2,400 pt tall and show its lower middle.
+            try await shot("explore-local-rows", mode, test: "testSpeciesDetail", wait: 20, NavigationStack { ExploreView() }.environment(m).tint(Palette.accent).frame(height: 2400).offset(y: -500))
+            m.paths[.explore] = [.species("Calypte anna")]
+            try await shot("species-detail", mode, test: "testSpeciesDetail", wait: 20, RootView().environment(m))
+            try await shot("species-range", mode, test: "testSpeciesDetail", wait: 20, NavigationStack { ScrollView { SpeciesRangeMap(key: "Calypte anna").padding(20) } }.environment(m).tint(Palette.accent))
+        }
+    }
 
 }
 
