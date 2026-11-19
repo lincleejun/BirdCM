@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS correction (
 CREATE TABLE IF NOT EXISTS single (
   id INTEGER PRIMARY KEY, stored TEXT NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, region TEXT,
   boxes TEXT, subject INTEGER, result TEXT, error TEXT, fp TEXT, correction TEXT);
+CREATE TABLE IF NOT EXISTS place_name (key TEXT PRIMARY KEY, label TEXT, fetched REAL NOT NULL);
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
 TERMINAL = ("done", "failed")

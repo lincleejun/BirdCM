@@ -3,7 +3,8 @@ the engine and cached on disk (docs/design-species-search.md §4–§9 and the o
 default and only when needed, the first use shows the disclosure, no translation, NC images allowed but labelled).
 
 Only ids and titles from the bundled mapping (data/species-map.sqlite, tools/build_species_map.py) leave the machine:
-a species with no accepted mapping gets nothing, nothing is guessed. Never photos, paths, places or typed text. The
+a species with no accepted mapping gets nothing, nothing is guessed. Never photos, paths, places or typed text (place
+names are places.py: rounded coordinates to OpenStreetMap Nominatim, its own setting in the same file). The
 browser only talks to the engine; the engine only talks to a fixed set of Wikimedia hosts.
 """
 from __future__ import annotations
@@ -42,8 +43,9 @@ TIMEOUT, DEADLINE = 3.0, 8.0                                  # per socket opera
 BY_SA = "https://creativecommons.org/licenses/by-sa/4.0/"
 
 DISCLOSURE = ("在线资料会把你打开的鸟种学名或来源编号发送给 Wikipedia / Wikimedia，以及你启用的图片来源。只有点击「在线查名称/百科」才发送"
-              "输入的搜索词。不会发送你的照片、拍摄信息、观察记录或位置。网站也会接收到网络连接所需的 IP 地址等信息。关闭后仍可离线搜索、"
-              "查看自己的记录和已经缓存的资料；可另行删除网络缓存。")
+              "输入的搜索词。不会发送你的照片、拍摄信息或观察记录；除下面的地名外也不发送位置。网站也会接收到网络连接所需的 IP 地址等信息。关闭后仍可离线搜索、"
+              "查看自己的记录和已经缓存的资料；可另行删除网络缓存。"
+              "「用网络显示地名」只把要显示地名的经纬度（取到约 1 公里）发送给 OpenStreetMap Nominatim，换成地名后存在本机；关闭后显示离线的地区名。")
 
 
 # ---- the mapping ------------------------------------------------------------------------------------------------------
@@ -97,19 +99,20 @@ def _settings_path() -> Path:
 
 
 def settings() -> dict:
+    """enabled: online species reference; places: 用网络显示地名 (places.py)."""
     try:
         s = json.loads(_settings_path().read_text())
     except (OSError, ValueError):
         s = {}
-    return {"enabled": bool(s.get("enabled", True)), "disclosed": bool(s.get("disclosed", False)), "disclosure": DISCLOSURE}
+    return {"enabled": bool(s.get("enabled", True)), "disclosed": bool(s.get("disclosed", False)),
+            "places": bool(s.get("places", True)), "disclosure": DISCLOSURE}
 
 
-def set_settings(enabled: bool | None = None, disclosed: bool | None = None) -> dict:
+def set_settings(enabled: bool | None = None, disclosed: bool | None = None, places: bool | None = None) -> dict:
     s = {k: v for k, v in settings().items() if k != "disclosure"}
-    if enabled is not None:
-        s["enabled"] = enabled
-    if disclosed is not None:
-        s["disclosed"] = disclosed
+    for k, v in (("enabled", enabled), ("disclosed", disclosed), ("places", places)):
+        if v is not None:
+            s[k] = v
     p = _settings_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(s))

@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from birdcm import archive, config, decode, geo, library, models, stars
+from birdcm import archive, config, decode, geo, library, models, places, stars
 from birdcm.pipeline import EQUIVALENT_DATA, EQUIVALENT_OLD_KEY, fingerprint, image_paths
 from birdcm.queue import Scheduler
 from birdcm.store import Store
@@ -65,13 +65,14 @@ def check_location(loc) -> None:
 
 
 def slim_result(res: dict | None, subject: int | None) -> dict | None:
-    """What the history list needs of a result: the shown bird's name and the photo's time and GPS."""
+    """What the history list needs of a result: the shown bird's name and the photo's time, GPS and place name."""
     if not res:
         return None
     i = subject if subject is not None else res.get("subject")
     b = res["boxes"][i] if i is not None and i < len(res.get("boxes") or []) else None
     return {"species": b["species"] if b else res.get("species"), "rejected": res["rejected"], "reject_reason": res["reject_reason"],
-            "taken_at": res["exif"].get("taken_at"), "gps": res["exif"].get("gps")}
+            "taken_at": res["exif"].get("taken_at"), "gps": (g := res["exif"].get("gps")),
+            "place": places.name(*g)["label"] if g and len(g) == 2 and geo.valid(*g) else None}
 
 
 class Guard:
@@ -214,25 +215,24 @@ class NewScan(BaseModel):
 
 
 # OpenStreetMap Nominatim, per its usage policy: an identifying User-Agent (no personal details), at most one request a
-# second, no autocomplete (the page only asks on Enter), answers cached. ponytail: in-memory cache, gone on restart.
+# second (shared with the place names, places.py), no autocomplete (the page only asks on Enter), answers cached.
+# ponytail: in-memory cache, gone on restart.
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
-_places_lock = threading.Lock()
 _places_cache: dict[str, list] = {}
-_places_last = [0.0]
 
 
 def places_search(q: str, fetch=None) -> list[dict]:
     import urllib.parse, urllib.request
     key = q.lower()
-    with _places_lock:                                       # serialises requests, so the 1/s spacing holds across threads
+    with places.LOCK:                                        # serialises requests, so the 1/s spacing holds across threads
         if key in _places_cache:
             return _places_cache[key]
-        wait = 1.0 - (time.monotonic() - _places_last[0])
+        wait = places.GAP - (time.monotonic() - places.LAST[0])
         if wait > 0:
             time.sleep(wait)
-        _places_last[0] = time.monotonic()
+        places.LAST[0] = time.monotonic()
         url = NOMINATIM + "?" + urllib.parse.urlencode({"format": "jsonv2", "limit": 6, "accept-language": "zh,en", "q": q})
-        req = urllib.request.Request(url, headers={"User-Agent": "BirdCM/0.1 (open-source local bird photo culling app)"})
+        req = urllib.request.Request(url, headers={"User-Agent": places.UA})
         if fetch is None:
             with urllib.request.urlopen(req, timeout=8) as r:
                 rows = json.load(r)
@@ -275,10 +275,12 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             return Engine(exif=exif)
     sched = Scheduler(store, engine_factory)
     previews = Previews()
+    names = places.use(store)
 
     @contextlib.asynccontextmanager
     async def lifespan(_app):
         if start_scheduler:
+            names.start()                                   # place names: one paced background lookup thread
             sched.start()                                   # loads the models in the background: the page is up at once
             api.state.library.refresh()                     # a restart with a dirty index rebuilds it (background)
             for (sid,) in store._db().execute("SELECT id FROM single WHERE result IS NULL AND error IS NULL"):
@@ -323,7 +325,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         return geo.catalogue()
 
     @api.get("/api/places")
-    def places(q: str):
+    def place_search(q: str):
         q = q.strip()[:200]
         if not q:
             return []
@@ -331,6 +333,14 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             return places_search(q)
         except Exception as e:  # offline, timeout, HTTP error: the map's local matches still work
             raise HTTPException(502, f"在线地名搜索用不了：{e}")
+
+    @api.get("/api/places/name")
+    def place_name(lat: float, lon: float):
+        """{label, online, pending}: the point's place name now (cached online name, else the offline region); pending =
+        an online lookup is queued, ask again in a moment."""
+        if not geo.valid(lat, lon):
+            raise HTTPException(422, "经纬度不对")
+        return names.name(lat, lon)
 
     @api.post("/api/pick-folder")
     def pick_folder():
@@ -1062,12 +1072,13 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
 
     @api.post("/api/online/settings")
     def online_set(body: dict):
-        if any(not isinstance(body.get(k, False), bool) for k in ("enabled", "disclosed")):
-            raise HTTPException(422, "enabled / disclosed 要是 true / false")
-        return online.set_settings(body.get("enabled"), body.get("disclosed"))
+        if any(not isinstance(body.get(k, False), bool) for k in ("enabled", "disclosed", "places")):
+            raise HTTPException(422, "enabled / disclosed / places 要是 true / false")
+        return online.set_settings(body.get("enabled"), body.get("disclosed"), body.get("places"))
 
     @api.delete("/api/online/cache")
     def online_clear():
+        places.clear(store)                            # the cached place names go too
         return {"deleted_bytes": online.clear()}
 
     @api.get("/api/species/reference")

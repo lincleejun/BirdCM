@@ -985,7 +985,7 @@ def species_detail(ix: Index, sci: str, frm=None, to=None) -> dict:
         months[int(g["day"][5:7]) - 1] += 1
         r0 = g["rows"][0]
         p = places.setdefault(g["place_key"], {"place_key": g["place_key"], "label": place_text(r0), "source": r0["place_source"],
-                                               "region_code": r0["region_code"], "observations": 0})
+                                               "region_code": r0["region_code"], "lat": r0["lat"], "lon": r0["lon"], "observations": 0})
         p["observations"] += 1
         for r in g["rows"]:
             k = (r["local_day"], r["capture_wall"] or "", r["asset_hash"], r["subject_id"])
@@ -1021,11 +1021,14 @@ def photo_list(ix: Index, sci=None, day=None, status="all", frm=None, to=None, o
                 continue
         best = next((r for r in subs if r["eligible"]), subs[0] if subs else next(r for r in rows if r["level"] == "photo"))
         out.append({**ref(best), "day": c["local_day"], "level": best["level"], "species_key": best["species_key"],
-                    "subjects": len(subs), "date_source": c["date_source"], "place_label": c["place_label"],
+                    "subjects": len(subs), "date_source": c["date_source"], "lat": c["lat"], "lon": c["lon"], "_row": c,
                     "_k": (c["local_day"], c["capture_wall"] or "", h, best["subject_id"])})
     out.sort(key=lambda x: x["_k"], reverse=True)
     page = [{k: v for k, v in x.items() if k != "_k"} for x in out[offset:offset + limit]]
     for x in page:                                       # the list shows the two-line name block, not the bare Latin
+        if "_row" in x:                                  # the place name: only for the rows shown
+            c = x.pop("_row")
+            x["place_label"] = place_text(c) if c["place_key"] != "none" else None
         if x["species_key"]:
             n = names_of(x["species_key"])
             x.update(zh=n["zh"], en=n["en"])
@@ -1071,16 +1074,17 @@ def of(store, **kw) -> Library:
 
 
 def place_text(r: dict) -> str | None:
-    """A row's place for people: its own label, else the region the point is in (the one point -> region mapping)
-    with the point, else the region code."""
-    if r["place_label"]:
-        return r["place_label"]
-    from birdcm import rarity
+    """A row's place name for people, English (owner, 2026-11-18; the page adds the point as a caption): a point's
+    place name (places.py: the cached online name, else its region), unless the row carries a label of its own that is
+    not one of our generated region labels (an imported record's text); a region's English name; else its label."""
+    from birdcm import places, rarity
+    own = r["place_label"]
     if r["lat"] is not None:
-        div, country = rarity.place_region(r["lat"], r["lon"])
-        name = rarity.iso_label(div) or rarity.iso_label(country) or (rarity.region_names(div or country) or (None, None))[1]
-        return f"{name + ' ' if name else ''}{r['lat']:.3f}, {r['lon']:.3f}"
-    return r["region_code"]
+        if own and not rarity.label_iso(own):
+            return own
+        return places.name(r["lat"], r["lon"])["label"]
+    code = r["region_code"] or rarity.label_iso(own)
+    return places.region_text(code) or own or code
 
 
 def cover_of(rows: list[dict]) -> dict:

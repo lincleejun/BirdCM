@@ -20,7 +20,7 @@ import time
 import uuid
 from pathlib import Path
 
-from birdcm import library
+from birdcm import library, places
 
 APPLICATION_ID = 1112101441
 MIME = "application/vnd.birdcm.archive"
@@ -152,7 +152,9 @@ def export(lib: "library.Library", out: Path, frm: str | None = None, to: str | 
                        "fallback_wall": fb["fallback_wall"], "fallback_offset_min": fb["fallback_offset_min"],
                        "date_source": c["date_source"], "local_day": c["local_day"],
                        "date_edit_json": json.dumps(pe["date"]["value"]) if pe.get("date") else None,
-                       "lat": c["lat"], "lon": c["lon"], "place_label": c["place_label"], "place_source": c["place_source"],
+                       # a photo's GPS has no label of its own: the cached online place name rides along (places.py)
+                       "lat": c["lat"], "lon": c["lon"], "place_source": c["place_source"],
+                       "place_label": c["place_label"] or (places.cached_label(c["lat"], c["lon"]) if c["lat"] is not None else None),
                        "region_code": c["region_code"], "place_edit_json": json.dumps(pe["place"]["value"], ensure_ascii=False) if pe.get("place") else None,
                        "payload_json": json.dumps(strip({"source": c["source_kind"], "file": src.name, "result": res}), ensure_ascii=False),
                        "revision": 1}
