@@ -71,5 +71,5 @@ is generated from the actual compiled resources; launch checks it without copyin
 Apple MapKit search/tiles are provided by Apple at runtime; their native attribution is preserved.
 Test photos remain CC0-only and are not resources of the Release app. No owner photographs are used.
 
-- App icon and product mark (kingfisher “K1”, `ios/BirdCM/Assets.xcassets`, sources in `ios/design/icon/`): original artwork made for this project, under the project's MIT licence.
+- App icon and product mark (kingfisher, round-4 design B, `ios/BirdCM/Assets.xcassets`, sources in `ios/design/icon/`): original artwork made for this project, under the project's MIT licence.
 - `ios/BirdCM/Resources/ebird-names.csv`: an unchanged copy of `engine/birdcm/data/ebird-names.csv` above (AviList v2026 extended file, CC BY 4.0), bundled in the iOS app for the eBird link and file.

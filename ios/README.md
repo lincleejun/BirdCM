@@ -152,4 +152,4 @@ Python 参考已重新生成：`tools/regenerate_crop_references.py ../BirdCM` �
 
 Debug 启动参数：`-legacyFixture N`（启动前写一个旧格式历史，测迁移）、`-maskFixture success|none|unsupported`、`-cameraFixture YES`、`-historyFixtureCount N`（不同字节、日期、鸟种）。与规格的出入见 `docs/deviations.md` 第 43 条起。
 
-应用图标与首页小标识是本项目原创的翠鸟图形 “K1”（`BirdCM/Assets.xcassets`，源文件 `design/icon/*.svg`），随项目以 MIT 许可发布。
+应用图标与首页小标识是本项目原创的翠鸟图形（第四轮方案 B，按 Apple 图标网格放大主体）（`BirdCM/Assets.xcassets`，源文件 `design/icon/*.svg`），随项目以 MIT 许可发布。
