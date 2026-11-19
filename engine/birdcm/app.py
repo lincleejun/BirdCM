@@ -497,7 +497,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             raise HTTPException(400, "范围只能是 one / burst / same")
         if not body.undo and body.sci is not None and body.sci not in names.catalogue():
             raise HTTPException(400, f"名录里没有这个学名：{body.sci}")
-        photos = store.snapshot(sid)["photos"]
+        photos = store.snapshot(sid, slim_results=True)["photos"]        # ids, bursts and the shown species only
         me = next((p for p in photos if p["id"] == body.photo_id), None)
         if not me:
             raise HTTPException(404, "这次扫描里没有这张照片")
