@@ -1,0 +1,69 @@
+import XCTest
+
+/// 记录 and settings: photo search/sort/delete/clear, correction and count, pending, migration, backup, about.
+final class RecordFlows: FlowCase {
+    func openPhotos() {back();tab("tab.records","记录");segment("照片");outcome("history.sort")}
+    /// history.sort is reachable at 0, 1, 7 and 8 records and while filtered, under 记录, and actually reorders.
+    func testHistorySearchSortDeleteClear() throws {
+        launch();tab("tab.records","记录");segment("照片");outcome("history.search");outcome("history.sort");try shot("photos-empty")
+        for n in [1,7] {launch(extra:["-historyFixtureCount","\(n)"]);pick();openPhotos();XCTAssertTrue(element("history.search").isHittable)}
+        launch(extra:["-historyFixtureCount","8"]);pick();openPhotos()
+        let before=rows;element("history.sort").tap()
+        until("rows reorder",5) {self.rows != before}
+        let after=rows;XCTAssertNotEqual(before,after);try shot("history-sorted")
+        element("history.sort").tap()
+        let search=element("history.search");search.tap();search.typeText("Bald");dismissTypingTip()
+        XCTAssertTrue(element("history.sort").isHittable);try shot("history-search")
+        app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'")).firstMatch.tap();outcome();back()
+        search.tap();search.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:4))
+        let doomed=rows[0];element(doomed).tap();outcome()
+        reveal("result.delete").tap();element("result.confirmDelete").tap();XCTAssertTrue(element("history.sort").waitForExistence(timeout:5))
+        XCTAssertTrue(app.buttons[doomed].waitForNonExistence(timeout:5))
+        element("home.more").tap();element("history.clear").tap();element("history.confirmClear").tap();element("settings.done").tap()
+        XCTAssertTrue(element("history.sort").waitForExistence(timeout:5));until("rows cleared",5) {self.rows.isEmpty};try shot("history-cleared")
+    }
+    /// Correction: Royal and Elegant Tern independently searchable; save, uncertain, reset; count edit.
+    func testCorrectSpeciesCountAndReset() throws {
+        launch();pick()
+        reveal("result.correctSpecies").tap();outcome("correction.uncertain");try shot("correction-sheet")
+        element("correction.cancel").tap();XCTAssertEqual(element("result.name").label,"白头海雕")
+        reveal("result.correctSpecies").tap();search("Elegant Tern");outcome("correction.row.Thalasseus elegans")
+        app.searchFields.firstMatch.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:12)+"Royal Tern")
+        element("correction.row.Thalasseus maximus").tap()
+        outcome("correction.review");try shot("correction-review");element("correction.save").tap()
+        outcome("result.corrected");XCTAssertNotEqual(element("result.name").label,"白头海雕");try shot("corrected")
+        reveal("result.correctSpecies").tap();element("correction.uncertain").tap()
+        until("name 不确定",5) {self.element("result.name").label=="不确定"}
+        reveal("result.correctSpecies").tap();element("correction.reset").tap()
+        until("name 白头海雕",5) {self.element("result.name").label=="白头海雕"}
+        reveal("result.count").tap();let field=element("count.field");field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"3");element("count.save").tap()
+        label(element("result.count"),contains:"数量 3",5)
+        reveal("result.exclude").tap();outcome("result.excluded");try shot("excluded");element("result.exclude").tap()
+    }
+    func testPendingListOpensSubject() throws {
+        launch("uncertain");pick();back();tab("tab.records","记录");segment("待确认")
+        let item=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'pending.item.'")).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout:5));try shot("pending");item.tap();outcome("result.correctSpecies")
+    }
+    func testMigrationFromOldStore() throws {
+        launch(extra:["-legacyFixture","3"]);tab("tab.records","记录");outcome("records.species.Haliaeetus leucocephalus");try shot("migrated-species")
+        segment("照片");XCTAssertEqual(rows.count,3)
+        element("home.more").tap();element("settings.backup").tap();XCTAssertTrue(reveal("backup.issues").label.contains("1"));try shot("migration-recovery")
+    }
+    func testBackupExportPreviewMerge() throws {
+        launch(extra:["-historyFixtureCount","3"]);pick();back()
+        element("home.more").tap();try shot("settings");element("settings.backup").tap();try shot("backup")
+        reveal("backup.selfTest").tap();let merge=element("backup.merge")
+        for _ in 0..<20 where !(merge.waitForExistence(timeout:1) && merge.isHittable) {app.swipeUp()};try shot("backup-preview")
+        merge.tap();let message=element("backup.message")
+        for _ in 0..<12 where !message.waitForExistence(timeout:1) {app.swipeDown()}
+        label(message,contains:"新增 0",20)
+    }
+    func testAboutLicencesAndDiagnostics() throws {
+        launch();element("home.more").tap();element("home.about").tap();try shot("about")
+        reveal("about.licences").tap();try shot("licences");element("resource.back").tap()
+        XCTAssertTrue(element("sheet.done").waitForExistence(timeout:5));element("sheet.done").tap()
+        XCTAssertTrue(element("home.diagnostics").waitForExistence(timeout:5));element("home.diagnostics").tap();try shot("diagnostics");element("sheet.done").tap()
+        element("settings.done").tap()
+    }
+}
