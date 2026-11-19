@@ -16,9 +16,9 @@ final class LargestTypeFlows: FlowCase {
         pick();back()
         tab("tab.stats","统计");outcome("stats.species");try shot("stats"+mode)
         let day=app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'calendar.day.'")).firstMatch
-        reveal("stats.calendar");try shot("calendar-month"+mode)
+        _=reveal("stats.calendar");try shot("calendar-month"+mode)
         XCTAssertTrue(day.appears(timeout:5));reveal(day.identifier).tap();outcome("obs.row.Haliaeetus leucocephalus.2026-11-14");try shot("calendar-day"+mode);back()
-        element("stats.period").buttons["本年"].tap();reveal("calendar.month.11");try shot("calendar-year"+mode)
+        element("stats.period").buttons["本年"].tap();_=reveal("calendar.month.11");try shot("calendar-year"+mode)
         element("calendar.month.11").tap();outcome("stats.range")
         // Map tiles have no accessibility signal; a short settle for the picture.
         reveal("stats.map").tap();_=reveal("map.noPlace");sleep(1);try shot("map"+mode);back()
@@ -65,8 +65,8 @@ final class LayoutFlows: FlowCase {
     func testResultFooterAboveBars() throws {
         for extra in [[String](),["-largestType","YES"]] {
             launch(extra:extra);pick()
-            let footer=element("result.footer"),page=element("result.scroll")
-            for _ in 0..<30 where !(footer.isHittable && clear(footer,"result.footer")) {page.swipeUp(velocity:.slow)}
+            // reveal() fails unless the footer ends up hittable and fully above the action and tab bars.
+            let footer=reveal("result.footer")
             XCTAssertTrue(footer.isHittable)
             let bar=element("result.photos").frame
             XCTAssertLessThanOrEqual(footer.frame.maxY,bar.minY+1);try shot("footer"+extra.joined())

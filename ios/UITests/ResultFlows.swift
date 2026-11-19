@@ -36,6 +36,11 @@ final class ResultFlows: FlowCase {
         XCTAssertTrue(reveal("result.priorWarning").exists)
         XCTAssertEqual(element("result.localRarity").value as? String,"不常见")
     }
+    func testResultUnknownPrior() throws {try resultState("unknown-prior")}
+}
+
+/// The result page beyond the fixture states: GBIF tier without a prior warning, range warning, background, save/share, manual box.
+final class ResultExtraFlows: FlowCase {
     func testResultGBIFRareWithoutPriorWarning() throws {
         launch("gbif-rare");pick();try shot("gbif-rare")
         XCTAssertEqual(element("result.localRarity").value as? String,"少见");XCTAssertFalse(element("result.priorWarning").exists)
@@ -44,7 +49,6 @@ final class ResultFlows: FlowCase {
         launch("uncertain-geo");pick();try shot("uncertain-geo")
         XCTAssertTrue(reveal("result.priorWarning").exists);XCTAssertFalse(element("result.localRarity").exists)
     }
-    func testResultUnknownPrior() throws {try resultState("unknown-prior")}
     func testCropBackgroundSaveAndShare() throws {
         // Revoking a privacy grant terminates a running app (TCC exit, seen in the full suite); reset before launching.
         app.resetAuthorizationStatus(for:.photos)
