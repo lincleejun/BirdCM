@@ -61,6 +61,7 @@ cp "$B/icon/MenuIcon.png" "$B/icon/MenuIcon@2x.png" "$C/Resources/"
 sed "s/__VERSION__/$VERSION/g" "$M/Info.plist" > "$C/Info.plist"
 install -m 755 "$M/launcher.sh" "$E/birdcm"
 cp models.toml "$E/models.toml"
+mkdir -p "$E/data" && cp data/species-map.sqlite "$E/data/"     # online.py finds it next to the bundled python
 L=$C/Resources/licenses
 cp LICENSE "$L/BirdCM-LICENSE.txt"
 cp NOTICE.md "$L/NOTICE.md"

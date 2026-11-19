@@ -1,0 +1,90 @@
+{
+ "url": "https://commons.wikimedia.org/w/api.php?action=query&prop=imageinfo&titles=File%3ANaturalis+Biodiversity+Center+-+RMNH.AVES.135708+2+-+Sericornis+arfakianus+%28Salvadori%2C+1876%29+-+Acanthizidae+-+bird+skin+specimen.jpeg&format=json&formatversion=2&iiprop=url%7Cextmetadata%7Csha1%7Cmime%7Csize&iiurlwidth=640&iiextmetadatafilter=Artist%7CCredit%7CAttribution%7CAttributionRequired%7CLicenseShortName%7CLicense%7CLicenseUrl%7CUsageTerms%7CRestrictions%7CNonFree%7CDeletionReason%7CObjectName",
+ "request_headers": {},
+ "retrieved": "2026-11-19T01:40:21Z",
+ "status": 200,
+ "headers": {
+  "content-type": "application/json; charset=utf-8"
+ },
+ "body": {
+  "batchcomplete": true,
+  "query": {
+   "pages": [
+    {
+     "pageid": 45109471,
+     "ns": 6,
+     "title": "File:Naturalis Biodiversity Center - RMNH.AVES.135708 2 - Sericornis arfakianus (Salvadori, 1876) - Acanthizidae - bird skin specimen.jpeg",
+     "imagerepository": "local",
+     "imageinfo": [
+      {
+       "size": 254947,
+       "width": 1920,
+       "height": 1277,
+       "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ef/Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg/960px-Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+       "thumbwidth": 640,
+       "thumbheight": 426,
+       "responsiveUrls": {
+        "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ef/Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg/1280px-Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+       },
+       "thumbattribs": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ef/Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg/960px-Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "decoding": "async",
+        "loading": "lazy",
+        "width": 640,
+        "height": 426,
+        "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ef/Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg/1280px-Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+       },
+       "url": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_%28Salvadori%2C_1876%29_-_Acanthizidae_-_bird_skin_specimen.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+       "descriptionurl": "https://commons.wikimedia.org/wiki/File:Naturalis_Biodiversity_Center_-_RMNH.AVES.135708_2_-_Sericornis_arfakianus_(Salvadori,_1876)_-_Acanthizidae_-_bird_skin_specimen.jpeg",
+       "descriptionshorturl": "https://commons.wikimedia.org/wiki/Special:Redirect/page/45109471",
+       "sha1": "5227127fb4c2635c596466565ccb2f6ac5e13a4c",
+       "extmetadata": {
+        "ObjectName": {
+         "value": "Naturalis Biodiversity Center - RMNH.AVES.135708 2 - Sericornis arfakianus (Salvadori, 1876) - Acanthizidae - bird skin specimen",
+         "source": "mediawiki-metadata"
+        },
+        "Artist": {
+         "value": "Salvadori, 1876",
+         "source": "commons-desc-page"
+        },
+        "Credit": {
+         "value": "<bdi><a href=\"https://en.wikipedia.org/wiki/en:Naturalis_Biodiversity_Center\" class=\"extiw\" title=\"w:en:Naturalis Biodiversity Center\"><span title=\"natural history museum and research center in the Leiden, The Netherlands\">Naturalis Biodiversity Center</span></a>\n</bdi>",
+         "source": "commons-desc-page"
+        },
+        "LicenseShortName": {
+         "value": "CC0",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "UsageTerms": {
+         "value": "Creative Commons Zero, Public Domain Dedication",
+         "source": "commons-desc-page"
+        },
+        "AttributionRequired": {
+         "value": "false",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "LicenseUrl": {
+         "value": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+         "source": "commons-desc-page"
+        },
+        "Restrictions": {
+         "value": "",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "License": {
+         "value": "cc0",
+         "source": "commons-templates",
+         "hidden": ""
+        }
+       },
+       "mime": "image/jpeg"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

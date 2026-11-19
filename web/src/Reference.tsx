@@ -8,7 +8,7 @@ import { del, get, post } from "./api";
 interface Card {
   state: "ok" | "stale" | "none" | "unmapped" | "off" | "unavailable" | "busy" | "missing"; why?: string; problem?: string;
   cached_at?: string; due?: boolean; lang?: string; title?: string; text?: string; source_url?: string; history_url?: string;
-  revision?: string; licence?: string; licence_url?: string; credit?: string; changes?: string; author?: string; nc?: boolean;
+  revision?: string; licence?: string; licence_url?: string; credit?: string; changes?: string; author?: string | null; nc?: boolean;
   attribution?: string; width?: number; height?: number;
 }
 interface Reference { summary: Card; image: Card; links: { name: string; url: string }[] }
@@ -79,9 +79,10 @@ export default function SpeciesReference({ sci, own }: { sci: string; own: numbe
             <img src={`/api/species/reference/image?sci=${encodeURIComponent(sci)}&v=${img.cached_at}`} alt={own ? "网络参考图" : "网络参考图，不是你的观察"}
               width={img.width} height={img.height} onError={() => setImgOk(false)} />
             <figcaption><b className="ref-label">{own ? "参考图" : "网络参考图，不是你的观察"}</b>
-              照片：<a href={img.source_url} {...ext}>{img.author}</a> · <a href={img.licence_url} {...ext}>{img.licence}</a>
+              照片：<a href={img.source_url} {...ext}>{img.author ?? "作者见 Commons 文件页"}</a> · <a href={img.licence_url} {...ext}>{img.licence}</a>
               {img.nc && <span className="pill">非商业许可（NC）</span>}
-              {img.attribution && <> · {img.attribution}</>} · 来源 <a href={img.source_url} {...ext}>Wikimedia Commons 文件页</a>
+              {img.credit && img.credit !== img.author && !/^own work$/i.test(img.credit) && <> · 出处 {img.credit}</>}
+              {" "}· 来源 <a href={img.source_url} {...ext}>Wikimedia Commons 文件页</a>
               {img.changes && <> · {img.changes}</>} · 缓存于 {img.cached_at}{img.state === "stale" && "（离线显示缓存）"}</figcaption>
           </> : <div className="ref-empty">{img ? problem(img, () => refresh(["image"], true), "可用的授权参考图") : <p className="hint">正在读取…</p>}</div>}
         </figure>

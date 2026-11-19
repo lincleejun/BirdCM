@@ -230,6 +230,45 @@ COMMONS = "https://commons.wikimedia.org/w/api.php"
 THUMB = "https://thumb.wikimedia.org/"
 
 
+@pytest.mark.parametrize("artist,author", [
+    ("Salvadori, 1876", None), ("(Linnaeus, 1758)", None), ("Gould & Sharpe, 1880", None), ("<span> </span>", None),
+    ("Diliff", "Diliff"), ('<a href="//commons.wikimedia.org/wiki/User:X">JJ Harrison</a> (https://www.jjharrison.com.au/)',
+                           "JJ Harrison (https://www.jjharrison.com.au/)"), ("Ernst Haeckel 1904", "Ernst Haeckel 1904"),
+])
+def test_author_is_not_a_taxon_authority(artist, author):
+    assert online._author({"Artist": artist}) == author
+    assert online._author({"Artist": artist, "Attribution": "<b>Photo by Y</b>"}) == "Photo by Y"    # the required credit line wins
+
+
+def authority_fixture(licence_code=None):
+    f = fixture("commons-imageinfo-authority-as-artist.json")      # Naturalis specimen photo: Artist "Salvadori, 1876", CC0
+    if licence_code:
+        f["body"]["query"]["pages"][0]["imageinfo"][0]["extmetadata"]["License"]["value"] = licence_code
+    return f
+
+
+def test_cc0_with_authority_as_artist_points_to_the_file_page(net):
+    net.routes[COMMONS] = authority_fixture()
+    net.routes[THUMB] = jpeg()
+    c = online.card("image", "Passer domesticus", network=True)
+    assert c["state"] == "ok" and c["licence"] == "CC0 1.0" and c["author"] is None
+    assert c["credit"] == "Naturalis Biodiversity Center" and c["source_url"].startswith("https://commons.wikimedia.org/wiki/File:")
+
+
+def test_attribution_licence_with_authority_as_artist_is_refused(net):
+    net.routes[COMMONS] = authority_fixture("cc-by-4.0")
+    c = online.card("image", "Passer domesticus", network=True)
+    assert c["state"] == "none" and "作者" in c["why"] and online.cached_file("Passer domesticus") is None
+    f = authority_fixture("cc-by-sa-3.0")
+    f["body"]["query"]["pages"][0]["imageinfo"][0]["extmetadata"]["Artist"]["value"] = ""
+    net.routes[COMMONS] = f
+    assert online.card("image", "Passer domesticus", network=True, force=True)["state"] == "none"
+
+
+def test_disclosure_names_only_what_is_built():
+    assert "地区包" not in online.DISCLOSURE and "不会发送你的照片" in online.DISCLOSURE
+
+
 def test_image_rendition_404_is_absent(net):
     net.routes[COMMONS] = fixture("commons-imageinfo-cc-by-sa.json")
     net.routes[THUMB] = urllib.error.HTTPError(THUMB, 404, "not found", {}, None)

@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import threading
 import time
 import urllib.error
@@ -24,7 +25,12 @@ from pathlib import Path
 
 from birdcm import config
 
-MAP = Path(os.environ.get("BIRDCM_SPECIES_MAP") or Path(__file__).resolve().parents[2] / "data" / "species-map.sqlite")
+# BIRDCM_SPECIES_MAP, else the source checkout's data/, else the Mac app's Resources/engine/data/ (macos/build.sh copies
+# it there; the bundled interpreter is Resources/engine/python, so sys.prefix's parent is Resources/engine)
+MAP = Path(os.environ.get("BIRDCM_SPECIES_MAP") or next(
+    (p for p in (Path(__file__).resolve().parents[2] / "data" / "species-map.sqlite",
+                 Path(sys.prefix).resolve().parent / "data" / "species-map.sqlite") if p.is_file()),
+    Path(__file__).resolve().parents[2] / "data" / "species-map.sqlite"))
 UA = "BirdCM/0.1 (https://github.com/lincleejun/BirdCM; open-source local bird photo app)"
 HOSTS = {"zh.wikipedia.org", "en.wikipedia.org", "commons.wikimedia.org", "upload.wikimedia.org", "thumb.wikimedia.org"}
 ACCEPT = {"exact-reviewed", "synonym-reviewed"}
@@ -37,7 +43,7 @@ BY_SA = "https://creativecommons.org/licenses/by-sa/4.0/"
 
 DISCLOSURE = ("在线资料会把你打开的鸟种学名或来源编号发送给 Wikipedia / Wikimedia，以及你启用的图片来源。只有点击「在线查名称/百科」才发送"
               "输入的搜索词。不会发送你的照片、拍摄信息、观察记录或位置。网站也会接收到网络连接所需的 IP 地址等信息。关闭后仍可离线搜索、"
-              "查看自己的记录和已经缓存的资料；可另行删除网络缓存。下载地区包会请求该包的素材，可能透露你关注的鸟种或地区。")
+              "查看自己的记录和已经缓存的资料；可另行删除网络缓存。")
 
 
 # ---- the mapping ------------------------------------------------------------------------------------------------------
@@ -355,10 +361,24 @@ def _plain(v: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", v or "")).strip()
 
 
+_AUTHORITY = re.compile(r"^\(?\s*[^\d()]+,\s*\d{4}\s*\)?$")      # "Salvadori, 1876", "(Linnaeus, 1758)": a taxon authority
+
+
+def _author(meta: dict) -> str | None:
+    """Who to credit, from the Commons fields as plain text: Attribution (the author's own required credit line) first,
+    then Artist. An empty Artist, or one that is a taxonomic authority citation (Commons often fills Artist from the
+    species name of a specimen photo), is not an author: None."""
+    att = _plain(meta.get("Attribution") or "")
+    if att:
+        return att
+    a = _plain(meta.get("Artist") or "")
+    return None if not a or _AUTHORITY.match(a) else a
+
+
 def licence(meta: dict) -> tuple[bool, dict | str]:
     """The per-file licence gate (design §7, owner decision on NC): CC0, CC BY, CC BY-SA with a version pass; CC BY-NC
     (-SA) pass labelled nc; ND, public domain without a verified basis, GFDL-only, unknown, version-less, non-free,
-    restricted, being deleted, or without an author do not. meta = Commons extmetadata (values, not {value: ...})."""
+    restricted, being deleted, or (unless CC0) without a reliable author do not. meta = Commons extmetadata (values, not {value: ...})."""
     code = (meta.get("License") or "").strip().lower()
     if str(meta.get("NonFree", "")).lower() in ("true", "1"):
         return False, "非自由文件"
@@ -366,12 +386,12 @@ def licence(meta: dict) -> tuple[bool, dict | str]:
         return False, "文件正在删除讨论中"
     if _plain(meta.get("Restrictions") or ""):
         return False, "文件带额外限制"
-    author = _plain(meta.get("Artist") or "")
-    if not author:
-        return False, "缺作者署名"
+    author = _author(meta)
     url = (meta.get("LicenseUrl") or "").strip()
-    if code == "cc0":
+    if code == "cc0":                 # no attribution required: without a reliable author the page points to the file page
         return True, {"licence": "CC0 1.0", "licence_url": url or "https://creativecommons.org/publicdomain/zero/1.0/", "nc": False, "author": author}
+    if not author:
+        return False, "缺可靠的作者署名"
     m = _CC.match(code)
     if not m or "-nd" in code:
         return False, f"许可不在白名单：{meta.get('LicenseShortName') or code or '未知'}"
