@@ -103,7 +103,7 @@ final class ResultExtraFlows: FlowCase {
             outcome("result.corrected");XCTAssertTrue(reveal("iucn.VU").exists);try shot("iucn-result"+mode)
             back();tab("tab.records","记录");segment("鸟种");reveal("records.species.Haliaeetus pelagicus").tap();outcome("species.name")
             XCTAssertTrue(reveal("iucn.VU").exists);try shot("iucn-species"+mode);back()
-            tab("tab.explore","探索");segment("全部物种");search("Steller");outcome("explore.row.Haliaeetus pelagicus")
+            tab("tab.explore","探索");segment("全部物种");search("Steller");app.typeText("\n");outcome("explore.row.Haliaeetus pelagicus")
             XCTAssertTrue(element("explore.row.Haliaeetus pelagicus").label.contains("易危"),"the row carries the VU chip");try shot("iucn-explore"+mode)
         }
     }

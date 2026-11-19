@@ -25,7 +25,7 @@ struct CropThumbnail:View {
     /// Decoded crops at their on-screen pixel size, keyed by photo / subject / window / frame; evicted under memory pressure.
     static let cache:NSCache<NSString,CGImage>={let c=NSCache<NSString,CGImage>();c.totalCostLimit=48<<20;return c}()
     /// At most four decodes at once: a fast scroll through a large grid never stacks dozens of transient bitmaps.
-    static let gate=Gate(4)
+    nonisolated static let gate=Gate(4)
     /// Long-edge pixels for a window filling `frame` at `scale`, capped: the frame × screen scale, never a fixed thumbnail size.
     nonisolated static func edge(window:[Double],size:CGSize,frame:CGSize,scale:CGFloat) -> Int {
         let w=max(1,(window[2]-window[0])*size.width),h=max(1,(window[3]-window[1])*size.height)
