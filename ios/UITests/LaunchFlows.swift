@@ -50,7 +50,10 @@ final class LaunchFlows: XCTestCase {
         wait("identifying.found",60);XCTAssertEqual(element("identifying.found").label,"找到 1 只鸟");shot("found-boxes")
         wait("result.name",90);XCTAssertEqual(element("result.name").label,"白头海雕")
     }
-    func shot(_ name:String) {let a=XCTAttachment(screenshot:XCUIScreen.main.screenshot());a.name=name;a.lifetime = .keepAlways;add(a)}
+    func shot(_ name:String) {
+        let s=XCUIScreen.main.screenshot(),a=XCTAttachment(screenshot:s);a.name=name;a.lifetime = .keepAlways;add(a)
+        if let folder=ProcessInfo.processInfo.environment["SCREENSHOT_DIR"] {try? s.pngRepresentation.write(to:URL(fileURLWithPath:folder).appendingPathComponent(self.name.replacingOccurrences(of:"/",with:"-")+"-"+name+".png"))}
+    }
     /// The first load fails: the waiting photo stays with the error and 重试 continues it; home shows its own 重试.
     func testLoadFailureThenRetry() throws {
         launch(["-delayModelLoad","2","-failModelLoad","1","-cameraFixture","YES"]);wait("home.camera",10)
@@ -76,6 +79,14 @@ final class LaunchFlows: XCTestCase {
         t=Date();pickFixture();wait("result.name",120);print(String(format:"PERF ui first identification %.2f s",Date().timeIntervalSince(t)))
         back();t=Date();pickFixture();wait("result.name",120);print(String(format:"PERF ui second identification %.2f s",Date().timeIntervalSince(t)))
     }
+    /// Home's bottom action area (picker, camera, status line) stays short (owner 2026-11-18: 当前太高太丑).
+    func testHomeActionAreaHeight() throws {
+        launch(["-fixtureState","normal"]);wait("home.photos",20)
+        let top=min(element("home.photos").frame.minY,element("home.camera").frame.minY),bottom=element("home.modelStatus").frame.maxY
+        let note=app.staticTexts["系统选片无需相册访问授权；仅读取你选择的照片。"].firstMatch
+        let height=bottom-(note.exists && note.frame.minY<top ? note.frame.minY:top)+16
+        print(String(format:"PERF home action area %.0f pt",height));shot("home-action-area")
+    }
     /// 10,000 synthetic photos: browse records and statistics; the app logs main-thread waits > 100 ms as HITCH lines.
     func testPerfTenThousandBrowse() throws {
         // Every synthetic record points at one CC0 12 MP original, so grid covers are real downsampled decodes.
@@ -83,10 +94,12 @@ final class LaunchFlows: XCTestCase {
         let start=Date();launch(["-fixtureState","normal"],reset:false);wait("home.photos",120)
         print(String(format:"PERF ui 10k cold launch to home %.2f s",Date().timeIntervalSince(start)))
         // Each step, then 3 s with no queries: HITCH lines in perf.log inside a step's window belong to it, not to the test runner.
-        func step(_ name:String,_ body:() -> Void) {print(String(format:"STEP %@ at %.1f s",name,Date().timeIntervalSince(start)));body();sleep(3)}
+        func step(_ name:String,_ body:() -> Void) {print(String(format:"STEP %@ at %.1f s (epoch %.0f)",name,Date().timeIntervalSince(start),Date().timeIntervalSince1970));body();sleep(3)}
         step("records") {app.tabBars.buttons["记录"].firstMatch.tap()}
         XCTAssertTrue(app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'records.species.'")).firstMatch.exists)
+        shot("records-grid-10k")
         step("records scroll") {for _ in 0..<3 {app.swipeUp()}}
+        shot("records-grid-10k-scrolled")
         step("photos") {app.segmentedControls.buttons["照片"].firstMatch.tap()}
         step("photos scroll") {for _ in 0..<4 {app.swipeUp()}}
         step("pending") {app.segmentedControls.buttons["待确认"].firstMatch.tap()}
