@@ -3,7 +3,7 @@ struct AboutView: View {
     @Environment(\.dismiss) var dismiss
     var body: some View {NavigationStack{ScrollView{VStack(alignment:.leading,spacing:20){
         Text("观羽 · BirdCM").font(.largeTitle.bold())
-        Text("开源代码 MIT。识别离线运行，照片与历史仅保存在设备。系统 PhotosPicker 无需授予整个相册权限。所有模型随安装包提供；只有 Apple 地图搜索、瓦片和地名（开启“用网络显示地名”时只发送坐标）联网；不向我们上传照片、坐标或结果。Apple 获取地图浏览区域以提供瓦片。")
+        Text("开源代码 MIT。识别离线运行，照片与历史仅保存在设备。系统 PhotosPicker 无需授予整个相册权限。所有模型随安装包提供；只有 Apple 地图搜索、瓦片和地名（开启“用网络显示地名”时只发送坐标），以及物种页的在线物种资料（开启“在线物种资料”时只把该鸟种的 Wikipedia 条目名、Wikidata 编号和 Commons 文件名发给 Wikipedia / Wikimedia）联网；不向我们上传照片、坐标或结果。Apple 获取地图浏览区域以提供瓦片。在线简介按 CC BY-SA 4.0，参考图按各自的 Commons 许可，署名与许可显示在图文旁。")
         Link("github.com/lincleejun/BirdCM",destination:URL(string:"https://github.com/lincleejun/BirdCM")!)
         Text("眼嘴与飞行模型仅限非商业用途。BioCLIP 2.5：MIT；D-FINE nano：Apache-2.0；AviList v2026：CC BY 4.0；文本向量：CC0。")
         Text("中文鸟名：Gill F, D Donsker & P Rasmussen (Eds). 2026. IOC World Bird List v15.2. doi:10.14344/IOC.ML.15.2，CC BY 3.0。多语言表编纂 Peter Kovalik；中文来源与逐行归属见下方完整声明。少数 Wikidata 名称 CC0。")

@@ -201,6 +201,8 @@ struct SpeciesPage: View {
                     Text("仅有自己的照片，没有内置参考图。你还没有记录这种鸟。").foregroundStyle(Palette.secondary)
                 }
                 Divider()
+                SpeciesReferenceSection(sci: key, own: stat != nil)
+                Divider()
                 if let code = EBird.names[key]?.code, !code.isEmpty { Link("在 eBird 查看", destination: URL(string: "https://ebird.org/species/" + code)!).frame(minHeight: 44).accessibilityIdentifier("species.ebird") }
                 Link("在维基百科搜索学名", destination: URL(string: "https://en.wikipedia.org/w/index.php?search=" + (key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""))!).frame(minHeight: 44)
                 Button("复制学名") { UIPasteboard.general.string = key }.frame(minHeight: 44)

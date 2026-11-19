@@ -1,0 +1,60 @@
+{
+ "url": "https://en.wikipedia.org/api/rest_v1/page/summary/House_sparrow",
+ "request_headers": {},
+ "retrieved": "2026-11-19T00:29:07Z",
+ "status": 200,
+ "headers": {
+  "content-language": "en",
+  "content-type": "application/json; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/Summary/1.5.0\"",
+  "etag": "W/\"1386478419/168f3190-e3a8-11f1-839c-43c17832416a\""
+ },
+ "body": {
+  "type": "standard",
+  "title": "House sparrow",
+  "displaytitle": "<span lang=\"en\" dir=\"ltr\"><span class=\"mw-page-title-main\">House sparrow</span></span>",
+  "namespace": {
+   "id": 0,
+   "text": ""
+  },
+  "wikibase_item": "Q14683",
+  "titles": {
+   "canonical": "House_sparrow",
+   "normalized": "House sparrow",
+   "display": "<span lang=\"en\" dir=\"ltr\"><span class=\"mw-page-title-main\">House sparrow</span></span>"
+  },
+  "pageid": 196147,
+  "thumbnail": {
+   "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9b/House_sparrow_male_in_Prospect_Park_%2853532%29.jpg/330px-House_sparrow_male_in_Prospect_Park_%2853532%29.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+   "width": 330,
+   "height": 257
+  },
+  "originalimage": {
+   "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9b/House_sparrow_male_in_Prospect_Park_%2853532%29.jpg/3840px-House_sparrow_male_in_Prospect_Park_%2853532%29.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+   "width": 4400,
+   "height": 3422
+  },
+  "lang": "en",
+  "dir": "ltr",
+  "revision": "1386478419",
+  "tid": "35087689-e388-11f1-ad7c-2b7feb5b66b3",
+  "timestamp": "2026-11-18T19:42:37Z",
+  "description": "Species of bird",
+  "description_source": "local",
+  "content_urls": {
+   "desktop": {
+    "page": "https://en.wikipedia.org/wiki/House_sparrow",
+    "revisions": "https://en.wikipedia.org/wiki/House_sparrow?action=history",
+    "edit": "https://en.wikipedia.org/wiki/House_sparrow?action=edit",
+    "talk": "https://en.wikipedia.org/wiki/Talk:House_sparrow"
+   },
+   "mobile": {
+    "page": "https://en.wikipedia.org/wiki/House_sparrow",
+    "revisions": "https://en.wikipedia.org/wiki/Special:History/House_sparrow",
+    "edit": "https://en.wikipedia.org/wiki/House_sparrow?action=edit",
+    "talk": "https://en.wikipedia.org/wiki/Talk:House_sparrow"
+   }
+  },
+  "extract": "The house sparrow is a bird of the sparrow family Passeridae, found in most parts of the world. It is a small bird that has a typical length of 16 cm (6.3 in) and a mass of 24–39.5 g (0.85–1.39 oz). Females and young birds are coloured pale brown and grey, and males have brighter black, white, and brown markings. One of 28 species in the genus Passer, the house sparrow is native to most of Europe, the Mediterranean Basin, and a large part of Asia. Its intentional or accidental introductions to many regions, including parts of Australasia, Africa, and the Americas, make it the most widely distributed wild bird.",
+  "extract_html": "<p>The <b>house sparrow</b> is a bird of the sparrow family Passeridae, found in most parts of the world. It is a small bird that has a typical length of 16 cm (6.3 in) and a mass of 24–39.5 g (0.85–1.39 oz). Females and young birds are coloured pale brown and grey, and males have brighter black, white, and brown markings. One of 28 species in the genus <i>Passer</i>, the house sparrow is native to most of Europe, the Mediterranean Basin, and a large part of Asia. Its intentional or accidental introductions to many regions, including parts of Australasia, Africa, and the Americas, make it the most widely distributed wild bird.</p>"
+ }
+}
