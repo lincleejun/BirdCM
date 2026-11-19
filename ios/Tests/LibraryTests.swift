@@ -187,6 +187,26 @@ final class LibraryTests: XCTestCase {
         // Old JSON sidecars remain as read-only recovery files.
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasSuffix(".json") }.count, 8)
     }
+    func testCleanupRemovesOnlyJSONCopiesAlreadyInTheLibrary() throws {
+        let dir = tmp(), old = try makeLegacyStore(dir)
+        let lib = try Library(dir: dir); XCTAssertTrue(lib.redundantLegacyFiles().isEmpty)     // not before a verified migration
+        try lib.migrate(zone: pst)
+        let files = lib.redundantLegacyFiles()
+        XCTAssertEqual(files.count, 8)                                                           // 7 records + the corrupt file kept as a recovery item
+        try Data("changed".utf8).write(to: dir.appendingPathComponent("\(old[0].id).json"))       // a file that differs is never offered
+        XCTAssertEqual(lib.redundantLegacyFiles().count, 7)
+        for u in lib.redundantLegacyFiles() { try FileManager.default.removeItem(at: u) }
+        let reopened = try Library(dir: dir); XCTAssertFalse(reopened.needsMigration)
+        for r in old { XCTAssertNotNil(try reopened.record(r.id)); if r.id != old[5].id { XCTAssertNotNil(reopened.url(r.id)) } }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("\(old[0].id).photo").path))
+    }
+    func testPinyinFullAndInitials() async throws {
+        let c = Catalogue.shared; await c.preparePinyin()
+        XCTAssertEqual(Catalogue.pinyinOf("白头海雕").0, "baitouhaidiao"); XCTAssertEqual(Catalogue.pinyinOf("白头海雕").1, "bthd")
+        XCTAssertTrue(c.search("baitouhaidiao").prefix(3).contains { $0.sci == "Haliaeetus leucocephalus" })
+        XCTAssertTrue(c.search("bthd").prefix(5).contains { $0.sci == "Haliaeetus leucocephalus" })
+        XCTAssertEqual(c.search("Bald Eagle").first?.sci, "Haliaeetus leucocephalus")
+    }
     /// An unreadable original is an I/O failure, not a corrupt record: migration stops unverified and the next attempt imports it.
     func testUnreadablePhotoRetriesInsteadOfQuarantining() throws {
         let dir = tmp(), old = try makeLegacyStore(dir)
@@ -295,6 +315,9 @@ final class CrossPlatformTests: XCTestCase {
         XCTAssertEqual(try a.rows("SELECT value FROM archive_meta WHERE key='producer'")[0].s(0), "ios")
         XCTAssertEqual(try a.rows("SELECT count(*) FROM ll_subject WHERE count_edit=1")[0].n(0), 0)
         XCTAssertEqual(try Library(dir: tmp()).importArchive(out), 309)
+        // Leave a copy for the desktop reader check (ios/build is git-ignored).
+        let copy = shared.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("ios/build/ios-export-fixture.birdcm")
+        try? FileManager.default.removeItem(at: copy); try? FileManager.default.copyItem(at: out, to: copy)
     }
     /// Synthetic 10,000 photos / 30,000 subjects (no original bytes): timings of the browsing paths, simulator numbers.
     func testTenThousandPhotoTimings() throws {
@@ -313,6 +336,9 @@ final class CrossPlatformTests: XCTestCase {
         _ = time("photos list filter 'tern'") { items.filter { i in i.subjects.contains { Catalogue.shared.name($0.key).contains("燕鸥") } } }
         _ = time("catalogue search 'tern'") { Catalogue.shared.search("tern") }
         _ = time("species page photos") { ledger.photos(of: all.list[0].id) }
+        _ = time("rarity book (30k observations)") { RarityBook.compute(ledger, nil) }
+        _ = time("evidence for every observation (map / eBird)") { ledger.observations.reduce(0) { $0 + ledger.evidence($1).count } }
+        _ = time("eBird checklists all time") { EBird.checklists(ledger, nil, rarity: Catalogue.shared.rarity) }
         print("PERF observations \(ledger.observations.count) species \(all.species)")
         XCTAssertGreaterThan(all.observations, 1000)
     }

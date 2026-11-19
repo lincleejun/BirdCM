@@ -81,11 +81,13 @@ struct Summary { var species = 0, observations = 0, estimate = 0, newSpecies = 0
 /// §3: a counted observation = effective species × local day × place bucket; estimate = max photo sum, or the group override.
 struct Ledger {
     let items: [PhotoItem]
+    private let byHash: [String: PhotoItem]
     let observations: [Sighting]
     let allTime: [String: SpeciesStat]
     let known: (String) -> Bool
     init(items: [PhotoItem] = [], edits: [String: Int] = [:], known: @escaping (String) -> Bool = { _ in true }) {
         self.items = items; self.known = known
+        byHash = Dictionary(items.map { ($0.hash, $0) }, uniquingKeysWith: { a, _ in a })
         var groups = [String: Sighting]()
         for item in items {
             for s in item.subjects where !s.excluded {
@@ -116,7 +118,7 @@ struct Ledger {
         return out
     }
     /// The photos supporting one observation (one per distinct hash).
-    func evidence(_ o: Sighting) -> [PhotoItem] { items.filter { o.frames[$0.hash] != nil } }
+    func evidence(_ o: Sighting) -> [PhotoItem] { o.frames.keys.sorted().compactMap { byHash[$0] } }
     static func eligible(_ s: SubjectItem, _ known: (String) -> Bool) -> Bool { !s.excluded && s.key.map(known) == true }
     static func inRange(_ day: String, _ r: (String, String)?) -> Bool { r.map { day >= $0.0 && day <= $0.1 } ?? true }
     static func stats(items: [PhotoItem], observations: [Sighting], known: (String) -> Bool, range: (String, String)?) -> [String: SpeciesStat] {

@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var place = false
     @State private var clear = false
     @State private var cleanup = false
+    @State private var redundant = [URL]()
+    func scanRedundant() async { if let lib = model.library { redundant = await Task.detached { lib.redundantLegacyFiles() }.value } }
     var body: some View {
         let all = model.ledger.summary(nil)
         NavigationStack {
@@ -19,7 +21,6 @@ struct SettingsView: View {
                     LabeledContent("照片", value: "\(all.photos)")
                     LabeledContent("鸟种 · 观察记录", value: "\(all.species) · \(all.observations)")
                     LabeledContent("本机占用", value: ByteCountFormatter.string(fromByteCount: Int64(model.library?.storageBytes() ?? 0), countStyle: .file))
-                    let redundant = model.library?.redundantLegacyFiles() ?? []
                     if !redundant.isEmpty {
                         let bytes = redundant.compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }.reduce(0, +)
                         Button("清理旧版本副本（\(redundant.count) 个，\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))）") { cleanup = true }.accessibilityIdentifier("settings.cleanup")
@@ -39,14 +40,15 @@ struct SettingsView: View {
                 } footer: { Text("清空前可以先在“备份与恢复”导出一份备份。") }
             }
             .navigationTitle("设置")
+            .task { await scanRedundant() }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() }.accessibilityIdentifier("settings.done") } }
             .sheet(isPresented: $about) { AboutView() }
             .sheet(isPresented: $diagnostics) { DiagnosticsView() }
             .sheet(isPresented: $place) { PlacePicker(onChoose: { p in model.chooseHome(p) }) }
             .confirmationDialog("删除旧版本的 JSON 副本？", isPresented: $cleanup, titleVisibility: .visible) {
                 Button("删除副本", role: .destructive) {
-                    for u in model.library?.redundantLegacyFiles() ?? [] { try? FileManager.default.removeItem(at: u) }
-                    model.refresh()
+                    for u in redundant { try? FileManager.default.removeItem(at: u) }
+                    redundant = []; model.refresh()
                 }.accessibilityIdentifier("settings.confirmCleanup")
                 Button("取消", role: .cancel) {}
             } message: { Text("这些是升级前每条记录的 JSON 文件，内容已逐字节保存在记录库里（也会随备份导出）。不删除任何原图。") }
@@ -203,12 +205,16 @@ struct DocumentExporter: UIViewControllerRepresentable {
         guard let data = d.data(forKey: "backupFolderBookmark") else { return nil }
         var stale = false
         guard let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale) else { return nil }
-        if stale { choose(url) }
+        // Renew only the bookmark; keep the own-file list and last success.
+        if stale, url.startAccessingSecurityScopedResource() {
+            defer { url.stopAccessingSecurityScopedResource() }
+            if let b = try? url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil) { d.set(b, forKey: "backupFolderBookmark") }
+        }
         return url
     }
     func runIfDue(_ library: Library?, force: Bool = false) async {
         guard let library, !running, enabled else { return }
-        let revision = (try? library.query("SELECT coalesce(max(updated_utc),'') || count(*) FROM ll_record").first?.s(0)) ?? ""
+        let revision = (try? library.query("SELECT coalesce((SELECT max(updated_utc) FROM ll_record),'') || (SELECT count(*) FROM ll_record) || '|' || coalesce((SELECT max(updated_utc) FROM ll_group_edit),'') || (SELECT count(*) FROM ll_group_edit)").first?.s(0)) ?? ""
         let dirty = revision != d.string(forKey: "backupFolderRevision")
         guard force || (dirty && (lastSuccess.map { Date().timeIntervalSince($0) >= 86400 } ?? true)) else { return }
         guard let dir = folder() else { lastError = String(localized: "无法再访问所选文件夹（可能已移动或权限被撤销）。请重新选择文件夹；本机记录不受影响，也可以用“导出备份”。"); return }

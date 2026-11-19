@@ -375,6 +375,11 @@ final class Library {
                     }
                 }
                 guard let hash else { throw StoreError(message: "缺少原图，无法保存这条记录") }
+                // A record imported from the desktop keeps its own payload; only the column edits (species, count, exclusion, date) apply.
+                if exists, data == nil, let p = try db.rows("SELECT payload_json FROM ll_record WHERE id=?", [r.id.uuidString.lowercased()]).first?.s(0),
+                   (try? JSONDecoder().decode(Record.self, from: Data(p.utf8))) == nil {
+                    throw StoreError(message: "这条记录来自电脑版，在手机上只能更正鸟种、数量、排除和日期")
+                }
                 try writeRecord(r, hash: hash, insert: !exists, now: now, zone: zone)
                 try syncSubjects(r, now: now)
             }
@@ -503,14 +508,16 @@ final class Library {
     }
     /// Legacy JSON sidecars whose exact bytes are already inside the verified library (record legacy_json or recovery raw_json).
     /// Removing them never touches an original photo.
+    /// Matched by record id (file name) or recovery file name, then compared byte for byte; call off the main actor.
     func redundantLegacyFiles() -> [URL] {
         guard (try? query("PRAGMA user_version").first?.n(0)) == 1 else { return [] }
         return legacyNames().filter { $0.hasSuffix(".json") }.compactMap { name -> URL? in
             let url = dir.appendingPathComponent(name)
             guard let data = try? Data(contentsOf: url) else { return nil }
-            let text = String(decoding: data, as: UTF8.self)
-            let kept = (try? query("SELECT 1 FROM ll_record WHERE legacy_json=? UNION ALL SELECT 1 FROM ll_legacy_issue WHERE filename=? AND raw_json=? LIMIT 1", [text, name, data]))?.isEmpty == false
-            return kept ? url : nil
+            let id = String(name.dropLast(5)).lowercased()
+            let stored = (try? query("SELECT legacy_json FROM ll_record WHERE id=?", [id]).first?.s(0)).flatMap { $0 }.map { Data($0.utf8) }
+                ?? (try? query("SELECT raw_json FROM ll_legacy_issue WHERE filename=?", [name]).first?[0] as? Data).flatMap { $0 }
+            return stored == data ? url : nil
         }
     }
     func storageBytes() -> Int {
@@ -561,18 +568,18 @@ final class Library {
     }
     func setGroupCount(_ key: String, _ n: Int?, now: Date = Date()) throws {
         guard n.map({ (1...999998).contains($0) }) ?? true else { throw StoreError(message: "数量须为 1–999998") }
-        try locked {
+        _ = try locked {
             if let n { try db.run("INSERT OR REPLACE INTO ll_group_edit VALUES(?,?,?)", [key, n, Self.utc(now)]) } else { try db.run("DELETE FROM ll_group_edit WHERE group_key=?", [key]) }
         }
     }
     /// Tombstones the photo and all byte-identical aliases; originals on disk/in Photos are untouched.
     func delete(_ id: UUID, now: Date = Date()) throws {
-        try locked {
+        _ = try locked {
             try db.run("UPDATE ll_record SET deleted_utc=?,revision=revision+1,updated_utc=? WHERE deleted_utc IS NULL AND asset_hash=(SELECT asset_hash FROM ll_record WHERE id=?)", [Self.utc(now), Self.utc(now), id.uuidString.lowercased()])
         }
     }
     func deleteAll(now: Date = Date()) throws {
-        try locked { try db.run("UPDATE ll_record SET deleted_utc=?,revision=revision+1,updated_utc=? WHERE deleted_utc IS NULL", [Self.utc(now), Self.utc(now)]) }
+        _ = try locked { try db.run("UPDATE ll_record SET deleted_utc=?,revision=revision+1,updated_utc=? WHERE deleted_utc IS NULL", [Self.utc(now), Self.utc(now)]) }
     }
 
     // MARK: portable archive (§8): SQLite file, exact tables, originals once per hash.

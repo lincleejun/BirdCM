@@ -20,16 +20,21 @@ struct CropThumbnail:View {
     init(url:URL?,id:UUID,boxes:[[Double]],crops:[[Double]]?,index:Int=0,original:Bool=false) {self.url=url;self.id=id;self.boxes=boxes;self.crops=crops;self.index=index;self.original=original}
     init(url:URL?,record:Record,index:Int=0,original:Bool=false) {self.init(url:url,id:record.id,boxes:record.boxes,crops:record.displayCrops,index:index,original:original)}
     @State private var image:CGImage?
+    /// Decoded 120 px crops, keyed by photo / subject / window; the system evicts under memory pressure.
+    static let cache:NSCache<NSString,CGImage>={let c=NSCache<NSString,CGImage>();c.totalCostLimit=24<<20;return c}()
     var body:some View {
         // Fill whatever frame the caller proposes, then clip to it (not to the image's own fill size).
         Rectangle().fill(Palette.paper).overlay {if let image {Image(decorative:image,scale:1).resizable().scaledToFill()}}
             .clipped().task(id:"\(id)-\(index)-\(original)-\(boxes)") {
                 guard let url else{return}
+                let key="\(id)-\(index)-\(original)-\(crops?[safe:index] ?? [])" as NSString
+                if let hit=Self.cache.object(forKey:key) {image=hit;return}
                 let value=await Task.detached {() -> CGImage? in
                     guard let source=CropSource(url) else{return nil}
                     let window=original || !boxes.indices.contains(index) ? [0.0,0,1,1] : crops?[safe:index] ?? source.crop(boxes[index]).normalized(in:source.size)
                     return source.image(window:window,edge:120)
                 }.value
+                if let value {Self.cache.setObject(value,forKey:key,cost:value.bytesPerRow*value.height)}
                 if !Task.isCancelled {image=value}
             }
     }

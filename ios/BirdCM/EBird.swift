@@ -38,7 +38,7 @@ enum EBird {
             var lat: Double?, lon: Double?, name = "", state = "", country = ""
             if let a = first.lat, let o = first.lon {
                 lat = min(89.99999, max(-89.99999, a)); lon = o
-                (name, state, country) = pointCodes(lat!, lon!, rarity)
+                (name, state, country) = pointCodes(lat!, lon!, rarity, bucket: first.placeKey)
                 name = "\(name) \(String(format: "%.4f", lat!)) \(String(format: "%.4f", lon!))".trimmingCharacters(in: .whitespaces)
             } else if let code = first.region {
                 let en = rarity?.rows("SELECT name_en FROM regions WHERE code=?", [code]).first?.first ?? code
@@ -51,9 +51,9 @@ enum EBird {
         }
     }
     /// A point → (English location name, state code, country code) through the one point → region mapping (Rarity.regionAt).
-    static func pointCodes(_ lat: Double, _ lon: Double, _ rarity: Rarity?) -> (String, String, String) {
+    static func pointCodes(_ lat: Double, _ lon: Double, _ rarity: Rarity?, bucket: String) -> (String, String, String) {
         guard let rarity else { return ("", "", "") }
-        let r = rarity.regionAt(lat: lat, lon: lon)
+        let r = rarity.regionAt(lat: lat, lon: lon, bucket: bucket)
         guard let country = r.country else { return ("", "", "") }
         if let div = r.division {
             let en = rarity.rows("SELECT name_en FROM regions WHERE code=?", [div]).first?.first ?? div
@@ -91,8 +91,9 @@ struct EBirdSheet: View {
     @State private var estimates = false
     @State private var file: BackupView.Exported?
     @State private var message = ""
+    @State private var lists = [EBird.Checklist]()
+    @State private var loading = true
     var body: some View {
-        let lists = EBird.checklists(model.ledger, range, rarity: model.catalogue.rarity)
         let fallbackCount = lists.filter(\.fallback).count
         let unmapped = Set(lists.flatMap { $0.sightings.map(\.species) }.filter { EBird.names[$0] == nil })
         NavigationStack {
@@ -110,16 +111,23 @@ struct EBirdSheet: View {
                     if pending > 0 { Text("另有 \(pending) 个待确认主体（属级、不确定、未识别）不导出。").font(.footnote) }
                     Button("导出 eBird 文件") { export(lists) }.buttonStyle(PrimaryActionStyle()).disabled(lists.isEmpty || (fallbackCount > 0 && fallback == nil)).accessibilityIdentifier("ebird.export")
                     if !message.isEmpty { Text(message).accessibilityIdentifier("ebird.message") }
+                    if loading { ProgressView("正在整理清单…") }
                 }
                 ForEach(lists) { cl in
                     Section("\(cl.day) · \(cl.name)\(cl.fallback ? " · 按识别日期" : "")") {
                         ForEach(cl.sightings) { o in LabeledContent(model.catalogue.name(o.species), value: estimates ? "\(o.estimate)" : "X") }
                     }
                 }
-                if lists.isEmpty { Text("这段时间没有可导出的观察记录。") }
+                if lists.isEmpty && !loading { Text("这段时间没有可导出的观察记录。") }
             }
             .navigationTitle("eBird · \(title)").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() }.accessibilityIdentifier("ebird.close") } }
+            .task {
+                // Off the main actor with a private table connection (SQLite handles are not shared across threads).
+                let ledger = model.ledger, range = range
+                lists = await Task.detached { EBird.checklists(ledger, range, rarity: try? Rarity(path: Models.rarityURL)) }.value
+                loading = false
+            }
             .sheet(item: $file) { f in DocumentExporter(url: f.url) { ok in message = ok ? String(localized: "文件已写入，可在 eBird 网站的“上传数据”里选择它。") : String(localized: "已取消。"); file = nil } }
         }
     }

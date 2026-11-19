@@ -10,17 +10,19 @@ struct RarityBook {
     static func compute(_ ledger: Ledger, _ range: (String, String)?) -> RarityBook {
         var book = RarityBook()
         guard let db = try? Rarity(path: Models.rarityURL) else { book.unavailable = Set(ledger.observations.map(\.id)); return book }
-        var cache = [String: Int?]()
+        // One GBIF month table per (region, month), read once; species tiers are dictionary lookups (no tier = 无记录).
+        var months = [String: [String: (n: Int, tier: Int)]?]()
+        let inTable = Set(db.rows("SELECT scientific FROM species", []).map { $0[0] })     // absent = unknown, not 无记录
         for o in ledger.observations where Ledger.inRange(o.day, range) {
-            let month = Int(o.day.dropFirst(5).prefix(2))
+            guard let month = Int(o.day.dropFirst(5).prefix(2)), inTable.contains(o.species) else { book.unavailable.insert(o.id); continue }
             var known = [Int]()
             for item in ledger.evidence(o) {
-                let place: Place? = item.lat.map { Place(lat: $0, lon: item.lon!, label: "", source: "map") } ?? item.region.map { Place(lat: 0, lon: 0, label: "", source: "region", regionCode: $0) }
-                guard let place else { continue }
-                // ponytail: cached per place bucket (≈1 km); per-pixel region edges inside one bucket are ignored.
-                let key = "\(o.species)|\(item.placeKey)|\(month ?? 0)"
-                if cache[key] == nil { cache[key] = .some(labels[db.lookup(o.species, place: place, month: month).label]) }
-                if let t = cache[key] ?? nil { known.append(t) }
+                // ponytail: region cached per place bucket (≈1 km); region edges inside one bucket are ignored.
+                let r = item.lat.map { db.regionAt(lat: $0, lon: item.lon!, bucket: item.placeKey) }
+                guard let code = item.region ?? r?.division ?? r?.country else { continue }
+                let key = "\(code)|\(month)"
+                if months[key] == nil { months[key] = .some(db.monthCounts(Place(lat: 0, lon: 0, label: "", source: "region", regionCode: code), month: month)?.counts) }
+                if let table = months[key] ?? nil { known.append(table[o.species]?.tier ?? 0) }
             }
             if known.isEmpty { book.unavailable.insert(o.id) } else { book.tiers[o.id] = known }
         }

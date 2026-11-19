@@ -22,6 +22,15 @@ final class Rarity {
         let p = Double(count)/Double(max(total,1))
         return p >= 0.002 ? 4 : p >= 0.0002 ? 3 : p >= 0.00002 ? 2 : 1
     }
+    private static var regionCache = [String: (division: String?, country: String?)]()
+    private static let regionLock = NSLock()
+    /// regionAt cached per place bucket (≈1 km cell); statistics and eBird ask for the same few points thousands of times.
+    func regionAt(lat: Double, lon: Double, bucket: String) -> (division: String?, country: String?) {
+        Self.regionLock.lock(); if let hit = Self.regionCache[bucket] { Self.regionLock.unlock(); return hit }; Self.regionLock.unlock()
+        let value = regionAt(lat: lat, lon: lon)
+        Self.regionLock.lock(); Self.regionCache[bucket] = value; Self.regionLock.unlock()
+        return value
+    }
     /// Port of rarity_global.region_at: ISO codes, even/odd rings, smallest area wins, 0.25° coastal tolerance.
     func regionAt(lat:Double,lon:Double) -> (division:String?,country:String?) {
         var stmt:OpaquePointer?

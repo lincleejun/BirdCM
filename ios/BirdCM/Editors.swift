@@ -53,6 +53,7 @@ struct CorrectionSheet: View {
                 }
             }
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: Text("中文、英文或学名"))
+            .task { await model.catalogue.preparePinyin() }
             .task(id: query) {
                 try? await Task.sleep(for: .milliseconds(150))
                 guard !Task.isCancelled else { return }
