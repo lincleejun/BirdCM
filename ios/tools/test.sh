@@ -49,8 +49,12 @@ case $mode in
     picked=($(for f in $files; do covers $f; done | sed -e 's#^U/#BirdCMUITests/#' -e 's#^T/#BirdCMTests/#' | sort -u))
     echo "changed since $base: ${#files} file(s) -> ${picked:-nothing to test}"
     (( ${#picked} )) || exit 0
+    # xcodebuild narrows to the most specific identifier (BirdCMTests + BirdCMTests/X runs only X): never pass both.
     only=()
-    (( ${picked[(Ie)QUICK]} )) && only=($smoke)
+    if (( ${picked[(Ie)QUICK]} )); then
+      for t in $smoke; do c=${${t#-only-testing:}%/*}; (( ${picked[(Ie)$c]} )) || only+=($t); done
+      picked=(${picked:#BirdCMTests/*})
+    fi
     for t in ${picked:#QUICK}; do only+=(-only-testing:$t); done ;;
   quick) default_devices='BirdCM 18 Pro'; default_workers=3; only=($smoke) ;;
   full) default_devices='BirdCM 18 Pro;BirdCM 15'; default_workers=3; only=() ;;

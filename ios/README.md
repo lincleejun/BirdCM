@@ -53,7 +53,7 @@ ios/tools/test.sh full      # 全部测试，'BirdCM 18 Pro' 与 'BirdCM 15' 同
 `Stats.swift` / `Ledger.swift` / `EBird.swift` → `LargestTypeFlows`、`LargestTypeMoreFlows`、`LayoutFlows`、`Step4Snapshots`、
 `AppearanceSnapshots`、`LibraryTests`、`CrossPlatformTests`；`ResultView.swift` 等结果页文件 → `ResultFlows`、`ResultExtraFlows`、
 `RecordFlows`、`LayoutFlows`、`AppearanceSnapshots`、`LogicTests`。`App.swift`、`FlowCase.swift`、资源、模型、工程文件和表里没有的
-App 文件退回 quick 冒烟集（App.swift 另加启动测试）；只改文档或脚本时不跑测试。新增 App 文件或测试类时顺手补一行映射。
+App 文件退回 quick 冒烟集（App.swift 另加启动测试）；只改文档或脚本时不跑测试。新增 App 文件或测试类时顺手补一行映射。注意 xcodebuild 遇到 `-only-testing:BirdCMTests` 与 `-only-testing:BirdCMTests/X` 同时出现时只跑 X，脚本已避免这种组合。
 
 两者都先 `build-for-testing` 一次（增量构建几秒），再对每台模拟器 `test-without-building`，用
 `-parallel-testing-enabled YES -parallel-testing-worker-count N` 让 Xcode 自动克隆模拟器、按测试类分发。
@@ -77,8 +77,8 @@ xcodebuild test-without-building -xctestrun ios/DerivedData/Build/Products/*.xct
 | 运行（墙钟时间，同一台机器） | 之前 | 现在 |
 |---|---|---|
 | 全部测试，一台模拟器（BirdCM 18 Pro B）串行 | 2049 s（34 分钟；UI 2017 s，单元 21 s） | — |
-| `quick`：构建 + 单元 + 外观快照 + 6 个冒烟流程，3 / 4 个克隆 | 没有对应命令 | 143 s / 151 s |
-| `changed`：只跑改动涉及的类 | — | 取决于改动；最多与 quick + 相关类相当 |
+| `quick`：构建 + 单元 + 外观快照 + 6 个冒烟流程，3 / 4 个克隆 | 没有对应命令 | 143 s / 151 s（截图前等待加载之前测得，现在约多 5–10 s） |
+| `changed`：只跑改动涉及的类 | — | 视改动而定；例：改 `App.swift` → quick 冒烟集 + 启动测试，58 个测试 317 s（多数花在 `testPerfTenThousandBrowse`） |
 | `full`：两台模拟器同时，每台 2 / 3 / 4 个克隆 | 审阅者实测两台同时各约 26–30 分钟 | 809 s / **617–709 s（三次，约 11 分钟）** / 693 s |
 
 `full` 每台 3 个克隆最快（默认）；4 个克隆时 8 台模拟器争 CPU，整体更慢，还出现过一次测试运行器启动被系统拒绝。
