@@ -172,13 +172,13 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
         }
     }
 
-    /// Every second until the models are in memory (or failed): 模型加载中 → 就绪 in the menu.
+    /// Until the models are in memory: 模型加载中 → 就绪 (or 出错, which a download or 重试 can still turn around).
     private func followLoad(_ port: Int) async {
         let url = URL(string: "http://127.0.0.1:\(port)/api/models")!
         while self.port == port {
             if let (d, _) = try? await URLSession.shared.data(from: url) { loaded = decode(Loaded.self, String(decoding: d, as: UTF8.self)) }
-            if loaded?.engine != "loading" { return }
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            if loaded?.engine == "ready" { return }
+            try? await Task.sleep(nanoseconds: loaded?.engine == "error" ? 5_000_000_000 : 1_000_000_000)   // error: models downloaded, a retry
         }
     }
 

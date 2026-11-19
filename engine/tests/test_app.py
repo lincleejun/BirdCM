@@ -405,10 +405,13 @@ def test_requests_before_the_models_are_ready_are_queued_and_complete(tmp_path, 
 
     def factory():
         calls.append(1)
-        if len(calls) == 1:
+        if len(calls) <= 2:
             raise FileNotFoundError("缺模型文件：x.safetensors")
         assert gate.wait(10)
         return Eng()
+    files_here = [False]
+    from birdcm import app as app_mod
+    monkeypatch.setattr(app_mod.models, "status", lambda: {"ready": files_here[0], "missing": []})
 
     store = Store(tmp_path / "data" / "t.db")
     guarded, api = create_app(PORT, token="tok", store=store, engine_factory=factory)
@@ -430,9 +433,12 @@ def test_requests_before_the_models_are_ready_are_queued_and_complete(tmp_path, 
         assert "缺模型文件" in c.get("/api/models", headers=OK).json()["load_error"]
         sid = c.post("/api/scans", json={"folder": str(tmp_path / "shoot")}, headers=h).json()["id"]
         time.sleep(0.3)
-        assert store.state(sid) == "queued"                                 # waits for a retry, is not failed
-        assert c.post("/api/models/retry", headers=h).json()["engine"] == "loading"
-        until(lambda: len(calls) == 2, "loading again")
+        assert store.state(sid) == "queued" and len(calls) == 1             # waits for a retry, is not failed
+        assert c.post("/api/models/retry", headers=h).json()["engine"] == "loading"    # 重试: still missing
+        until(lambda: len(calls) == 2 and c.get("/api/models", headers=OK).json()["engine"] == "error", "failed again")
+        files_here[0] = True                                                 # downloaded meanwhile: loads, no click
+        assert c.get("/api/models", headers=OK).json()["engine"] == "loading"
+        until(lambda: len(calls) == 3, "loading again")
         t = time.monotonic()
         rec = c.post("/api/singles", files={"file": ("a.png", buf.getvalue())}, headers=h).json()
         assert time.monotonic() - t < 2 and rec["result"] is None and rec["error"] is None     # accepted, queued

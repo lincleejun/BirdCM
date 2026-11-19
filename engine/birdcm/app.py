@@ -281,9 +281,9 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         if start_scheduler:
             sched.start()                                   # loads the models in the background: the page is up at once
             api.state.library.refresh()                     # a restart with a dirty index rebuilds it (background)
-            for r in store.singles():                       # queued when the last run ended: queued again
-                if r["result"] is None and r["error"] is None:
-                    run_single(r["id"], r["region"], r["boxes"], wait=False)
+            for (sid,) in store._db().execute("SELECT id FROM single WHERE result IS NULL AND error IS NULL"):
+                r = store.single(sid)                       # queued when the last run ended: queued again
+                run_single(sid, r["region"], r["boxes"], wait=False)
         yield
         sched.close()
         previews.close()
@@ -307,7 +307,10 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.get("/api/models")
     def models_status():
         """ready = the files are here; engine = loading | ready | error (loaded in the background at start-up)."""
-        return {**models.status(), "exiftool": decode.ExifTool.available(), "engine_error": sched.engine_error,
+        st = models.status()
+        if st["ready"] and sched.state == "error" and (sched.load_error or "").startswith("FileNotFoundError"):
+            sched.retry()                              # the missing files were downloaded meanwhile: load, no click needed
+        return {**st, "exiftool": decode.ExifTool.available(), "engine_error": sched.engine_error,
                 "engine": sched.state, "load_error": sched.load_error}
 
     @api.post("/api/models/retry")
@@ -1035,6 +1038,8 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         if body.fallback not in ("refuse", "include", "exclude"):
             raise HTTPException(422, "fallback 只能是 refuse / include / exclude")
         st, ix, frm, to = view(body.start, body.end)
+        if st["hashing"]:                            # the stand-in generation may count a file seen twice: not for a file to keep
+            raise HTTPException(409, "正在给照片做指纹，做完再导出")
         try:
             text = ebird.lifelist_csv(ix, frm, to, body.species, body.counts, body.use_estimates, body.fallback)
         except ValueError as e:

@@ -130,7 +130,7 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
 function EngineBadge() {
   const s = useEngine();
   const [asked, setAsked] = useState(false);
-  useEffect(() => { if (s?.engine !== "error") setAsked(false); }, [s?.engine]);
+  useEffect(() => setAsked(false), [s]);             // every poll answers the click (a failed reload is quick)
   if (!s) return null;
   if (s.engine === "ready") return <span className="engine ok" role="status" title="模型已加载，识别会立刻开始">模型就绪</span>;
   if (s.engine === "loading" || asked) return <span className="engine busy" role="status" title="页面可以照常使用；这时开始的识别会排队，加载完自动开始">模型准备中…</span>;
