@@ -1,0 +1,15 @@
+{
+ "url": "https://zh.wikipedia.org/api/rest_v1/page/summary/Xyzzynotapage12345",
+ "request_headers": {
+  "Accept-Language": "zh-cn"
+ },
+ "retrieved": "2026-11-19T00:29:10Z",
+ "status": 404,
+ "headers": {
+  "content-type": "application/json; charset=utf-8"
+ },
+ "body": {
+  "status": 404,
+  "type": "Internal error"
+ }
+}

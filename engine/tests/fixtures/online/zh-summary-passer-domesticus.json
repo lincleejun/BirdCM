@@ -1,0 +1,62 @@
+{
+ "url": "https://zh.wikipedia.org/api/rest_v1/page/summary/%E5%AE%B6%E9%BA%BB%E9%9B%80",
+ "request_headers": {
+  "Accept-Language": "zh-cn"
+ },
+ "retrieved": "2026-11-19T00:29:05Z",
+ "status": 200,
+ "headers": {
+  "content-language": "zh",
+  "content-type": "application/json; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/Summary/1.5.0\"",
+  "etag": "W/\"87011385/c93c4bf0-e3af-11f1-9b8a-5d7352a84913\""
+ },
+ "body": {
+  "type": "standard",
+  "title": "家麻雀",
+  "displaytitle": "<span lang=\"zh-Hans-CN\" dir=\"ltr\"><span class=\"mw-page-title-main\">家麻雀</span></span>",
+  "namespace": {
+   "id": 0,
+   "text": ""
+  },
+  "wikibase_item": "Q14683",
+  "titles": {
+   "canonical": "家麻雀",
+   "normalized": "家麻雀",
+   "display": "<span lang=\"zh-Hans-CN\" dir=\"ltr\"><span class=\"mw-page-title-main\">家麻雀</span></span>"
+  },
+  "pageid": 771024,
+  "thumbnail": {
+   "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d9/House_sparrowII.jpg/330px-House_sparrowII.jpg?utm_source=zh.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+   "width": 330,
+   "height": 218
+  },
+  "originalimage": {
+   "source": "https://upload.wikimedia.org/wikipedia/commons/d/d9/House_sparrowII.jpg?utm_source=zh.wikipedia.org&utm_campaign=api&utm_content=thumbnail_unscaled",
+   "width": 1030,
+   "height": 680
+  },
+  "lang": "zh",
+  "dir": "ltr",
+  "revision": "87011385",
+  "tid": "c93b1370-e3af-11f1-b532-ce327530d3dc",
+  "timestamp": "2025-04-27T09:04:00Z",
+  "description": "雀科麻雀属鸟类",
+  "description_source": "central",
+  "content_urls": {
+   "desktop": {
+    "page": "https://zh.wikipedia.org/wiki/%E5%AE%B6%E9%BA%BB%E9%9B%80",
+    "revisions": "https://zh.wikipedia.org/wiki/%E5%AE%B6%E9%BA%BB%E9%9B%80?action=history",
+    "edit": "https://zh.wikipedia.org/wiki/%E5%AE%B6%E9%BA%BB%E9%9B%80?action=edit",
+    "talk": "https://zh.wikipedia.org/wiki/Talk:%E5%AE%B6%E9%BA%BB%E9%9B%80"
+   },
+   "mobile": {
+    "page": "https://zh.wikipedia.org/wiki/%E5%AE%B6%E9%BA%BB%E9%9B%80",
+    "revisions": "https://zh.wikipedia.org/wiki/Special:History/%E5%AE%B6%E9%BA%BB%E9%9B%80",
+    "edit": "https://zh.wikipedia.org/wiki/%E5%AE%B6%E9%BA%BB%E9%9B%80?action=edit",
+    "talk": "https://zh.wikipedia.org/wiki/Talk:%E5%AE%B6%E9%BA%BB%E9%9B%80"
+   }
+  },
+  "extract": "家麻雀 的原产地在欧洲及亚洲的大部分区域。是种麻雀属动物，它跟随人类的分布，被有意或无意地带到美洲、非洲撒哈拉南部、新西兰、澳洲、和都市地区。它们是鸟类在当今地球上分布区域最广泛的物种。\n",
+  "extract_html": "<p><b>家麻雀</b> 的原产地在欧洲及亚洲的大部分区域。是种麻雀属动物，它跟随人类的分布，被有意或无意地带到美洲、非洲撒哈拉南部、新西兰、澳洲、和都市地区。它们是鸟类在当今地球上分布区域最广泛的物种。\n</p>"
+ }
+}

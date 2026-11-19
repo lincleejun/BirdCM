@@ -1046,6 +1046,46 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             raise HTTPException(422, str(e)) from None
         return Response(text, media_type="text/csv; charset=utf-8")
 
+    # ---- online species reference (online.py; docs/design-species-search.md): GET reads the cache, POST asks the source
+    from birdcm import online
+
+    def reference(sci: str, refresh: bool, kinds: tuple = ("summary", "image"), force: bool = False) -> dict:
+        net = refresh and online.settings()["enabled"]
+        out = {k: online.card(k, sci[:200], net, force) for k in kinds}
+        if refresh and not net:
+            out = {k: {**v, "state": "off"} if v["state"] in ("missing", "unavailable") else v for k, v in out.items()}
+        return {**out, "links": online.links(online.mapping(sci[:200]), sci)}
+
+    @api.get("/api/online/settings")
+    def online_settings():
+        return online.settings()
+
+    @api.post("/api/online/settings")
+    def online_set(body: dict):
+        if any(not isinstance(body.get(k, False), bool) for k in ("enabled", "disclosed")):
+            raise HTTPException(422, "enabled / disclosed 要是 true / false")
+        return online.set_settings(body.get("enabled"), body.get("disclosed"))
+
+    @api.delete("/api/online/cache")
+    def online_clear():
+        return {"deleted_bytes": online.clear()}
+
+    @api.get("/api/species/reference")
+    def species_reference(sci: str):
+        return reference(sci, refresh=False)
+
+    @api.post("/api/species/reference")
+    def species_reference_refresh(body: dict):
+        kinds = tuple(k for k in ("summary", "image") if k in (body.get("kinds") or ("summary", "image")))
+        return reference(str(body.get("sci", "")), refresh=True, kinds=kinds, force=bool(body.get("force")))
+
+    @api.get("/api/species/reference/image")
+    def species_reference_image(sci: str):
+        f = online.cached_file(sci[:200])
+        if f is None:
+            raise HTTPException(404, "没有缓存的授权参考图")
+        return FileResponse(f[0], media_type=f[1], headers={"Cache-Control": "private, no-cache"})
+
     if WEB.is_dir():
         @api.get("/", include_in_schema=False)
         def index():                           # never cached: it names the hashed assets of the current build
