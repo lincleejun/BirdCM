@@ -53,10 +53,13 @@ def test_routes_summary_species_observations_calendar_map(tmp_path, monkeypatch)
     assert obs["total"] == 2 and {o["sci"] for o in obs["items"]} == {"Sterna hirundo", "Ardea alba"}
     burst = next(o for o in obs["items"] if o["sci"] == "Sterna hirundo")
     assert burst["estimate"] == 1 and burst["photo_count"] == 300 and len(burst["source_refs"]) == 6
+    assert (burst["zh"], burst["en"]) == ("普通燕鸥", "Common Tern")                # line 2 of the name block: English · Latin
     cal = c.get("/api/library/calendar?year=2026", headers=H).json()
     assert cal["days"]["2026-01-01"]["observations"] == 2 and cal["active_days"] == 4 and len(cal["months"]) == 12
     m = c.get("/api/library/map?bounds=10,20,10.5,20.5", headers=H).json()
     assert sum(x["observations"] for x in m["clusters"]) >= 6 and m["no_place_observations"] == 0
+    assert all(r["en"] for x in m["clusters"] for r in x["refs"])                      # the map's photos carry the name block too
+    assert all(x["cover"]["en"] for x in cal["days"].values())
     assert c.get("/api/library/map?bounds=1,2,3", headers=H).status_code == 422
     pend = c.get("/api/library/photos?status=pending", headers=H).json()
     assert pend["total"] == 3 and {p["reason"] for p in pend["items"]} == {"只认到属", "不确定", "还没识别的框"}

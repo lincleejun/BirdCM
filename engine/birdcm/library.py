@@ -918,7 +918,7 @@ class Index:
                 c["lon"] += r["lon"]
                 c["n"] += 1
                 if len(c["refs"]) < 3:
-                    c["refs"].append({**ref(r), "day": g["day"], "sci": g["sci"], "lat": r["lat"], "lon": r["lon"]})
+                    c["refs"].append({**ref(r), "day": g["day"], "sci": g["sci"], **names_of(g["sci"]), "lat": r["lat"], "lon": r["lon"]})
         top = sorted(cells.values(), key=lambda c: (-len(c["groups"]), c["lat"], c["lon"]))[:500]
         return {"clusters": [{"lat": round(c["lat"] / c["n"], 5), "lon": round(c["lon"] / c["n"], 5), "observations": len(c["groups"]),
                               "refs": c["refs"]} for c in top],
