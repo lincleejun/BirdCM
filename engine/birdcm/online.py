@@ -74,6 +74,8 @@ def links(m: dict | None, sci: str) -> list[dict]:
             if lang in m["articles"]:
                 out.append({"name": name, "url": m["articles"][lang]["url"]})
         out.append({"name": "Wikidata", "url": f"https://www.wikidata.org/wiki/{m['wd_qid']}"})
+    elif m["wd_qid"]:                                  # broader / narrower / split-lump: only the source, said to differ
+        out.append({"name": "Wikidata（来源分类与 AviList 不同）", "url": f"https://www.wikidata.org/wiki/{m['wd_qid']}"})
     if m["inat_state"] in ACCEPT and m["inat_id"]:
         out.append({"name": "iNaturalist", "url": f"https://www.inaturalist.org/taxa/{m['inat_id']}"})
     if m["gbif_state"] in ACCEPT and m["gbif_legacy_key"]:
@@ -269,7 +271,10 @@ def card(kind: str, sci: str, network: bool, force: bool = False) -> dict:
     errors become states."""
     m = mapping(sci)
     if m is None or m["wd_state"] not in ACCEPT:
-        return {"state": "unmapped", "why": "资料未对应：映射里没有这个物种的已核验条目" if m else "资料未对应：没有映射数据"}
+        why = ("资料未对应：没有映射数据" if m is None else
+               f"来源分类与 AviList 不同（{m['wd_note'] or m['wd_state']}），不显示在线资料" if m["wd_state"] in ("broader", "narrower", "split-lump")
+               else "资料未对应：映射里没有这个物种的已核验条目")
+        return {"state": "unmapped", "why": why}
     with _inflight_lock:
         lock = _inflight.setdefault((kind, sci), threading.Lock())
     with lock:                                         # one fetch per species and kind, however many requests ask

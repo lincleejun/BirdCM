@@ -100,7 +100,8 @@ def test_mapping_package():
 def test_links_only_for_accepted_states():
     assert online.links(None, "x") == []
     m = {**SPARROW, "wd_state": "narrower", "inat_state": "ambiguous", "gbif_state": "unmapped"}
-    assert [x["name"] for x in online.links(m, "x")] == ["eBird"]                              # the AviList Cornell code
+    assert [x["name"] for x in online.links(m, "x")] == ["Wikidata（来源分类与 AviList 不同）", "eBird"]   # eBird: the AviList code
+    assert [x["name"] for x in online.links({**m, "wd_state": "ambiguous", "wd_qid": None}, "x")] == ["eBird"]
 
 
 # ---- Wikipedia summary ----------------------------------------------------------------------------------------------

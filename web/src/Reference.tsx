@@ -65,6 +65,7 @@ export default function SpeciesReference({ sci, own }: { sci: string; own: numbe
       <div className="row"><h3 id="h-ref">物种参考</h3>
         {s && <label className="inline"><input type="checkbox" checked={s.enabled} onChange={(e) => setting({ enabled: e.target.checked, disclosed: true })} /> 在线资料（Wikipedia / Wikimedia）</label>}
         <button className="btn link" onClick={clearCache}>删除网络缓存</button></div>
+      {s && !s.enabled && <p className="hint" role="status">在线资料已关闭：不会联网，只显示已经缓存的资料。</p>}
       {s && !s.disclosed && <div className="ref-disclosure" role="note">
         <p>{s.disclosure}</p>
         <div className="row"><button className="btn" onClick={() => setting({ disclosed: true })}>知道了</button>
