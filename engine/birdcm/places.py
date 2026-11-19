@@ -23,7 +23,9 @@ LOCK = threading.Lock()                     # one Nominatim request at a time, s
 LAST = [0.0]                                # monotonic time of the last request start
 GAP = 1.0                                   # seconds between requests (Nominatim usage policy)
 PAUSE = 60.0                                # after a network error: the queue is dropped, nothing asked for a minute
-FEATURES = {"natural", "waterway", "leisure", "boundary", "tourism", "landuse", "water"}
+# a feature worth naming: any natural / water one, else only parks and reserves (never a hotel, shop or housing estate)
+FEATURES = {"natural", "waterway", "water"}
+FEATURE_TYPES = {"park", "nature_reserve", "protected_area", "national_park", "garden", "wetland"}
 LOCALITY = ("city", "town", "village", "hamlet", "municipality", "district", "county")
 AREA = ("state", "province", "region", "country")
 
@@ -53,7 +55,7 @@ def compose(js: dict | None) -> str | None:
     if not isinstance(js, dict) or "error" in js:
         return None
     a = js.get("address") or {}
-    feature = js.get("name") if js.get("category") in FEATURES else None
+    feature = js.get("name") if js.get("category") in FEATURES or js.get("type") in FEATURE_TYPES else None
     locality = next((a[k] for k in LOCALITY if a.get(k)), None)
     area = next((a[k] for k in AREA if a.get(k)), None)
     return " · ".join(p for p in dict.fromkeys((locality or area, feature or area)) if p) or None
@@ -133,19 +135,29 @@ class Names:
         self.running = True
 
         def loop():
-            while True:
+            while self.running:
                 with self.cv:
-                    while not self.todo:
+                    while self.running and not self.todo:
                         self.cv.wait()
-                self.step()
+                if self.running:
+                    self.step()
         threading.Thread(target=loop, name="place-names", daemon=True).start()
+
+    def stop(self) -> None:
+        """The app is closing (or replaced): nothing more is queued or asked."""
+        with self.cv:
+            self.running = False
+            self.todo.clear()
+            self.cv.notify_all()
 
 
 _names: list[Names] = []
 
 
 def use(store) -> Names:
-    """The app's instance (one engine database per process)."""
+    """The app's instance (one engine database per process); a previous one stops."""
+    if _names:
+        _names[0].stop()
     _names[:] = [Names(store)]
     return _names[0]
 

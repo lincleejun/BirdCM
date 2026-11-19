@@ -287,6 +287,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                 r = store.single(sid)                       # queued when the last run ended: queued again
                 run_single(sid, r["region"], r["boxes"], wait=False)
         yield
+        names.stop()
         sched.close()
         previews.close()
         exif.close()

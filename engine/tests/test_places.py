@@ -110,6 +110,31 @@ def test_not_running_never_queues(tmp_path, monkeypatch):
     assert n.name(33.70, -118.05)["pending"] is False and not n.todo
 
 
+def test_closed_or_replaced_app_stops_asking(tmp_path, monkeypatch):
+    """The lifespan starts the thread and stops it on close; a newer app's instance stops the older one."""
+    from fastapi.testclient import TestClient
+    from birdcm.app import create_app
+    monkeypatch.setenv("BIRDCM_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("BIRDCM_CACHE_DIR", str(tmp_path / "cache"))
+    guarded, _ = create_app(8797, token="tok", store=Store(tmp_path / "data" / "t.db"), engine_factory=lambda: (_ for _ in ()).throw(FileNotFoundError("缺模型文件")))
+    n = places._names[0]
+    n.fetch = lambda req: pytest.fail("network")
+    with TestClient(guarded, base_url="http://127.0.0.1:8797"):
+        assert n.running
+    assert not n.running and n.name(33.70, -118.05)["pending"] is False
+    old = places.use(Store(tmp_path / "data" / "t.db"))
+    old.running = True
+    places.use(Store(tmp_path / "data" / "t.db"))
+    assert not old.running and not old.todo
+
+
+def test_feature_whitelist_skips_hotels():
+    hotel = {"category": "tourism", "type": "hotel", "name": "Grand Hotel", "address": {"city": "Monterey", "state": "California"}}
+    park = {"category": "leisure", "type": "nature_reserve", "name": "Elkhorn Slough", "address": {"county": "Monterey County"}}
+    assert places.compose(hotel) == "Monterey · California"
+    assert places.compose(park) == "Monterey County · Elkhorn Slough"
+
+
 def test_api_place_name_region_point_and_setting(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     from birdcm.app import create_app

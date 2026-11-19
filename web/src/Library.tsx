@@ -494,7 +494,7 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
   return (
     <div className="result-section"><div className="row"><h3>地图</h3>
       {!shown && <button className="btn" onClick={() => setShown(true)}>打开地图</button>}</div>
-      {!shown && <p className="hint">地图图块来自 openstreetmap.org，打开时才加载；照片和记录不会离开这台电脑。</p>}
+      {!shown && <p className="hint">地图图块来自 openstreetmap.org，打开时才加载；照片和记录不会离开这台电脑（开着「用网络显示地名」时，只把地点的经纬度取到约 1 公里发给 OpenStreetMap Nominatim 换成地名）。</p>}
       {shown && <>
         <div ref={box} className="map-box ll-map" aria-label="观察记录地图（数字是该处的观察记录数）" />
         {tiles === false && <p className="hint">地图图块加载不了（可能离线）。下面的地区和列表仍然可用。</p>}

@@ -221,7 +221,7 @@ function MapDialog({ start, catalogue, onClose, onPick }: { start: Place | null;
             {onlineMsg && <li className="hint">{onlineMsg}</li>}
           </ul>
         )}
-        <p className="hint">地图图块和按回车的地名搜索会访问 openstreetmap.org（搜索由本机程序转发，只发送你输入的地名；照片不会离开这台电脑）。搜到地方后点一下或拖动图钉细调。</p>
+        <p className="hint">地图图块和按回车的地名搜索会访问 openstreetmap.org（搜索由本机程序转发，只发送你输入的地名；开着「用网络显示地名」时，图钉的经纬度取到约 1 公里发给 OpenStreetMap Nominatim 换成地名；照片不会离开这台电脑）。搜到地方后点一下或拖动图钉细调。</p>
         <div ref={box} className="map-box" />
         {tilesOk === false && <p className="hint">地图图块加载不了（可能离线）。可以用上面的本地地名或输入坐标。</p>}
         <div className="row" style={{ marginTop: 8 }}>
