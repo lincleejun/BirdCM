@@ -73,53 +73,17 @@ extension Array {
     subscript(safe index:Int) -> Element? {indices.contains(index) ? self[index]:nil}
 }
 
+/// Hero pager (owner 2026-11-18: buttons must not ride on the image). The hero starts below the navigation bar and its
+/// height follows the current page's aspect within limits; the crop fills the hero width. Save / share / 去背景 sit at one
+/// fixed place beside the thumbnail strip, for bird pages only; the 原图 page has no save actions.
 struct BirdPager:View {
     @Environment(AppModel.self) var model
     let record:Record
     @Binding var marks:Bool
     @Binding var drawing:Bool
     @State private var page=0
-    @Environment(\.dynamicTypeSize) private var typeSize
-    var count:Int {min(6,record.boxes.count)}
-    var body:some View {
-        VStack(spacing:8) {
-            TabView(selection:$page) {
-                ForEach(0..<count,id:\.self) {i in
-                    BirdCropPage(record:record,index:i,active:page==i,marks:marks).tag(i)
-                }
-                if let image=model.preview {
-                    VStack(spacing:4) {
-                        PhotoView(image:image,record:record,marks:marks,drawing:drawing,onSelect:{i in if i<count {page=i}},onDraw:{box in drawing=false;let i=record.boxes.isEmpty ? 0:record.selected;Task{await model.analyze(index:i,box:box,manual:true,newBox:true,place:record.place);page=i}})
-                            .aspectRatio(image.size,contentMode:.fit).accessibilityIdentifier("result.photo")
-                        if record.boxes.count>count {Text("还有 \(record.boxes.count-count) 只").font(.caption).foregroundStyle(.white)}
-                    }.background(.black).tag(count)
-                }
-            }.tabViewStyle(.page(indexDisplayMode:.always)).indexViewStyle(.page(backgroundDisplayMode:.always))
-                .frame(height:typeSize.isAccessibilitySize ? 560:320).background(Palette.paper).accessibilityIdentifier("result.pager")
-            ScrollView(.horizontal) {
-                HStack(spacing:12) {ForEach(0...count,id:\.self) {i in
-                    Button {page=i} label:{VStack(spacing:3) {
-                        CropThumbnail(url:model.url(record.id),record:record,index:i,original:i==count)
-                            .frame(width:48,height:38).clipShape(RoundedRectangle(cornerRadius:8))
-                        Text(i==count ? "原图":"鸟 \(i+1)").font(.caption.bold())
-                    }.padding(4).background(page==i ? Palette.green.opacity(0.15):.clear,in:RoundedRectangle(cornerRadius:12))}
-                        .buttonStyle(.plain).accessibilityIdentifier(i==count ? "result.original":"result.subject.\(i)").accessibilityAddTraits(page==i ? .isSelected:[])
-                }}.padding(.horizontal)
-            }
-        }.onChange(of:page) {_,value in if value<count {Task{await model.select(value)}}}
-            .onChange(of:drawing) {_,value in if value {page=count}}
-            .onChange(of:record.boxes) {_,_ in page=count==0 ? 0:min(page,count-1)}
-            .onAppear {page=record.boxes.isEmpty ? 0:min(record.selected,count-1)}
-    }
-}
-
-struct BirdCropPage:View {
-    @Environment(AppModel.self) var model
-    @Environment(\.dynamicTypeSize) private var typeSize
-    let record:Record
-    let index:Int
-    let active:Bool
-    let marks:Bool
+    @State private var width:CGFloat=0
+    // The current bird page: its decoded crop and background-removal state, reset when the page changes.
     @State private var image:CGImage?
     @State private var mask:CGImage?
     @State private var lifted:CGImage?
@@ -130,50 +94,104 @@ struct BirdCropPage:View {
     @State private var working=false
     @State private var saving=false
     @State private var saved=false
+    @Environment(\.dynamicTypeSize) private var typeSize
+    var count:Int {min(6,record.boxes.count)}
     var source:CropSource? {model.url(record.id).flatMap{CropSource($0)}}
-    var window:[Double]? {source.map{record.displayCrops?[safe:index] ?? $0.crop(record.boxes[index]).normalized(in:$0.size)}}
+    func window(_ s:CropSource,_ i:Int) -> [Double] {record.displayCrops?[safe:i] ?? s.crop(record.boxes[i]).normalized(in:s.size)}
     /// Saved/shared captions use the effective (corrected) name.
-    var species:String {model.effective(record,index).name}
+    var species:String {model.effective(record,page).name}
+    /// Portrait large, landscape not tiny: width × aspect, clamped.
+    var hero:CGFloat {
+        var aspect=0.75
+        if page<count,let s=source {let v=window(s,page);aspect=(v[3]-v[1])*s.size.height/max(1,(v[2]-v[0])*s.size.width)}
+        else if let p=model.preview {aspect=p.size.height/max(1,p.size.width)}
+        // ponytail: fixed 240 pt cap keeps name + chips on the first screen of a 6.1" phone; tune if the bar heights change.
+        return min(typeSize.isAccessibilitySize ? 340:240,max(200,(width-32)*aspect))
+    }
     var body:some View {
-        // No inner vertical scroll: it would capture drags meant for the result page. The pager height fits this content at every type size.
-        VStack(spacing:6) {
-                if active,let image,let source,let window {
-                    PhotoView(image:UIImage(cgImage:removeBackground ? lifted ?? image:image),record:CropCoordinates(window:window).record(record,index:index),marks:marks,drawing:false,neutral:true,onSelect:{_ in},onDraw:{_ in})
-                        .aspectRatio(CGSize(width:image.width,height:image.height),contentMode:.fit).frame(maxHeight:typeSize.isAccessibilitySize ? 300:170).accessibilityIdentifier("result.crop.\(index)")
-                    if source.crop(record.boxes[index]).tiny {Text("鸟很小").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.tiny")}
-                    let controls=Group {
-                        if maskState != "none" && maskState != "unsupported" {
-                            Toggle("去背景",isOn:$removeBackground).toggleStyle(.button).disabled(working).accessibilityIdentifier("result.background")
-                        }
-                        if working {ProgressView()}
-                        Button(saved ? "已保存":"保存到相册",systemImage:"square.and.arrow.down") {Task{await save(source:source,window:window)}}.disabled(saving).accessibilityIdentifier("result.save")
-                        ShareLink(item:BirdShare(source:source,window:window,name:species,mask:removeBackground ? mask:nil),preview:SharePreview(species,image:Image(decorative:image,scale:1))) {Label("分享",systemImage:"square.and.arrow.up")}.accessibilityIdentifier("result.share")
-                    }.buttonStyle(.bordered).frame(minHeight:44)
-                    ViewThatFits(in:.horizontal) {HStack{controls};VStack{controls}}.font(.caption)
-                    switch maskState {
-                    case "none":
-                        let note=Text("未找到合适的轮廓，矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.noMask")
-                        let retry=Button("再试一次"){retried=true;maskState="idle";removeBackground=true}.font(.caption).frame(minHeight:44).accessibilityIdentifier("result.maskRetry")
-                        if retried {note} else {ViewThatFits(in:.horizontal) {HStack{note;retry};VStack(spacing:0){note;retry}}}
-                    case "unsupported": Text("此设备不支持去背景（模拟器不运行 Apple Vision 前景分割）。矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.maskUnsupported")
-                    case "fixture": Text("测试夹具蒙版，不是 Apple Vision 结果").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.maskFixture")
-                    case "success": Text("轮廓来自 Apple Vision，细腿、羽缘可能被切掉，请核对。").font(.caption2).foregroundStyle(Palette.secondary).multilineTextAlignment(.center)
-                    default: EmptyView()
-                    }
-                } else {ProgressView().frame(maxWidth:.infinity,minHeight:160)}
-            }.padding(.horizontal,8).padding(.bottom,40)   // clear of the page dots
-            .frame(maxHeight:.infinity,alignment:.top).background(Palette.paper)
-            .task(id:"\(record.id)-\(index)-\(active)") {
-                guard active,let source,let window else {image=nil;lifted=nil;mask=nil;removeBackground=false;return}
-                let decoded=await Task.detached {source.image(window:window,edge:1200)}.value
-                guard !Task.isCancelled else{return};image=decoded
+        VStack(spacing:8) {
+            TabView(selection:$page) {
+                ForEach(0..<count,id:\.self) {i in
+                    Group {
+                        if i==page,let image,let s=source {
+                            PhotoView(image:UIImage(cgImage:removeBackground ? lifted ?? image:image),record:CropCoordinates(window:window(s,i)).record(record,index:i),marks:marks,drawing:false,neutral:true,onSelect:{_ in},onDraw:{_ in})
+                                .aspectRatio(CGSize(width:image.width,height:image.height),contentMode:.fit)
+                                .clipShape(RoundedRectangle(cornerRadius:12)).accessibilityIdentifier("result.crop.\(i)")
+                                .overlay(alignment:.topLeading) {if s.crop(record.boxes[i]).tiny {Text("鸟很小").font(.caption.bold()).foregroundStyle(.white).padding(.horizontal,8).padding(.vertical,3).background(.black.opacity(0.55),in:Capsule()).padding(8).accessibilityIdentifier("result.tiny")}}
+                        } else {ProgressView()}
+                    }.frame(maxWidth:.infinity,maxHeight:.infinity).padding(.horizontal,16).tag(i)
+                }
+                if let image=model.preview {
+                    PhotoView(image:image,record:record,marks:marks,drawing:drawing,onSelect:{i in if i<count {page=i}},onDraw:{box in drawing=false;let i=record.boxes.isEmpty ? 0:record.selected;Task{await model.analyze(index:i,box:box,manual:true,newBox:true,place:record.place);page=i}})
+                        .aspectRatio(image.size,contentMode:.fit).clipShape(RoundedRectangle(cornerRadius:12)).accessibilityIdentifier("result.photo")
+                        .frame(maxWidth:.infinity,maxHeight:.infinity).padding(.horizontal,16).tag(count)
+                }
+            }.tabViewStyle(.page(indexDisplayMode:.always)).indexViewStyle(.page(backgroundDisplayMode:.always))
+                .frame(height:hero).animation(.easeInOut(duration:0.2),value:hero).accessibilityIdentifier("result.pager")
+            ViewThatFits(in:.horizontal) {
+                HStack(spacing:8) {strip;Spacer(minLength:0);actions}
+                VStack(alignment:.leading,spacing:8) {strip;actions}
+            }.padding(.horizontal)
+            notes.padding(.horizontal)
+        }.padding(.top,8)
+            .onGeometryChange(for:CGFloat.self) {$0.size.width} action:{width=$0}
+            .onChange(of:page) {_,value in if value<count {Task{await model.select(value)}}}
+            .onChange(of:drawing) {_,value in if value {page=count}}
+            .onChange(of:record.boxes) {_,_ in page=count==0 ? 0:min(page,count-1)}
+            .onAppear {page=record.boxes.isEmpty ? 0:min(record.selected,count-1)}
+            .task(id:"\(record.id)-\(page)-\(record.boxes)") {
+                image=nil;lifted=nil;mask=nil;removeBackground=false;maskState="idle";retried=false;saved=false
+                guard page<count,let s=source else {return}
+                let v=window(s,page),decoded=await Task.detached {s.image(window:v,edge:1200)}.value
+                if !Task.isCancelled {image=decoded}
             }
-            .task(id:removeBackground && active) {if removeBackground,active,mask==nil {await lift()}}
+            .task(id:removeBackground) {if removeBackground,mask==nil {await lift()}}
+    }
+    var strip:some View {
+        ScrollView(.horizontal) {
+            HStack(spacing:12) {ForEach(0...count,id:\.self) {i in
+                Button {page=i} label:{VStack(spacing:3) {
+                    CropThumbnail(url:model.url(record.id),record:record,index:i,original:i==count)
+                        .frame(width:48,height:38).clipShape(RoundedRectangle(cornerRadius:8))
+                    Text(i==count ? "原图":"鸟 \(i+1)").font(.caption.bold())
+                }.padding(4).background(page==i ? Palette.green.opacity(0.15):.clear,in:RoundedRectangle(cornerRadius:12))}
+                    .buttonStyle(.plain).accessibilityIdentifier(i==count ? "result.original":"result.subject.\(i)").accessibilityAddTraits(page==i ? .isSelected:[])
+            }}
+        }.scrollIndicators(.hidden).fixedSize(horizontal:false,vertical:true)
+    }
+    @ViewBuilder var actions:some View {
+        if page<count,let s=source,let image {
+            HStack(spacing:6) {
+                if maskState != "none" && maskState != "unsupported" {
+                    Toggle(isOn:$removeBackground) {Label("去背景",systemImage:"scissors")}.toggleStyle(.button).disabled(working).accessibilityIdentifier("result.background")
+                }
+                Button {Task{await save(source:s,window:window(s,page))}} label:{Label(saved ? "已保存":"保存",systemImage:"square.and.arrow.down")}.disabled(saving).accessibilityIdentifier("result.save")
+                ShareLink(item:BirdShare(source:s,window:window(s,page),name:species,mask:removeBackground ? mask:nil),preview:SharePreview(species,image:Image(decorative:image,scale:1))) {Label("分享",systemImage:"square.and.arrow.up")}.accessibilityIdentifier("result.share")
+            }.buttonStyle(.bordered).font(.caption).frame(minHeight:44)
+        }
+    }
+    @ViewBuilder var notes:some View {
+        if page<count {
+            VStack(spacing:4) {
+                if working {ProgressView()}
+                switch maskState {
+                case "none":
+                    let note=Text("未找到合适的轮廓，矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.noMask")
+                    let retry=Button("再试一次"){retried=true;maskState="idle";removeBackground=true}.font(.caption).frame(minHeight:44).accessibilityIdentifier("result.maskRetry")
+                    if retried {note} else {ViewThatFits(in:.horizontal) {HStack{note;retry};VStack(spacing:0){note;retry}}}
+                case "unsupported": Text("此设备不支持去背景（模拟器不运行 Apple Vision 前景分割）。矩形裁图仍可保存和分享。").font(.caption).multilineTextAlignment(.center).accessibilityIdentifier("result.maskUnsupported")
+                case "fixture": Text("测试夹具蒙版，不是 Apple Vision 结果").font(.caption).foregroundStyle(Palette.rust).accessibilityIdentifier("result.maskFixture")
+                case "success": Text("轮廓来自 Apple Vision，细腿、羽缘可能被切掉，请核对。").font(.caption2).foregroundStyle(Palette.secondary).multilineTextAlignment(.center)
+                default: EmptyView()
+                }
+            }.frame(maxWidth:.infinity)
+        } else if record.boxes.count>count {Text("还有 \(record.boxes.count-count) 只").font(.caption).foregroundStyle(Palette.secondary).frame(maxWidth:.infinity)}
     }
     func lift() async {
-        guard let image,let source,let window else{return}
+        guard let image,let source,page<count else{return}
+        let window=window(source,page)
         working=true;defer{working=false}
-        let box=CropCoordinates(window:window).box(record.boxes[index])
+        let box=CropCoordinates(window:window).box(record.boxes[page])
         var injected:String?
         #if DEBUG
         injected=UserDefaults.standard.string(forKey:"maskFixture")
