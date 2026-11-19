@@ -42,7 +42,7 @@ struct SpeciesReferenceSection: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(Reference.disclosure).font(.footnote)
             HStack(spacing: 16) {
-                Button("知道了") { Reference.disclosed = true; disclosed = true }.foregroundStyle(.white).buttonStyle(.borderedProminent).tint(Palette.button).accessibilityIdentifier("reference.disclosed")
+                Button("知道了") { Reference.disclosed = true; disclosed = true }.foregroundStyle(Palette.onAccent).buttonStyle(.borderedProminent).tint(Palette.accent).accessibilityIdentifier("reference.disclosed")
                 Button("关闭在线资料") { Reference.disclosed = true; disclosed = true; set(enabled: false) }.accessibilityIdentifier("reference.disable")
             }
         }.padding(12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
@@ -71,7 +71,7 @@ struct SpeciesReferenceSection: View {
                 link(c.author ?? "作者见 Commons 文件页", c.sourceURL)
                 Text("·")
                 link(c.licence ?? "", c.licenceURL)
-                if c.nc == true { Text("非商业许可（NC）").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2).overlay(Capsule().stroke(Palette.rust)).foregroundStyle(Palette.rust) }
+                if c.nc == true { Text("非商业许可（NC）").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2).overlay(Capsule().stroke(Palette.warning)).foregroundStyle(Palette.warning) }
             }
             if let credit = c.credit, !credit.isEmpty, credit != c.author, credit.lowercased() != "own work" { Text("出处 \(credit)") }
             HStack(spacing: 4) { Text("来源"); link("Wikimedia Commons 文件页", c.sourceURL) }
@@ -106,7 +106,7 @@ struct SpeciesReferenceSection: View {
     }
 
     @ViewBuilder func link(_ title: String, _ url: String?) -> some View {
-        if let url, let u = URL(string: url) { Link(title, destination: u).foregroundStyle(Palette.green) } else { Text(title) }
+        if let url, let u = URL(string: url) { Link(title, destination: u).foregroundStyle(Palette.accent) } else { Text(title) }
     }
 
     /// The same wording as the desktop page; a retry where asking again can help.
