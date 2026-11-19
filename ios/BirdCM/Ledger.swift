@@ -5,7 +5,10 @@ final class Catalogue {
     struct Species: Hashable, Identifiable {
         let sci: String, en: String, zh: String, genus: String, family: String
         var id: String { sci }
+        /// The name block's first line (polish.md): Chinese, else English, else the scientific name.
         var name: String { zh.isEmpty ? (en.isEmpty ? sci : en) : zh }
+        /// The other common name on the second line: English under a Chinese title; nothing when English is the title.
+        var alt: String { zh.isEmpty ? "" : en }
     }
     static let shared = Catalogue()
     let all: [Species]

@@ -56,12 +56,12 @@ final class PlaceFlows: FlowCase {
         launch("no-location");fixture();outcome("place.skip");try shot("missing-gps-sheet");element("place.skip").tap();outcome();try shot("without-place")
     }
     func testChangePlaceChangesAnswer() throws {
-        launch("location-rerank");pick();XCTAssertEqual(element("result.name").label,"不确定")
+        launch("location-rerank");pick();XCTAssertEqual(shownName(),"不确定")
         reveal("result.bottomPlace").tap();search("California")
         let ca=element("place.region.US-CA");XCTAssertTrue(ca.appears(timeout:5));XCTAssertTrue(ca.isHittable);ca.tap()
-        XCTAssertTrue(app.staticTexts["红翅黑鹂"].firstMatch.appears(timeout:10));try shot("local-blackbird")
+        label(element("result.name"),contains:"红翅黑鹂");try shot("local-blackbird")
         back();app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'")).firstMatch.tap()
-        outcome();XCTAssertEqual(element("result.name").label,"红翅黑鹂")
+        outcome();XCTAssertEqual(shownName(),"红翅黑鹂")
     }
     /// Photo GPS shows as a map snapshot with the place under it (owner 2026-11-18), opens a full map; offline keeps the text.
     func testResultPlaceMap() throws {

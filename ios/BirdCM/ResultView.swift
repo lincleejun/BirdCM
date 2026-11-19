@@ -92,8 +92,7 @@ struct ResultView: View {
             .sheet(isPresented:$dating){if let item {DateSheet(item:item)}}
             .sheet(item:$candidate){c in
                 NavigationStack{ScrollView{VStack(alignment:.leading,spacing:16){
-                    Text(model.catalogue.name(c.value.scientific)).font(.title)
-                    Text(c.value.english);Text(c.value.scientific).italic()
+                    SpeciesName(key:c.value.scientific,size:.hero)
                     Text("候选把握 \(c.value.p.formatted(.percent.precision(.fractionLength(1))))")
                     let rarity=model.localRarity(c.value.scientific,r)
                     Text("当地当月：\(rarity.label)")
@@ -138,12 +137,10 @@ struct ResultView: View {
     @ViewBuilder func identification(_ r: Record) -> some View {
         let e=model.effective(r,r.selected)
         VStack(alignment:.leading,spacing:8) {
-            Text(e.name).accessibilityIdentifier("result.name").accessibilityValue(e.state=="none" ? e.model?.level ?? "unclassified":e.state).font(.largeTitle.bold()).foregroundStyle(e.key == nil ? Palette.warning:Palette.ink).accessibilityAddTraits(.isHeader)
-            if let k=e.key,let sp=model.catalogue.species(k) {
-                if !sp.en.isEmpty {Text(sp.en).font(.title3)}
-                Text(sp.sci).italic().foregroundStyle(Palette.secondary)
-                if sp.zh.isEmpty {Text("暂无中文名").font(.caption).foregroundStyle(Palette.secondary)}
-            }
+            Group {
+                if let k=e.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.hero)}
+                else {SpeciesName(title:e.name,size:.hero,uncertain:e.key == nil)}
+            }.accessibilityIdentifier("result.name").accessibilityValue(e.state=="none" ? e.model?.level ?? "unclassified":e.state).accessibilityAddTraits(.isHeader)
             if e.state=="species" {Label("已人工更正",systemImage:"person.crop.circle.badge.checkmark").font(.subheadline).foregroundStyle(Palette.accent).accessibilityIdentifier("result.corrected")}
             ViewThatFits(in:.horizontal) {HStack {factChips(e,r)};VStack(alignment:.leading) {factChips(e,r)}}
             if e.state=="none",let result=e.model {
@@ -192,7 +189,7 @@ struct ResultView: View {
                 }.frame(minHeight:44).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityIdentifier("result.candidates.toggle").padding(.bottom,open ? 8:0)
                 if open {ForEach(others,id:\.offset){i,c in
                         Button {candidate=CandidateSheet(value:c)} label:{HStack{
-                            VStack(alignment:.leading,spacing:4){Text(model.catalogue.name(c.scientific));Text(c.scientific).font(.caption).italic().foregroundStyle(Palette.secondary);ProgressView(value:c.p).tint(Palette.accent)}
+                            VStack(alignment:.leading,spacing:8){SpeciesName(key:c.scientific,size:.row);ProgressView(value:c.p).tint(Palette.accent)}
                             Spacer();Text(c.p.formatted(.percent.precision(.fractionLength(1)))).font(.subheadline).monospacedDigit();Image(systemName:"chevron.right").font(.caption)
                         }.frame(minHeight:48)}.accessibilityIdentifier("result.candidate.\(i)").buttonStyle(.plain)
                         Divider()

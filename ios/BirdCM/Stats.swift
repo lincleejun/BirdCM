@@ -104,9 +104,9 @@ struct StatsView: View {
                     ForEach(s.list) { st in
                         NavigationLink(value: AppModel.Route.species(st.id)) {
                             HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(model.catalogue.name(st.id)).font(.body)
-                                    Text("\(st.observations) 次观察 · 估计 \(st.estimate) · \(st.photos.count) 张 · 最近 \(st.last)").font(.caption).foregroundStyle(Palette.secondary).monospacedDigit()
+                                VStack(alignment: .leading, spacing: 8) {
+                                    SpeciesName(key: st.id, size: .row)
+                                    Text("\(st.observations) 次观察 · 估计 \(st.estimate) · \(st.photos.count) 张 · 最近 \(st.last)").font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit()
                                 }
                                 Spacer()
                                 if Ledger.inRange(model.ledger.allTime[st.id]?.first ?? "", period.range) { NewBadge() }
@@ -136,7 +136,8 @@ struct StatsView: View {
                 let rare = obs.filter { book.rare($0.id) }
                 Text("本地罕见 / 少见：\(rare.count) 条观察记录").font(.subheadline).accessibilityIdentifier("stats.rare")
                 ForEach(rare.prefix(20)) { o in
-                    Text("· \(model.catalogue.name(o.species)) · \(o.day)").font(.caption)
+                    HStack(alignment: .firstTextBaseline) { SpeciesName(key: o.species, size: .row); Spacer(); Text(o.day).font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit() }
+                        .accessibilityElement(children: .combine)
                 }
                 let labels = ["无记录", "罕见", "少见", "不常见", "常见"]
                 let buckets = Dictionary(grouping: obs) { book.bucket($0.id) }.mapValues(\.count)
@@ -145,7 +146,7 @@ struct StatsView: View {
                 if !UserDefaults.standard.bool(forKey: "hideIUCN") {
                     let threatened = book.iucn.filter { RarityBook.threatened.contains($0.value) }.sorted { $0.key < $1.key }
                     Text("IUCN 受威胁（易危 / 濒危 / 极危）：\(threatened.count) 种").font(.subheadline).accessibilityIdentifier("stats.threatened")
-                    ForEach(threatened, id: \.key) { k, v in HStack { Text(model.catalogue.name(k)).font(.caption); IUCNChip(code: v, small: true) } }
+                    ForEach(threatened, id: \.key) { k, v in HStack { SpeciesName(key: k, size: .row); Spacer(); IUCNChip(code: v, small: true) }.accessibilityElement(children: .combine) }
                 }
             } else { ProgressView("正在查本地稀有度…").font(.caption) }
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
@@ -271,10 +272,13 @@ struct SightingList: View {
                         if let item = model.ledger.evidence(o).first, let sub = item.subjects.first(where: { $0.key == o.species }) {
                             CropThumbnail(url: model.url(item.id), id: item.id, boxes: item.boxes, crops: item.crops, index: sub.ordinal).frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityHidden(true)
                         }
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack { Text(model.catalogue.name(o.species)); if model.ledger.allTime[o.species]?.first == o.day { NewBadge() } }
-                            Text("\(o.day) · \(place(o))").font(.caption).foregroundStyle(Palette.secondary)
-                            Text("估计 \(o.estimate)\(o.override != nil ? "（你改过）" : "") · \(o.frames.count) 张").font(.caption).monospacedDigit()
+                        // The reported bug: this list showed the Chinese name alone; it is the shared two-line block now.
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline) { SpeciesName(key: o.species, size: .row); if model.ledger.allTime[o.species]?.first == o.day { NewBadge() } }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(o.day) · \(place(o))").monospacedDigit()
+                                Text("估计 \(o.estimate)\(o.override != nil ? "（你改过）" : "") · \(o.frames.count) 张").monospacedDigit()
+                            }.font(.caption).foregroundStyle(Palette.tertiary)
                         }
                         Spacer()
                     }.contentShape(Rectangle())
@@ -297,8 +301,8 @@ struct SightingSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent("鸟种", value: model.catalogue.name(o.species))
-                    LabeledContent("日期", value: o.day)
+                    SpeciesName(key: o.species, size: .row)
+                    LabeledContent("日期") { Text(o.day).monospacedDigit() }
                     LabeledContent("单张照片最多", value: "\(o.frames.values.max() ?? 0) 只")
                     LabeledContent("照片", value: "\(o.frames.count) 张")
                 }
@@ -371,7 +375,10 @@ struct SightingMap: View {
             Section("有坐标的记录 · \(Set(pts.map(\.2.id)).count)") {
                 ForEach(Array(Set(pts.map(\.2.id))).sorted().prefix(100), id: \.self) { id in
                     if let o = obs.first(where: { $0.id == id }), let i = model.ledger.evidence(o).first(where: { $0.lat != nil }) {
-                        Text("\(model.catalogue.name(o.species)) · \(o.day) · \(String(format: "%.3f, %.3f", i.lat!, i.lon!))").font(.caption).monospacedDigit()
+                        VStack(alignment: .leading, spacing: 8) {
+                            SpeciesName(key: o.species, size: .row)
+                            Text("\(o.day) · \(String(format: "%.3f, %.3f", i.lat!, i.lon!))").font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit()
+                        }.accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -384,7 +391,12 @@ struct SightingMap: View {
         .navigationTitle("地图").navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: Binding(get: { picked != nil }, set: { if !$0 { picked = nil } })) {
             NavigationStack {
-                List(picked ?? []) { o in Text("\(model.catalogue.name(o.species)) · \(o.day) · 估计 \(o.estimate)") }
+                List(picked ?? []) { o in
+                    VStack(alignment: .leading, spacing: 8) {
+                        SpeciesName(key: o.species, size: .row)
+                        Text("\(o.day) · 估计 \(o.estimate)").font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit()
+                    }.accessibilityElement(children: .combine)
+                }
                     .navigationTitle("照片位置").toolbar { Button("完成") { picked = nil } }
             }.presentationDetents([.medium]).debugAppearance()
         }

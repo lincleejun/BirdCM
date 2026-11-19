@@ -38,6 +38,60 @@ enum Palette {
     static func fg(_ s:ThemeContrast.Semantic) -> Color {token(s.fg)}
     static func bg(_ s:ThemeContrast.Semantic) -> Color {token(s.bg)}
 }
+/// The one species name block (docs/design/polish/polish.md; web: names.tsx SpeciesName): line 1 the name in the UI
+/// language (Chinese; English when there is none), line 2 in secondary gray "other common name · *Latin*", 2 pt apart,
+/// never a third line for the Latin. Hero and row keep line 2 on one line: the common name gives way first and goes,
+/// with its dot, when not even two of its characters fit; the Latin truncates only when it alone is too wide. A card
+/// (owner 2026-11-18) and accessibility sizes let line 2 wrap to two lines. Text never shrinks; VoiceOver reads all names.
+/// Metadata is not part of it: callers put it 8–12 pt below.
+struct SpeciesName: View {
+    enum Size { case hero, row, card }
+    let title: String, alt: String, sci: String
+    var size: Size
+    var uncertain=false
+    @ScaledMetric private var primary: CGFloat
+    @ScaledMetric private var secondary: CGFloat
+    @Environment(\.dynamicTypeSize) private var typeSize
+    init(title:String,alt:String="",sci:String="",size:Size,uncertain:Bool=false) {
+        self.title=title;self.alt=alt;self.sci=sci;self.size=size;self.uncertain=uncertain
+        switch size {
+        case .hero: _primary=ScaledMetric(wrappedValue:28,relativeTo:.title);_secondary=ScaledMetric(wrappedValue:15,relativeTo:.subheadline)
+        case .row: _primary=ScaledMetric(wrappedValue:18,relativeTo:.body);_secondary=ScaledMetric(wrappedValue:13,relativeTo:.footnote)
+        case .card: _primary=ScaledMetric(wrappedValue:17,relativeTo:.headline);_secondary=ScaledMetric(wrappedValue:13,relativeTo:.footnote)
+        }
+    }
+    /// A catalogue key; an unknown key shows as itself.
+    init(key:String,size:Size) {
+        let sp=Catalogue.shared.species(key)
+        self.init(title:sp?.name ?? key,alt:sp?.alt ?? "",sci:sp?.sci ?? "",size:size)
+    }
+    var label:String {[title,alt,sci].filter{!$0.isEmpty}.joined(separator:"，")}
+    var body: some View {
+        VStack(alignment:.leading,spacing:2) {
+            Text(title).font(.system(size:primary,weight:.semibold)).foregroundStyle(uncertain ? Palette.warning:Palette.ink).lineLimit(1)
+            if !alt.isEmpty || !sci.isEmpty {second.font(.system(size:secondary)).foregroundStyle(Palette.secondary)}
+        }
+        .accessibilityElement(children:.ignore).accessibilityLabel(label)
+    }
+    // ponytail: the italic's 2 pt allowance is trailing padding on the Latin, not a measured overhang.
+    var latin: Text {Text(sci).italic()}
+    @ViewBuilder var second: some View {
+        let wraps=size == .card || typeSize.isAccessibilitySize
+        if wraps || alt.isEmpty || sci.isEmpty {
+            (alt.isEmpty ? latin:sci.isEmpty ? Text(alt):Text(alt)+Text(" · ")+latin).lineLimit(wraps ? 2:1).padding(.trailing,2)
+        } else {
+            ViewThatFits(in:.horizontal) {
+                (Text(alt)+Text(" · ")+latin).lineLimit(1).padding(.trailing,2)
+                // Two characters of the common name, an ellipsis, the dot and the whole Latin fit: the hidden proxy sets the
+                // ideal width, the real line fills the width it gets (the common name truncating first).
+                (Text(String(alt.prefix(2))+"…")+Text(" · ")+latin).lineLimit(1).padding(.trailing,2).hidden()
+                    .frame(maxWidth:.infinity,alignment:.leading)
+                    .overlay(alignment:.leading) {HStack(spacing:0) {Text(alt).lineLimit(1);Text(" · ").fixedSize();latin.lineLimit(1).fixedSize().padding(.trailing,2)}}
+                latin.lineLimit(1).padding(.trailing,2)
+            }
+        }
+    }
+}
 /// Names are read-time derivations from the bundled catalogue, never the cached label in an old result.
 func title(_ r: Identification) -> String {
     if r.level == "species", let k=r.name ?? r.top5.first?.scientific { return Catalogue.shared.name(k) }
@@ -783,7 +837,8 @@ struct HistoryRow: View {
         HStack(spacing:14) {
             CropThumbnail(url:model.url(item.id),id:item.id,boxes:item.boxes,crops:item.crops).frame(width:64,height:64).clipShape(RoundedRectangle(cornerRadius:16)).accessibilityHidden(true)
             VStack(alignment:.leading,spacing:6) {
-                Text(model.label(item)).font(.headline)
+                if let s=item.subjects.first,!s.excluded,let k=s.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.row)}
+                else {SpeciesName(title:model.label(item),size:.row)}
                 Text(item.dateSource=="photo" || item.dateSource=="user" ? item.wall.replacingOccurrences(of:"T",with:" "):item.day+" · 按识别日期").font(.caption).monospacedDigit()
                 Text(model.placeName(item) ?? String(localized:"没有地点")).font(.caption).foregroundStyle(Palette.secondary)
                 if item.missing {Text("原图不可用").font(.caption).foregroundStyle(Palette.warning)}

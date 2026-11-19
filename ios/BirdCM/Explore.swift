@@ -145,11 +145,10 @@ struct ExploreView: View {
         let l = likely?.rows.first { $0.sci == sp.sci }
         return NavigationLink(value: AppModel.Route.species(sp.sci)) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(sp.zh.isEmpty ? sp.en : sp.zh)
-                    Text(sp.zh.isEmpty ? "暂无中文名 · " + sp.sci : sp.en + " · " + sp.sci).font(.caption).foregroundStyle(Palette.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    SpeciesName(title: sp.name, alt: sp.alt, sci: sp.sci, size: .row)
                     if local, let l {
-                        Text([l.median.map { "地点模型 \($0.formatted(.percent.precision(.fractionLength(0))))" } ?? "地点模型未知", l.share.map { "观测记录 \($0.formatted(.percent.precision(.fractionLength(2))))" }, l.tier.map { ["无记录", "罕见", "少见", "不常见", "常见"][max(0, min(4, $0))] }].compactMap { $0 }.joined(separator: " · ")).font(.caption2).monospacedDigit()
+                        Text([l.tier.map { "本地：" + ["无记录", "罕见", "少见", "不常见", "常见"][max(0, min(4, $0))] }, l.median.map { "地点模型 \($0.formatted(.percent.precision(.fractionLength(0))))" } ?? "地点模型未知", l.share.map { "观测记录 \($0.formatted(.percent.precision(.fractionLength(2))))" }].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit()
                     }
                 }
                 Spacer()

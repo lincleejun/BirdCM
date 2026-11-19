@@ -90,6 +90,8 @@ class FlowCase: XCTestCase {
         while !done() {if Date()>end {return false};usleep(100_000)}
         return true
     }
+    /// The first line of a SpeciesName block: its VoiceOver label reads every name, "白头海雕，Bald Eagle，Haliaeetus …".
+    func shownName(_ id:String="result.name")->String {element(id).label.components(separatedBy:"，")[0]}
     func label(_ e:XCUIElement,contains text:String,_ timeout:Double=10,file:StaticString=#filePath,line:UInt=#line) {
         until("label contains \(text)",timeout,file:file,line:line) {e.exists && e.label.contains(text)}
     }

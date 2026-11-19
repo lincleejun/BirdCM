@@ -251,6 +251,18 @@ final class LibraryTests: XCTestCase {
         for r in old { XCTAssertNotNil(try reopened.record(r.id)); if r.id != old[5].id { XCTAssertNotNil(reopened.url(r.id)) } }
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("\(old[0].id).photo").path))
     }
+    /// polish.md name block: Chinese title with English beside the Latin; without Chinese, English is the title and the Latin
+    /// stands alone; VoiceOver reads every name.
+    @MainActor func testSpeciesNameLines() {
+        let zh = Catalogue.Species(sci: "Haliaeetus leucocephalus", en: "Bald Eagle", zh: "白头海雕", genus: "", family: "")
+        XCTAssertEqual([zh.name, zh.alt], ["白头海雕", "Bald Eagle"])
+        let en = Catalogue.Species(sci: "Aus bus", en: "Some Bird", zh: "", genus: "", family: "")
+        XCTAssertEqual([en.name, en.alt], ["Some Bird", ""])
+        let bare = Catalogue.Species(sci: "Aus cus", en: "", zh: "", genus: "", family: "")
+        XCTAssertEqual([bare.name, bare.alt], ["Aus cus", ""])
+        XCTAssertEqual(SpeciesName(title: zh.name, alt: zh.alt, sci: zh.sci, size: .row).label, "白头海雕，Bald Eagle，Haliaeetus leucocephalus")
+        XCTAssertEqual(SpeciesName(title: en.name, alt: en.alt, sci: en.sci, size: .card).label, "Some Bird，Aus bus")
+    }
     func testPinyinFullAndInitials() async throws {
         let c = Catalogue.shared; await c.preparePinyin()
         XCTAssertEqual(Catalogue.pinyinOf("白头海雕").0, "baitouhaidiao"); XCTAssertEqual(Catalogue.pinyinOf("白头海雕").1, "bthd")
