@@ -28,6 +28,20 @@ final class LaunchTests: XCTestCase {
         r=try check(build:"1.0(7)");XCTAssertEqual(r.invalid,["a"]);XCTAssertFalse(r.hashed)
         XCTAssertEqual(try Models.check(dir:dir,assets:[],defaults:defaults).invalid,["integrity.json"])
     }
+    /// IUCN is read now from the current table on the result page and the species page alike, never from the value an
+    /// old build stored inside the Identification (owner 2026-11-18: different category and colour between screens).
+    @MainActor func testIUCNIsReadTimeOnEverySurface() throws {
+        let name = "IUCNTest-\(UUID().uuidString)", model = AppModel(history: name)
+        defer { try? FileManager.default.removeItem(at: Models.support.appendingPathComponent(name)) }
+        let key = "Haliaeetus leucocephalus"
+        var stale = Identification(top5: [Candidate(scientific: key, english: "Bald Eagle", chinese: "白头海雕", p: 0.99)], level: "species", name: key)
+        stale.rarity = RarityValue(label: "罕见", iucn: "CR")
+        var r = Record(boxes: [[0.1, 0.1, 0.5, 0.5]], selected: 0, result: stale, shooting: Shooting(data: Data()), place: nil); r.results["0"] = stale
+        let table = try XCTUnwrap(model.catalogue.rarity?.iucn(key), "bundled table has the eagle")
+        let resultPage = model.iucn(model.effective(r, 0).key), speciesPage = model.iucn(key)
+        XCTAssertEqual(resultPage, table); XCTAssertEqual(speciesPage, table); XCTAssertNotEqual(resultPage, "CR")
+        XCTAssertEqual(model.catalogue.rarity?.iucn(codes: [table])[key], table, "探索 badges read the same column")
+    }
     /// Old downloaded models (Application Support/Models) go; History and everything else stay.
     func testLegacyDownloadedModelsRemoved() throws {
         let support=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

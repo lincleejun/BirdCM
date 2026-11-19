@@ -78,9 +78,19 @@ final class Rarity {
         }
         return (out, total, s.coverage)
     }
+    /// The one IUCN read for display: the current table's category for a species (nil when hidden or unknown).
+    /// Never the value stored inside an old Identification.
+    func iucn(_ sci: String) -> String? {
+        UserDefaults.standard.bool(forKey:"hideIUCN") ? nil : rows("SELECT iucn FROM species WHERE scientific=?",[sci]).first.flatMap{$0[0].isEmpty ? nil:$0[0]}
+    }
+    /// Same column for many species at once (探索 filters and badges).
+    func iucn(codes: [String]) -> [String: String] {
+        guard !UserDefaults.standard.bool(forKey:"hideIUCN") else {return [:]}
+        return Dictionary(rows("SELECT scientific,iucn FROM species WHERE iucn IN (\(codes.map{"'\($0)'"}.joined(separator:",")))",[]).map{($0[0],$0[1])},uniquingKeysWith:{a,_ in a})
+    }
     func lookup(_ sci: String, place: Place?, month: Int?) -> RarityValue {
         let sp=rows("SELECT id,iucn FROM species WHERE scientific=?",[sci]).first
-        let iucn=UserDefaults.standard.bool(forKey:"hideIUCN") ? nil:sp.flatMap{$0[1].isEmpty ? nil:$0[1]}
+        let iucn=self.iucn(sci)
         guard let place else {return RarityValue(label:"数据不足",iucn:iucn)}
         let global = !rows("SELECT name FROM sqlite_master WHERE name='shapes'",[]).isEmpty
         var code:String?

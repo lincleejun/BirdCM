@@ -27,7 +27,7 @@ struct RarityBook {
             if known.isEmpty { book.unavailable.insert(o.id) } else { book.tiers[o.id] = known }
         }
         if !UserDefaults.standard.bool(forKey: "hideIUCN") {
-            for k in Set(ledger.observations.filter { Ledger.inRange($0.day, range) }.map(\.species)) { if let c = db.lookup(k, place: nil, month: nil).iucn { book.iucn[k] = c } }
+            for k in Set(ledger.observations.filter { Ledger.inRange($0.day, range) }.map(\.species)) { if let c = db.iucn(k) { book.iucn[k] = c } }
         }
         return book
     }
@@ -145,7 +145,7 @@ struct StatsView: View {
                 if !UserDefaults.standard.bool(forKey: "hideIUCN") {
                     let threatened = book.iucn.filter { RarityBook.threatened.contains($0.value) }.sorted { $0.key < $1.key }
                     Text("IUCN 受威胁（易危 / 濒危 / 极危）：\(threatened.count) 种").font(.subheadline).accessibilityIdentifier("stats.threatened")
-                    ForEach(threatened, id: \.key) { k, v in Text("· \(model.catalogue.name(k)) · \(Rarity.iucnLabel(v))").font(.caption) }
+                    ForEach(threatened, id: \.key) { k, v in HStack { Text(model.catalogue.name(k)).font(.caption); IUCNChip(code: v, small: true) } }
                 }
             } else { ProgressView("正在查本地稀有度…").font(.caption) }
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))

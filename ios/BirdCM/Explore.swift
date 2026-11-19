@@ -100,7 +100,7 @@ struct ExploreView: View {
             }
         }
         .scrollContentBackground(.hidden).background(Palette.paper)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: Text("搜索全部鸟种"))
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: Text("搜索全部鸟种"))
         .task { await model.catalogue.preparePinyin() }
         .task(id: "\(mode)|\(month)|\(model.homePlace?.stableCode ?? "")") {
             guard mode == "local", let place = model.homePlace else { likely = nil; return }
@@ -111,9 +111,8 @@ struct ExploreView: View {
         .task(id: "\(query)|\(seen)|\(tier)|\(threatened)|\(family)|\(sort)|\(likely?.rows.count ?? -1)|\(mode)|\(model.ledger.allTime.count)") {
             try? await Task.sleep(for: .milliseconds(150))
             guard !Task.isCancelled else { return }
-            if threatened && iucn.isEmpty, let db = model.catalogue.rarity {
-                iucn = Dictionary(db.rows("SELECT scientific,iucn FROM species WHERE iucn IN ('VU','EN','CR')", []).map { ($0[0], $0[1]) }, uniquingKeysWith: { a, _ in a })
-            }
+            // Same read as every other screen (Rarity.iucn); near-threatened and worse get a badge on the row.
+            if iucn.isEmpty, let db = model.catalogue.rarity { iucn = db.iucn(codes: ["NT", "VU", "EN", "CR", "EW", "EX"]) }
             results = filtered(); limit = 50
         }
         .sheet(isPresented: $choosePlace) { PlacePicker(onChoose: { model.chooseHome($0) }).debugAppearance() }
@@ -140,7 +139,7 @@ struct ExploreView: View {
                 }
             }
         }
-        return list.filter { (seen == "all" || (seenSet[$0.sci] != nil) == (seen == "seen")) && (family.isEmpty || $0.family == family) && (!threatened || iucn[$0.sci] != nil) }
+        return list.filter { (seen == "all" || (seenSet[$0.sci] != nil) == (seen == "seen")) && (family.isEmpty || $0.family == family) && (!threatened || RarityBook.threatened.contains(iucn[$0.sci] ?? "")) }
     }
     func row(_ sp: Catalogue.Species) -> some View {
         let l = likely?.rows.first { $0.sci == sp.sci }
@@ -154,6 +153,7 @@ struct ExploreView: View {
                     }
                 }
                 Spacer()
+                if let code = iucn[sp.sci] { IUCNChip(code: code, small: true) }
                 if model.ledger.allTime[sp.sci] != nil { Label("已见", systemImage: "checkmark.circle.fill").font(.caption.bold()).foregroundStyle(Palette.green) }
             }.frame(minHeight: 44)
         }.accessibilityIdentifier("explore.row.\(sp.sci)")
