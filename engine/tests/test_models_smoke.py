@@ -14,7 +14,10 @@ try:
     READY = True
 except FileNotFoundError:
     READY = False
-pytestmark = pytest.mark.skipif(not READY, reason="model files not installed (birdcm models fetch)")
+pytestmark = [pytest.mark.skipif(not READY, reason="model files not installed (birdcm models fetch)"),
+              # the owner's sample photos are gitignored (not published): absent in a fresh clone and in CI
+              pytest.mark.skipif(not all((IMG / f"{k}.jpg").is_file() for k in ("000004_11", "000005_03", "000006_13")),
+                                 reason="sample photos docs/prototype/img/*.jpg not here")]
 
 
 @pytest.fixture(scope="module")
