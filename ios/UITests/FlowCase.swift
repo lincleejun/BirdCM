@@ -15,6 +15,8 @@ extension XCUIElement {
 /// UI fixtures exercise presentation; real inference and cached re-ranking have separate engine checks.
 class FlowCase: XCTestCase {
     let app=XCUIApplication()
+    /// Screenshot names use this test name instead of the running one (a test split in two keeps its old names).
+    var shotTest:String?
     var env:[String:String] {ProcessInfo.processInfo.environment}
     var image:String {Bundle(for:FlowCase.self).resourceURL!.appendingPathComponent("Fixtures/photo-0.jpg").path}
     override func setUp(){continueAfterFailure=false}
@@ -69,7 +71,7 @@ class FlowCase: XCTestCase {
         let s=XCUIScreen.main.screenshot(),a=XCTAttachment(screenshot:s);a.name=name;a.lifetime = .keepAlways;add(a)
         if let folder=env["SCREENSHOT_DIR"] {
             let dir=URL(fileURLWithPath:folder);try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
-            let test=self.name.replacingOccurrences(of:"[\(type(of:self)) ",with:"[Flows ")
+            let test=shotTest.map{"-[Flows \($0)]"} ?? self.name.replacingOccurrences(of:"[\(type(of:self)) ",with:"[Flows ")
             try s.pngRepresentation.write(to:dir.appendingPathComponent(test.replacingOccurrences(of:"/",with:"-")+"-"+name+".png"))
         }
     }

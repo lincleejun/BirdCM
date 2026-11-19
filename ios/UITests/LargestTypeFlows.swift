@@ -3,11 +3,10 @@ import XCTest
 /// The running app at the largest text size: every screen of the old appearance matrix is reached, scrolled to and
 /// used for real here. Light, dark and dark + largest pixels of the same screens come from the in-process renders
 /// (BirdCMTests/AppearanceSnapshots), so the app is not relaunched per appearance.
-final class LargestTypeFlows: FlowCase {
+class LargestTypeCase: FlowCase {
     let mode="--largestTypeYES"
-    /// Step 4: photo calendar (month, day, year), map, observations with the group-count editor, eBird export,
-    /// “这里这个月” and folder backup.
-    func testStep4Screens() throws {
+    /// Step 4 with three photos and a device place: launch at the largest type, locate, pick, then 统计.
+    func step4() {
         let folder=FileManager.default.temporaryDirectory.appendingPathComponent("BirdCMBackupFixture").path
         try? FileManager.default.createDirectory(atPath:folder,withIntermediateDirectories:true)
         launch("photo-gps",extra:["-largestType","YES","-historyFixtureCount","3","-locationFixture","allowed","-backupFolderFixture",folder])
@@ -16,7 +15,14 @@ final class LargestTypeFlows: FlowCase {
         for _ in 0..<4 where !element("home.place").exists {app.swipeDown()}
         label(element("home.place"),contains:"Bolsa Chica")
         pick();back()
-        tab("tab.stats","统计");outcome("stats.species");try shot("stats"+mode)
+        tab("tab.stats","统计");outcome("stats.species")
+    }
+}
+
+/// Step 4, first half: photo calendar (month, day, year), map, observations with the group-count editor.
+final class LargestTypeFlows: LargestTypeCase {
+    func testStep4Screens() throws {
+        step4();try shot("stats"+mode)
         let day=app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'calendar.day.'")).firstMatch
         _=reveal("stats.calendar");try shot("calendar-month"+mode)
         XCTAssertTrue(day.appears(timeout:5));reveal(day.identifier).tap();outcome("obs.row.Haliaeetus leucocephalus.2026-11-14");try shot("calendar-day"+mode);back()
@@ -28,6 +34,14 @@ final class LargestTypeFlows: FlowCase {
         XCTAssertTrue(row.appears(timeout:5));row.tap();let field=reveal("obs.count");try shot("observation-editor"+mode)
         field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"5");reveal("obs.save").tap()
         label(row,contains:"估计 5",5);back()
+    }
+}
+
+/// Step 4, second half (eBird export, “这里这个月”, folder backup; its own class so both halves run in parallel), and the
+/// old matrix's tour of every tab root, species page, pending list, correction and place sheets and settings.
+final class LargestTypeMoreFlows: LargestTypeCase {
+    func testStep4ExportExploreBackup() throws {
+        step4();shotTest="testStep4Screens"
         reveal("stats.ebird").tap();_=reveal("ebird.export");try shot("ebird"+mode)
         reveal("ebird.export").tap();XCTAssertTrue(reveal("ebird.message").exists);element("ebird.close").tap()
         tab("tab.explore","探索");outcome("explore.mode")
@@ -40,7 +54,6 @@ final class LargestTypeFlows: FlowCase {
         for _ in 0..<10 where !ok.appears(timeout:1) {app.swipeDown()}
         XCTAssertTrue(ok.appears(timeout:20));try shot("backup-folder-ok"+mode)
     }
-    /// Every tab root, species page, pending list, correction sheet and settings.
     func tour(_ mode:String) throws {
         try shot("identify"+mode)
         tab("tab.records","记录");outcome("records.species.Haliaeetus leucocephalus");try shot("records-species"+mode)
@@ -78,8 +91,9 @@ final class LayoutFlows: FlowCase {
     func testLastRowsClearTabBar() throws {
         launch(extra:["-historyFixtureCount","8"]);pick();back()
         tab("tab.explore","探索");segment("全部物种")
-        let more=element("explore.more");for _ in 0..<40 where !(more.exists && more.isHittable && clear(more,"explore.more")) {app.swipeUp()}
-        XCTAssertTrue(more.isHittable && clear(more,"explore.more"));try shot("explore-last-row")
+        // Fling until the row is built, then reveal() places it (and fails unless it clears the tab bar).
+        let more=element("explore.more");for _ in 0..<40 where !more.exists {app.swipeUp()}
+        _=reveal("explore.more");XCTAssertTrue(more.isHittable && clear(more,"explore.more"));try shot("explore-last-row")
         tab("tab.records","记录");segment("照片");let rows=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'"))
         XCTAssertTrue(rows.firstMatch.appears(timeout:5));for _ in 0..<6 {app.swipeUp()}
         let last=rows.allElementsBoundByIndex.last!;XCTAssertTrue(clear(last,last.identifier));try shot("photos-last-row")
