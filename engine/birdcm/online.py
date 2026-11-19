@@ -330,7 +330,7 @@ def _summary(sci: str, m: dict) -> dict:
             why = f"{lang} 条目与这个物种不对应（消歧义或 Wikidata 条目不符）"
             continue
         page = (s.get("content_urls") or {}).get("desktop") or {}
-        return {"state": "ok", "fetched": time.time(), "lang": lang, "title": s.get("title") or a["title"], "text": text,
+        return {"state": "ok", "fetched": time.time(), "lang": lang, "title": _plain(s.get("displaytitle") or "") or s.get("title") or a["title"], "text": text,
                 "source_url": page.get("page") or a["url"], "history_url": page.get("revisions"),
                 "revision": s.get("revision"), "licence": "CC BY-SA 4.0", "licence_url": BY_SA,
                 "credit": "维基百科贡献者", "changes": "原文摘录" + ("；简体由维基百科自动转换" if lang == "zh" else "")}
