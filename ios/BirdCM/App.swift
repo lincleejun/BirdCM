@@ -283,6 +283,8 @@ func title(_ r: Identification) -> String {
                 let check=try await Task.detached(priority:.userInitiated) {try Models.check()}.value
                 Perf.mark(check.hashed ? "models.integrity.sha256":"models.integrity.sizes",Date().timeIntervalSince(t0))
                 guard check.invalid.isEmpty else {throw StoreError(message:String(localized:"安装包损坏，请重新安装：")+check.invalid.joined(separator:"、"))}
+                // The bundled models verified: an early build's downloaded copies (~700 MB) can go.
+                Task.detached(priority:.utility) {let freed=Models.removeLegacyDownloads();if freed>0 {Perf.log("LEGACY models removed \(freed) bytes")}}
                 let e=try await Task.detached(priority:.userInitiated) {try Engine(dir:Models.dir)}.value
                 engine=e;Perf.mark("models.detector")
                 try await Task.detached(priority:.userInitiated) {try e.prepare()}.value

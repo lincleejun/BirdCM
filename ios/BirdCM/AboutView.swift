@@ -45,6 +45,8 @@ struct DiagnosticsView: View {
             ForEach([("完整性 · SHA-256", "models.integrity.sha256"), ("完整性 · 只查大小", "models.integrity.sizes"), ("名录", "load.names"), ("检测模型", "load.detector"), ("BioCLIP", "load.bioclip"), ("眼嘴与飞行", "load.heads"), ("地点模型", "load.geo"), ("稀有度表", "load.rarity"), ("等待模型（选片早于就绪）", "identify.waitedForModels")], id: \.1) { title, key in
                 if marks[key] != nil { LabeledContent(title, value: seconds(key)) }
             }
+            let freed = UserDefaults.standard.object(forKey: "legacyModelsFreed") as? Int64 ?? 0
+            if freed > 0 { LabeledContent("已删除早期版本下载的模型", value: ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)).accessibilityIdentifier("diagnostics.legacyFreed") }
             Text("首次安装或升级后完整计算一次 SHA-256，之后只核对文件大小（App 包有系统代码签名保护）。").font(.caption)
             Button(verifying ? "正在完整校验…" : "完整校验") {
                 verifying = true

@@ -28,6 +28,26 @@ final class LaunchTests: XCTestCase {
         r=try check(build:"1.0(7)");XCTAssertEqual(r.invalid,["a"]);XCTAssertFalse(r.hashed)
         XCTAssertEqual(try Models.check(dir:dir,assets:[],defaults:defaults).invalid,["integrity.json"])
     }
+    /// Old downloaded models (Application Support/Models) go; History and everything else stay.
+    func testLegacyDownloadedModelsRemoved() throws {
+        let support=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer{try? FileManager.default.removeItem(at:support)}
+        let fm=FileManager.default,legacy=support.appendingPathComponent("Models"),history=support.appendingPathComponent("History")
+        try fm.createDirectory(at:legacy.appendingPathComponent("BioCLIP.mlpackage/Data"),withIntermediateDirectories:true)
+        try fm.createDirectory(at:history,withIntermediateDirectories:true)
+        try Data(count:200_000).write(to:legacy.appendingPathComponent("BioCLIP.mlpackage/Data/weight.bin"))
+        try Data("keep".utf8).write(to:history.appendingPathComponent("library.sqlite"))
+        try Data("keep".utf8).write(to:support.appendingPathComponent("other.txt"))
+        let defaults=UserDefaults(suiteName:UUID().uuidString)!
+        // Models in use inside the legacy folder (a -modelDir override): untouched.
+        XCTAssertEqual(Models.removeLegacyDownloads(support:support,inUse:legacy,defaults:defaults),0)
+        XCTAssertTrue(fm.fileExists(atPath:legacy.path))
+        let freed=Models.removeLegacyDownloads(support:support,inUse:URL(fileURLWithPath:"/bundle/Models"),defaults:defaults)
+        XCTAssertGreaterThanOrEqual(freed,200_000);XCTAssertEqual(defaults.object(forKey:"legacyModelsFreed") as? Int64,freed)
+        XCTAssertFalse(fm.fileExists(atPath:legacy.path))
+        XCTAssertTrue(fm.fileExists(atPath:history.appendingPathComponent("library.sqlite").path));XCTAssertTrue(fm.fileExists(atPath:support.appendingPathComponent("other.txt").path))
+        XCTAssertEqual(Models.removeLegacyDownloads(support:support,inUse:URL(fileURLWithPath:"/bundle/Models"),defaults:defaults),0,"nothing left to free")
+    }
 
     // The hosted test app does not load models on its own, so each test below starts the load through the queue.
     @MainActor func model() throws -> AppModel {

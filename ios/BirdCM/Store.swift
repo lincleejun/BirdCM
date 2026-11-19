@@ -98,6 +98,21 @@ enum Models {
         if invalid.isEmpty { defaults.set(key, forKey: "integrityVerified") } else { defaults.removeObject(forKey: "integrityVerified") }
         return (invalid, true)
     }
+    /// An early build downloaded the models into Application Support/Models (~700 MB); they ship in the bundle now. Deletes
+    /// that one folder (never History or anything else), and never while the models in use live inside it. Remembers the
+    /// bytes freed for 诊断; returns them.
+    @discardableResult static func removeLegacyDownloads(support: URL = support, inUse: URL = dir, defaults: UserDefaults = .standard) -> Int64 {
+        let fm = FileManager.default, legacy = support.appendingPathComponent("Models", isDirectory: true)
+        guard fm.fileExists(atPath: legacy.path) else { return 0 }
+        func path(_ u: URL) -> String { u.standardizedFileURL.resolvingSymlinksInPath().path + "/" }
+        guard !path(inUse).hasPrefix(path(legacy)) else { return 0 }
+        var bytes: Int64 = 0
+        let files = fm.enumerator(at: legacy, includingPropertiesForKeys: [.totalFileAllocatedSizeKey])
+        while let f = files?.nextObject() as? URL { bytes += Int64((try? f.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0) }
+        guard (try? fm.removeItem(at: legacy)) != nil else { return 0 }
+        defaults.set(bytes, forKey: "legacyModelsFreed")
+        return bytes
+    }
     static func digest(_ url: URL) throws -> String {
         let h = try FileHandle(forReadingFrom:url); defer{try? h.close()}
         var hash = SHA256()
