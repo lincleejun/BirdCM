@@ -97,9 +97,8 @@ export default function Singles({ catalogue }: { catalogue: Country[] }) {
               <li key={h.id} className="history-entry">
                 <button type="button" className="history-open" onClick={() => open(h.id)}>
                   <img className="history-thumb" src={`/api/singles/${h.id}/image?size=thumb&v=${h.created_at}`} alt="" loading="lazy" />
-                  <span><span className={`history-name${name === "不确定" || h.result?.rejected ? " uncertain" : ""}`}>{name}</span>
-                    {h.result && !h.result.rejected && h.result.species && (() => { const n = named(h.result.species);
-                      return <span className="history-meta">{n.sub}{n.sub ? " · " : ""}<i>{n.sci}</i></span>; })()}
+                  <span>{h.result && !h.result.rejected && h.result.species ? <SpName sp={h.result.species} size="row" />
+                    : <span className={`history-name${h.result?.rejected ? " uncertain" : ""}`}>{name}</span>}
                     <span className="history-meta">{fmtTime(h.result?.taken_at)} · {h.name}</span>
                     <span className="history-meta">{h.result?.gps ? "照片自带位置" : h.region ? placeText(h.region) : "地点未记录"}</span></span>
                 </button>
@@ -197,7 +196,7 @@ function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick, on
 
       {framing ? (
         <div className="result-content">
-          <h1 className="sp-cn" style={{ font: "700 30px/1.2 var(--serif)" }} tabIndex={-1}>{drawing ? "手动画框" : r?.reject_reason ?? "没有找到鸟"}</h1>
+          <h1 className="sp-cn" tabIndex={-1}>{drawing ? "手动画框" : r?.reject_reason ?? "没有找到鸟"}</h1>
           <p className="lead hint">在照片上拖出一个框，也可以用整张照片重试。</p>
           <div className="row" style={{ marginTop: 10 }}>
             <button className="btn primary" disabled={!box || !!busy} onClick={() => box && onAct({ box })}>识别框里的鸟</button>
@@ -208,7 +207,7 @@ function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick, on
       ) : r && b && (
         <div className="result-content">
           <div className="identity-result">
-            <h1 tabIndex={-1} id="h-result" style={{ margin: 0 }}><SpName sp={sp} big /></h1>
+            <h1 tabIndex={-1} id="h-result" style={{ margin: 0 }}><SpName sp={sp} size="hero" /></h1>
             <span className="conf">{sure ? "初步把握" : "最高候选"} {pct(sure || sp?.level === "genus" ? sp!.label!.p : sp!.top5[0].p)}</span>
           </div>
           {cor && own && <p className="fixed-note"><span className="tbd">主人改正</span> 应用自己认的是 {named(own).title}{own.label && <> <i>{own.label.sci}</i></>}</p>}

@@ -88,20 +88,23 @@ const Tile = memo(function Tile({ p, st, active, complete, more, marks, exif: e,
       ref={(el) => act.current.ref(p.id, el)}
       onClick={() => act.current.pick(p.id)} onDoubleClick={() => act.current.open(p.id)}>
       <Photo row={p} marks={marks} show={!!r || active} />
-      <span className="row-result">{r && r.rejected && r.species?.label ? <span className="name dim" style={{ display: "block" }}>{name} · {named(r.species).title}</span>
-        : r && !r.rejected ? <><SpName sp={r.species} />{r.species_own && <span className="pill">{r.species?.manual ? "主人改正" : "按连拍组修正"}</span>}
-        {r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}</> : <span className={r ? "name" : "scan-name"} style={{ display: "block" }}>{name}</span>}
-        {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
-        {more && (p.burst_size ?? 1) > 1 && (
-          <span className="pill more" role="link" title="只看这一组" onClick={(ev) => { ev.stopPropagation(); act.current.group(p); }}>+{(p.burst_size ?? 1) - 1}</span>
-        )}
-        {r && !r.rejected && r.flying !== null && <span className="pill">{r.flying ? "在飞" : "不在飞"}</span>}
-        {r && <span className="small reason-line" style={{ display: "block" }}>
+      <span className="row-result">{r && r.rejected && r.species?.label ? <span className="name dim">{name} · {named(r.species).title}</span>
+        : r && !r.rejected ? <SpName sp={r.species} size="card" /> : <span className={r ? "name" : "scan-name"}>{name}</span>}
+        <span className="tile-meta">
+          {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
+          {r && !r.rejected && r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}
+          {r && !r.rejected && r.species_own && <span className="pill">{r.species?.manual ? "主人改正" : "按连拍组修正"}</span>}
+          {more && (p.burst_size ?? 1) > 1 && (
+            <span className="pill more" role="link" title="只看这一组" onClick={(ev) => { ev.stopPropagation(); act.current.group(p); }}>+{(p.burst_size ?? 1) - 1}</span>
+          )}
+          {r && !r.rejected && r.flying !== null && <span className="pill">{r.flying ? "在飞" : "不在飞"}</span>}
+        </span>
+        {r && <span className="small reason-line">
           {complete && p.star_reason ? p.star_reason : r.rejected ? "不参与标星" : r.eye_visible ? `眼睛可见 · 头部清晰度 ${sharpTxt(r.sharpness)}` : "眼睛未找到"}</span>}
-        {st === "failed" && <span className="small reason-line" style={{ display: "block" }}>{p.error}</span>}
+        {st === "failed" && <span className="small reason-line">{p.error}</span>}
       </span>
-      <span className="row-settings"><span className="file">{p.file}</span><br />
-        {e && <span className="small">{e.focal_mm != null ? `${+e.focal_mm.toFixed(0)} mm` : "—"} · f/{e.aperture ?? "—"} · {e.shutter ?? "—"} s<br />ISO {e.iso ?? "—"} · {evText(e.ev ?? null)}</span>}</span>
+      <span className="row-settings"><span className="file">{p.file}</span>
+        {e && <span className="small"> · {e.focal_mm != null ? `${+e.focal_mm.toFixed(0)} mm` : "—"} · f/{e.aperture ?? "—"} · {e.shutter ?? "—"} s · ISO {e.iso ?? "—"} · {evText(e.ev ?? null)}</span>}</span>
     </button>
   );
 });
@@ -115,7 +118,7 @@ function Photo({ row, marks, big, show, alt = "" }: { row: PhotoRow; marks: Mark
   if (!r) return <span className="ph"><img src={src} alt={alt} loading="lazy" /></span>;
   return (
     <span className="ph">
-      <span className={`frame ${r.width >= r.height ? "land" : "port"}`} style={{ aspectRatio: `${r.width} / ${r.height}` }}>
+      <span className="frame" style={{ aspectRatio: `${r.width} / ${r.height}`, ["--ar" as string]: r.width / r.height }}>
         <img src={src} alt={alt} loading="lazy" decoding="async" />
         {marks && <Marks r={r} m={marks} />}
       </span>
@@ -620,12 +623,15 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
       <div className="inspection">
         <section className="list" aria-labelledby="list-title">
           <div className="list-head"><h3 id="list-title">照片列表</h3><span aria-live="polite">显示 {view.length} / {c.total} 张</span></div>
-          <p className="sr-only" id="photo-keys">上、下方向键选择照片，回车看大图。右侧显示这张照片的全部信息。</p>
+          <p className="sr-only" id="photo-keys">方向键选择照片（上、下换一行），回车看大图。右侧显示这张照片的全部信息。</p>
           <div id="grid" onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); openViewer(); return; }
-            if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+            // a grid of cards: left / right one photo, up / down one row (however many columns fit)
+            const d = ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -1, ArrowDown: 1 } as Record<string, number>)[e.key];
+            if (!d) return;
             e.preventDefault();
-            step(e.key === "ArrowDown" ? 1 : -1);
+            const row = e.key === "ArrowUp" || e.key === "ArrowDown";
+            step(row ? d * getComputedStyle(e.currentTarget).gridTemplateColumns.split(" ").length : d);
           }}>
             {view.length ? view.map((p) => (
               <Tile key={p.id} p={p} st={rowState(p)} active={p.id === current?.id} complete={complete} more={fold && groupOnly === null}
@@ -695,7 +701,7 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
               </>
             ) : sp ? (
               <>
-                <SpName sp={sp} big />
+                <SpName sp={sp} size="hero" />
                 <Verdict sp={sp} />
                 {sp.manual && r!.species_own && (
                   <p className="fixed-note"><span className="tbd">主人改正</span> 应用自己认的是 {named(r!.species_own).title}

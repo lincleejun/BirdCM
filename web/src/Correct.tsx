@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { get } from "./api";
 import type { Name } from "./types";
+import { PlainName } from "./names";
 
 export interface Pick { sci: string; zh: string | null; en: string | null }
 export type Scope = "one" | "burst" | "same";
@@ -31,7 +32,7 @@ export default function CorrectPanel({ own, inScan, current, burst, onApply, onU
       <ul className="correct-list">
         {list.map((x) => (
           <li key={x.sci}><button type="button" aria-pressed={chosen?.sci === x.sci} onClick={() => setChosen(x)}>
-            {x.zh ?? x.en} <small>{x.en} · <i>{x.sci}</i></small></button></li>
+            <PlainName zh={x.zh} en={x.en} sci={x.sci} size="row" /></button></li>
         ))}
         {!list.length && <li className="hint">{q.trim() ? "没有找到" : "输入名字搜索"}</li>}
       </ul>

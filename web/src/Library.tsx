@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { get, post, postText, upload } from "./api";
 import LocationPicker, { type Country } from "./Location";
 import SpeciesReference from "./Reference";
+import { PlainName } from "./names";
 import type { Place } from "./types";
 
 export interface Ref { kind: "photo" | "single" | "import"; id: string; subject_id: string; asset_hash: string; thumb: string; day?: string; sci?: string }
@@ -147,9 +148,9 @@ function SpeciesGrid({ gen, text, explore, sort, onSpecies, from = null, to = nu
         {items.map((x) => (
           <li key={x.key}><button className="ll-card" onClick={() => onSpecies(x.key)} aria-label={`${label(x)}，${x.seen ? `${x.observations} 条观察记录` : "未见"}`}>
             <Thumb r={x.cover_ref} alt={label(x)} />
-            <span className="ll-card-text"><b>{label(x)}</b>{!x.zh && x.en && <small className="ll-nozh">暂无中文名</small>}
-              <small>{x.en} · <i>{x.key}</i></small>
-              <small>{x.seen ? (x.observations ? `${x.observations} 条观察 · ${x.photos} 张` : "这段时间没有") : "未见"}</small>
+            <span className="ll-card-text"><PlainName zh={x.zh} en={x.en} sci={x.key} size="card" />
+              <small className="ll-card-meta">{x.seen ? (x.observations ? `${x.observations} 条观察 · ${x.photos} 张照片` : "这段时间没有") : "未见"}
+                {!x.zh && x.en && " · 暂无中文名"}</small>
               {x.seen && <small>首见 {x.first_day}</small>}</span>
           </button></li>))}
       </ul>
@@ -205,9 +206,9 @@ function SpeciesPage({ sci, gen, onBack, onOpen, dialog }: { sci: string; gen?: 
     <section className="ll" aria-labelledby="h-sp">
       <button className="btn link" onClick={onBack}>← 返回记录</button>
       {err && <p className="error-text" role="alert">{err}</p>}
-      <h2 id="h-sp" tabIndex={-1} ref={head} className="ll-sp-title">{d ? (d.zh || d.en || sci) : sci}</h2>
+      <h2 id="h-sp" tabIndex={-1} ref={head} className="ll-sp-title">{d ? <PlainName zh={d.zh} en={d.en} sci={d.key} size="hero" /> : sci}</h2>
       {d && <>
-        <p className="sp-sci">{d.en}{!d.zh && " · 暂无中文名"} · <i>{d.key}</i>{d.family && ` · ${d.family}`}</p>
+        {(d.family || !d.zh) && <p className="hint">{[!d.zh && "暂无中文名", d.family].filter(Boolean).join(" · ")}</p>}
         <p className="facts-inline">
           <span>{d.seen ? <>首次 <strong>{d.first_day}</strong> · 最近 <strong>{d.last_day}</strong></> : <strong>未见</strong>}</span>
           {d.iucn && <span>IUCN <strong>{IUCN_ZH[d.iucn] ?? d.iucn}</strong>（{d.iucn}）</span>}
@@ -277,7 +278,7 @@ function Evidence({ r, catalogue, onClose, onChanged }: { r: Ref; catalogue: Cou
           {bird && <div className="result-section"><h3>更正鸟种</h3>
             <input className="map-search" placeholder="搜鸟种：中文、英文或学名" value={find} onChange={(e) => setFind(e.target.value)} />
             <ul className="correct-list">{hits.map((h) => <li key={h.sci}><button type="button" disabled={busy}
-              onClick={() => send({ op: "species", state: "species", key: h.sci })}>{h.zh ?? h.en} <small>{h.en} · <i>{h.sci}</i></small></button></li>)}</ul>
+              onClick={() => send({ op: "species", state: "species", key: h.sci })}><PlainName zh={h.zh} en={h.en} sci={h.sci} size="row" /></button></li>)}</ul>
             <div className="row"><button className="btn" disabled={busy} onClick={() => send({ op: "species", state: "uncertain", key: null })}>标为不确定</button>
               <button className="btn" disabled={busy} onClick={() => send({ op: "species", state: "none", key: null })}>恢复自动识别</button></div></div>}
           {bird && <div className="result-section"><h3>数量</h3>
@@ -317,8 +318,8 @@ export function Stats({ catalogue, onSpecies }: { catalogue: Country[]; onSpecie
   const [list, setList] = useState<{ kind: "species" | "obs"; day?: string; rare?: boolean } | null>(null);
   const [open, setOpen] = useState<Ref | null>(null);
   const m = s?.metrics;
-  const tile = (n: number | undefined, t: string, onClick?: () => void, title?: string) => (
-    <button className="ll-metric" onClick={onClick} disabled={!onClick} title={title}><b>{n ?? "–"}</b><small>{t}</small></button>);
+  const tile = (n: number | undefined, t: string, onClick?: () => void, title?: string, cls = "") => (
+    <button className={`ll-metric ${cls}`} onClick={onClick} disabled={!onClick} title={title}><b>{n ?? "–"}</b><small>{t}</small></button>);
   return (
     <section className="ll" aria-labelledby="h-stats">
       <div className="topbar"><div><h2 id="h-stats">统计</h2><span className="sub">{rg.text}</span></div>
@@ -335,7 +336,7 @@ export function Stats({ catalogue, onSpecies }: { catalogue: Country[]; onSpecie
         {tile(m?.species, "鸟种", () => setList({ kind: "species" }))}
         {tile(m?.observations, "观察记录", () => setList({ kind: "obs" }), "同一种鸟、同一天、同一地点算一条")}
         {tile(m?.estimated_count, "估计数量", () => setList({ kind: "obs" }), ESTIMATE_NOTE)}
-        {tile(m?.new_species, "新种", undefined, "这段时间里第一次见到的鸟种（按全部记录算）")}
+        {tile(m?.new_species, "新种", undefined, "这段时间里第一次见到的鸟种（按全部记录算）", "new")}
       </div>
       {m && <p className="hint">照片 {m.photos} 张 · 待确认 {m.pending_subjects} 个主体（{m.pending_photos} 张）· 未找到鸟 {m.no_bird_photos} 张 · 有记录的天数 {m.active_days}
         {s!.coverage.fallback_date_photos > 0 && ` · ${s!.coverage.fallback_date_photos} 张拍摄日期缺失，按首次识别日期统计`}
@@ -387,7 +388,7 @@ function ObsList({ gen, from, to, rare, onSpecies, onOpen, onChanged }: {
           <li key={o.key}>
             <div className="ll-obs-refs">{o.source_refs.slice(0, 3).map((r) => <button key={r.asset_hash + r.subject_id} onClick={() => onOpen({ ...r, day: o.day, sci: o.sci })} aria-label="打开照片"><Thumb r={r} alt="" /></button>)}</div>
             <div>
-              <button className="btn link ll-obs-name" onClick={() => onSpecies(o.sci)}>{o.zh || o.en || o.sci} <i className="hint">{o.sci}</i></button>
+              <button className="ll-obs-name" onClick={() => onSpecies(o.sci)}><PlainName zh={o.zh} en={o.en} sci={o.sci} size="row" /></button>
               {o.first_seen && <span className="pill">新种</span>}{o.rare && <span className="pill rare">本地{o.contexts.find((c) => c.tier === 1) ? "罕见" : "少见"}</span>}
               <span className="history-meta">{o.day} · {o.place_key === "none" ? "地点未知" : o.place.region_code ? `${o.place.label ?? o.place.region_code}（地区）` : o.place.label ?? o.place_key}
                 {" · "}{o.photo_count} 张 · 估计 {o.estimate} 只{o.estimate_source === "edit" ? `（你改的；单张最多 ${o.max_in_photo}）` : ""}

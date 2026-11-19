@@ -19,17 +19,31 @@ export function named(sp: Species | null | undefined): Named {
   return { title: "不确定", sub: t ? `最高候选 ${t.zh ? t.zh + " " : ""}${t.en ?? ""}` : "", sci: t ? t.sci : "", uncertain: true };
 }
 
-/** "Chinese / English · Latin" as a title line and a small second line. */
-export function SpName({ sp, big = false }: { sp: Species | null | undefined; big?: boolean }) {
-  const n = named(sp);
+export type NameSize = "hero" | "row" | "card";
+
+/** The one name block (docs/design/polish/polish.md): line 1 the name in the UI language (Chinese; English when there
+ * is none), line 2 in secondary gray "the other common name · *Latin*". Hero and row keep line 2 on one line (the
+ * common name gives way first, then the Latin); a card may wrap it to two lines (owner, 2026-11-18). Spans only: it
+ * sits inside buttons and headings. The full names stay in the text (and the title) when the eye sees an ellipsis. */
+export function SpeciesName({ title, sub, sci, size, uncertain = false }: { title: string; sub?: string | null; sci?: string | null; size: NameSize; uncertain?: boolean }) {
   return (
-    <>
-      <span className={`${big ? "sp-cn" : "name"}${n.uncertain && big ? " uncertain" : ""}`}>{n.title}</span>
-      <span className={big ? "sp-en" : "small sp-line"} style={{ display: "block" }}>
-        {n.sub}{n.sub && n.sci ? " · " : ""}{n.sci && <i className="sp-sci">{n.sci}</i>}
-      </span>
-    </>
+    <span className={`spn spn-${size}${uncertain ? " uncertain" : ""}`} title={[title, sub, sci].filter(Boolean).join(" · ")}>
+      <span className="spn-1">{title}</span>
+      {(sub || sci) && <span className="spn-2">{sub && <span className="spn-alt">{sub}</span>}{sub && sci && <span className="spn-dot"> · </span>}
+        {sci && <i className="spn-sci">{sci}</i>}</span>}
+    </span>
   );
+}
+
+/** A plain {zh, en, sci} (records, search hits) as the name block. */
+export function PlainName({ zh, en, sci, size }: { zh: string | null; en: string | null; sci: string; size: NameSize }) {
+  return <SpeciesName title={zh || en || sci} sub={zh ? en : null} sci={sci} size={size} />;
+}
+
+/** A naming result (species, genus or 不确定) as the name block. */
+export function SpName({ sp, size = "row" }: { sp: Species | null | undefined; size?: NameSize }) {
+  const n = named(sp);
+  return <SpeciesName title={n.title} sub={n.sub} sci={n.sci} size={size} uncertain={n.uncertain} />;
 }
 
 export const candidateText = (c: Name) => `${c.zh ? c.zh + " " : ""}${c.en ?? ""}`.trim();
