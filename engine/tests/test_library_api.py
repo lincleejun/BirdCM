@@ -61,6 +61,8 @@ def test_routes_summary_species_observations_calendar_map(tmp_path, monkeypatch)
     pend = c.get("/api/library/photos?status=pending", headers=H).json()
     assert pend["total"] == 3 and {p["reason"] for p in pend["items"]} == {"只认到属", "不确定", "还没识别的框"}
     assert c.get("/api/library/photos?status=no-bird", headers=H).json()["total"] == 1
+    tern = c.get("/api/library/photos", params={"sci": "Sterna hirundo", "limit": 1}, headers=H).json()["items"][0]
+    assert (tern["zh"], tern["en"]) == ("普通燕鸥", "Common Tern")                  # the list shows the name block
 
 
 def test_edits_through_routes_and_stale_generation(tmp_path, monkeypatch):

@@ -1024,7 +1024,12 @@ def photo_list(ix: Index, sci=None, day=None, status="all", frm=None, to=None, o
                     "subjects": len(subs), "date_source": c["date_source"], "place_label": c["place_label"],
                     "_k": (c["local_day"], c["capture_wall"] or "", h, best["subject_id"])})
     out.sort(key=lambda x: x["_k"], reverse=True)
-    return {"total": len(out), "items": [{k: v for k, v in x.items() if k != "_k"} for x in out[offset:offset + limit]]}
+    page = [{k: v for k, v in x.items() if k != "_k"} for x in out[offset:offset + limit]]
+    for x in page:                                       # the list shows the two-line name block, not the bare Latin
+        if x["species_key"]:
+            n = names_of(x["species_key"])
+            x.update(zh=n["zh"], en=n["en"])
+    return {"total": len(out), "items": page}
 
 
 def names_of(sci: str) -> dict:

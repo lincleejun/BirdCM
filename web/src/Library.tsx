@@ -27,7 +27,7 @@ interface Obs {
   estimate: number; estimate_source: "max" | "edit"; max_in_photo: number; photo_count: number; rare: boolean; first_seen: boolean;
   fallback_date: boolean; contexts: { region: string | null; tier: number | null; label: string; note: string | null }[]; source_refs: Ref[];
 }
-interface PhotoItem extends Ref { day: string; level: string; species_key: string | null; reason?: string; subjects?: number; date_source?: string; place_label?: string | null }
+interface PhotoItem extends Ref { day: string; level: string; species_key: string | null; zh?: string | null; en?: string | null; reason?: string; subjects?: number; date_source?: string; place_label?: string | null }
 
 const IUCN_ZH: Record<string, string> = { LC: "无危", NT: "近危", VU: "易危", EN: "濒危", CR: "极危", DD: "数据缺乏", NE: "未评估", EX: "灭绝", EW: "野外灭绝" };
 const ESTIMATE_NOTE = "同日同地点取单张最大值；可能重复见到同一只鸟";
@@ -176,7 +176,8 @@ function PhotoList({ gen, status, onOpen, empty, sci, day }: { gen?: number; sta
           <li key={`${x.asset_hash}/${x.subject_id}`} className="history-entry">
             <button className="history-open" onClick={() => onOpen(x)}>
               <Thumb r={x} alt="" />
-              <span><span className="history-name">{x.reason ?? (x.species_key ?? (x.level === "photo" ? "未找到鸟" : "待确认"))}</span>
+              <span>{!x.reason && x.species_key ? <PlainName zh={x.zh ?? null} en={x.en ?? null} sci={x.species_key} size="row" />
+                : <span className="history-name">{x.reason ?? (x.level === "photo" ? "未找到鸟" : "待确认")}</span>}
                 <span className="history-meta">{x.day}{x.date_source?.startsWith("identified") ? "（拍摄日期缺失，按首次识别日期统计）" : ""}
                   {x.place_label ? ` · ${x.place_label}` : ""}{x.subjects && x.subjects > 1 ? ` · ${x.subjects} 个主体` : ""} · {x.kind === "photo" ? "批量选片" : x.kind === "single" ? "认一张" : "导入"}</span></span>
             </button></li>))}
