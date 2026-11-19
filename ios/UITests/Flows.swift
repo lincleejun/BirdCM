@@ -36,6 +36,9 @@ final class Flows:XCTestCase {
             if e.exists && e.isHittable && clear(e,id) {return e}
             // Short slow drags with a hold (no momentum overshoot); alternate start points so neither the bottom bar nor the pager swallows every attempt.
             let y=[0.62,0.45,0.7,0.35][i%4], x=i%8<4 ? 0.94:0.06, up = !(e.exists && e.frame.maxY < 90)
+            // Every third try a fast system swipe: slow drags that start on a control inside a sheet may not scroll.
+            // Only while the row is not built yet; once it exists, slow drags place it without overshooting.
+            if i%3==2 && !e.exists {app.swipeUp();continue}
             app.coordinate(withNormalizedOffset:CGVector(dx:x,dy:up ? y:y-0.25)).press(forDuration:0.05,thenDragTo:app.coordinate(withNormalizedOffset:CGVector(dx:x,dy:up ? y-0.25:y)),withVelocity:.slow,thenHoldForDuration:0.1)
         }
         try? shot("unreachable-"+id);XCTFail("Missing or unreachable: \(id)");return e
@@ -89,7 +92,7 @@ final class Flows:XCTestCase {
             XCTAssertTrue(row.waitForExistence(timeout:5));row.tap();let field=reveal("obs.count");try shot("observation-editor"+mode)
             field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"5");reveal("obs.save").tap()
             expectation(for:NSPredicate(format:"label CONTAINS '估计 5'"),evaluatedWith:row);waitForExpectations(timeout:5);back()
-            reveal("stats.ebird").tap();outcome("ebird.export");try shot("ebird"+mode)
+            reveal("stats.ebird").tap();sleep(1);try shot("ebird"+mode);_=reveal("ebird.export")
             reveal("ebird.export").tap();XCTAssertTrue(reveal("ebird.message").exists);element("ebird.close").tap()
             tab("tab.explore","探索");outcome("explore.mode")
             let likely=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'explore.row.'")).firstMatch
@@ -349,8 +352,9 @@ final class Flows:XCTestCase {
         element("home.more").tap();try shot("settings");element("settings.backup").tap();try shot("backup")
         reveal("backup.selfTest").tap();let merge=element("backup.merge")
         for _ in 0..<20 where !(merge.exists && merge.isHittable) {app.swipeUp()};try shot("backup-preview")
-        merge.tap();for _ in 0..<8 {app.swipeDown()}
-        expectation(for:NSPredicate(format:"label CONTAINS '新增 0'"),evaluatedWith:element("backup.message"));waitForExpectations(timeout:20)
+        merge.tap();let message=element("backup.message")
+        for _ in 0..<12 where !message.exists {app.swipeDown();sleep(1)}
+        expectation(for:NSPredicate(format:"label CONTAINS '新增 0'"),evaluatedWith:message);waitForExpectations(timeout:20)
     }
     /// Every tab root, species page, pending list, correction sheet and settings.
     func tour(_ mode:String) throws {
