@@ -18,14 +18,16 @@ struct LikelyResult { var rows: [Likely]; var geo: Bool; var gbif: Bool; var cov
 
 enum Likelihood {
     static let tierNames = ["无记录", "罕见", "少见", "不常见", "常见"]
-    /// Main list: this month's model value at the place at least this (the result page's 此地此季少见 line, Confirm.tau)…
-    static let typicalFloor = Confirm.tau
-    /// …or a GBIF tier above the rarest (少见 and up). Below that, a model value ≥ rareFloor or any GBIF record (罕见,
+    /// Main list: this month's model value at the place at least this… (owner, 2026-11-19: Confirm.tau 0.05 listed 462
+    /// species in San Francisco in November; 0.5 with 不常见 and up gives about 285, near what is really seen there)
+    static let typicalFloor = 0.5
+    static let mainTier = 3
+    /// …or a GBIF tier of 不常见 and up. Below that, a model value ≥ rareFloor or any GBIF record (罕见,
     /// single vagrants included) goes to the collapsed 罕见 / 偶见 section; nothing else is listed.
     static let rareFloor = 0.01
     enum Inclusion: Equatable { case main, rare }
     static func inclusion(typical: Double?, tier: Int?) -> Inclusion? {
-        if (typical ?? 0) >= typicalFloor || (tier ?? 0) >= 2 { return .main }
+        if (typical ?? 0) >= typicalFloor || (tier ?? 0) >= mainTier { return .main }
         if (typical ?? 0) >= rareFloor || (tier ?? 0) >= 1 { return .rare }
         return nil
     }
@@ -172,7 +174,7 @@ struct ExploreView: View {
         let l = local ? byKey[sp.sci] : nil
         return NavigationLink(value: AppModel.Route.species(sp.sci)) {
             HStack(spacing: 12) {
-                SpeciesThumb(key: sp.sci)
+                SpeciesThumb(key: sp.sci, size: 64)
                 VStack(alignment: .leading, spacing: 8) {
                     SpeciesName(title: sp.name, alt: sp.alt, sci: sp.sci, size: .row)
                     // Facts under the name so the name keeps the row's width. Text carries the local word; the colored
@@ -199,18 +201,6 @@ struct ExploreView: View {
         if let word = l.label {
             StateTag(text: (l.tier == nil ? "估计：" : "本地：") + word, state: ThemeContrast.rarity[word] ?? ThemeContrast.unavailable, strong: ["罕见", "少见"].contains(word), small: true).fixedSize()
         }
-    }
-}
-
-/// The fixed leading image slot of a species row (64 pt, rounded 8). A neutral placeholder for now; an offline-cached
-/// thumbnail source can fill it by key later without touching the rows.
-struct SpeciesThumb: View {
-    let key: String
-    var size: CGFloat = 64
-    var body: some View {
-        RoundedRectangle(cornerRadius: 8).fill(Palette.inset)
-            .overlay { Image(systemName: "bird").font(.title3).foregroundStyle(Palette.tertiary) }
-            .frame(width: size, height: size).accessibilityHidden(true)
     }
 }
 

@@ -32,9 +32,10 @@ final class GeoTests: XCTestCase {
         XCTAssertEqual(Geo.seasonMap(v,grid:[[40,0],[-40,0]],season:.year),[1,1])
     }
     func testExploreInclusion() {
-        XCTAssertEqual(Likelihood.inclusion(typical:0.05,tier:nil),.main)
-        XCTAssertEqual(Likelihood.inclusion(typical:0.2,tier:0),.main)
-        XCTAssertEqual(Likelihood.inclusion(typical:0.001,tier:2),.main)     // reported often enough
+        XCTAssertEqual(Likelihood.inclusion(typical:0.5,tier:nil),.main)
+        XCTAssertEqual(Likelihood.inclusion(typical:0.6,tier:0),.main)
+        XCTAssertEqual(Likelihood.inclusion(typical:0.001,tier:3),.main)     // reported often enough (不常见)
+        XCTAssertEqual(Likelihood.inclusion(typical:0.2,tier:2),.rare)       // 少见 with a middling model value
         XCTAssertEqual(Likelihood.inclusion(typical:0.04,tier:nil),.rare)    // low model value
         XCTAssertEqual(Likelihood.inclusion(typical:nil,tier:1),.rare)       // a single vagrant record
         XCTAssertEqual(Likelihood.inclusion(typical:0.001,tier:1),.rare)
