@@ -525,6 +525,9 @@ struct RootView: View {
         }
         .alert("未能完成",isPresented:Binding(get:{model.error != nil},set:{if !$0 {model.error=nil}})) {Button("好"){model.error=nil}} message:{Text(model.error ?? "")}
         .foregroundStyle(Palette.ink)
+        // The app accent on the root itself (selected tab, links, toggles), not only on the window: every host of RootView
+        // (the app, previews, appearance snapshots) gets it; AppearanceSnapshots fails on system blue in the tab bar.
+        .tint(Palette.green)
         .debugAppearance()
     }
 }

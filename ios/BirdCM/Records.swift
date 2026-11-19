@@ -74,7 +74,7 @@ struct RecordsView: View {
     }
     var photoList: some View {
         List {
-            modePicker.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            modePicker.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
             Section {
                 TextField("搜索鸟名、地点或日期", text: $search, prompt: Text("搜索鸟名、地点或日期").foregroundColor(Palette.secondary)).accessibilityIdentifier("history.search").frame(minHeight: 44)
                 let names = ["viewed": String(localized: "最近查看"), "date": String(localized: "拍摄日期"), "name": String(localized: "鸟种名称")]
@@ -91,13 +91,13 @@ struct RecordsView: View {
                 Button { model.open(r.id) } label: { HistoryRow(item: r) }.buttonStyle(.plain).accessibilityIdentifier("history.item.\(r.id)").listRowBackground(Palette.surface)
                     .swipeActions { Button("删除", role: .destructive) { deleting = r }.accessibilityIdentifier("history.delete.\(r.id)") }
             }
-        }.scrollContentBackground(.hidden)
+        }.scrollContentBackground(.hidden).contentMargins(.top, 4, for: .scrollContent)   // the picker follows the title, like 统计
     }
     var pendingList: some View {
         let pending = model.ledger.pending
         let unprocessed = pending.filter { $0.subject.level == "unclassified" && $0.subject.state == "none" }.count
         return List {
-            modePicker.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            modePicker.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
             if pending.isEmpty {
                 ContentUnavailableView("所有已识别主体都已确定到种", systemImage: "checkmark.circle").accessibilityIdentifier("pending.empty")
             } else {
@@ -117,7 +117,7 @@ struct RecordsView: View {
             }
             let noBird = model.items.filter { $0.subjects.isEmpty }.count
             if noBird > 0 { Section { Text("另有 \(noBird) 张照片没找到鸟，保留在“照片”里，不算待确认。").font(.footnote) } }
-        }.scrollContentBackground(.hidden)
+        }.scrollContentBackground(.hidden).contentMargins(.top, 4, for: .scrollContent)
     }
 }
 

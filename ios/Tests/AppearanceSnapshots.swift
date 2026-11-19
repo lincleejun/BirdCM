@@ -56,6 +56,7 @@ class SnapshotCase: XCTestCase {
         }
         let png = try XCTUnwrap(image.pngData())
         XCTAssertEqual(image.size, w.bounds.size, name)
+        XCTAssertLessThan(Self.systemBlue(image), 200, "\(name): system blue in the tab bar (the app tint is missing)")
         XCTAssertGreaterThan(png.count, 20_000, "\(name) looks blank")
         let file = "-[Flows \(test)]-\(name)\(mode?.suffix ?? "").png"
         let a = XCTAttachment(data: png, uniformTypeIdentifier: "public.png"); a.name = file; a.lifetime = .keepAlways; add(a)
@@ -65,8 +66,21 @@ class SnapshotCase: XCTestCase {
             try png.write(to: dir.appendingPathComponent(file))
         }
     }
+    /// Pixels of iOS system blue as the glass tab bar renders it (about #3070E0 light, #40A0F0 dark) in the bottom 120 pt.
+    /// The app's accent is green; thousands of these mean the tint fell off the root (sky in photos is far darker).
+    static func systemBlue(_ image: UIImage) -> Int {
+        guard let cg = image.cgImage else { return 0 }
+        let w = cg.width, band = min(cg.height, Int(120 * image.scale))
+        var px = [UInt8](repeating: 0, count: w * band * 4)
+        guard let ctx = CGContext(data: &px, width: w, height: band, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return 0 }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: cg.height))   // the image's bottom rows land in this band
+        var n = 0
+        for i in stride(from: 0, to: px.count, by: 4) where px[i] < 90 && (100...185).contains(px[i + 1]) && px[i + 2] > 210 && Int(px[i + 2]) - Int(px[i]) > 140 { n += 1 }
+        return n
+    }
     func sheet(_ m: AppModel, _ content: some View) -> some View {
-        RootView().environment(m).sheet(isPresented: .constant(true)) { content.environment(m).debugAppearance() }
+        // The app's window carries the tint for sheets presented above RootView; this host has no such window.
+        RootView().environment(m).sheet(isPresented: .constant(true)) { content.environment(m).tint(Palette.green).debugAppearance() }
     }
 
 }
@@ -138,7 +152,7 @@ final class Step4Snapshots: SnapshotCase {
             // Map tiles keep streaming in: a bounded wait.
             try await shot("map", wait: 3, NavigationStack { SightingMap(range: now.range) }.environment(m))
             try await shot("observation-editor", NavigationStack { SightingList(title: now.title, range: now.range, day: nil) }.environment(m)
-                .sheet(isPresented: .constant(true)) { SightingSheet(sighting: o).environment(m).debugAppearance() })
+                .sheet(isPresented: .constant(true)) { SightingSheet(sighting: o).environment(m).tint(Palette.green).debugAppearance() })
             try await shot("ebird", sheet(m, EBirdSheet(title: now.title, range: now.range)))
             m.tab = .explore
             try await shot("explore-local", wait: 20, RootView().environment(m))
