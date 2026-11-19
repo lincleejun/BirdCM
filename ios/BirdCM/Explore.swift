@@ -48,7 +48,12 @@ enum Likelihood {
 /// 探索: whole catalogue or “这里这个月”, with seen / rarity / IUCN / family filters.
 struct ExploreView: View {
     @Environment(AppModel.self) var model
+    #if DEBUG
+    /// Snapshot tests open the tab with a search already typed.
+    @State private var query = UserDefaults.standard.string(forKey: "exploreQuery") ?? ""
+    #else
     @State private var query = ""
+    #endif
     @State private var mode = "local"
     @State private var seen = "all"
     @State private var tier = 0
