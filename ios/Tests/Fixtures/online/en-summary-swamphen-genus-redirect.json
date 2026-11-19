@@ -1,0 +1,60 @@
+{
+ "url": "https://en.wikipedia.org/api/rest_v1/page/summary/Swamphen",
+ "request_headers": {},
+ "retrieved": "2026-11-19T00:29:12Z",
+ "status": 200,
+ "headers": {
+  "content-language": "en",
+  "content-type": "application/json; charset=utf-8; profile=\"https://www.mediawiki.org/wiki/Specs/Summary/1.5.0\"",
+  "etag": "W/\"1355527292/a8d97cd0-e2f0-11f1-8e99-6b6fb5469881\""
+ },
+ "body": {
+  "type": "standard",
+  "title": "Swamphen",
+  "displaytitle": "<span lang=\"en\" dir=\"ltr\"><span class=\"mw-page-title-main\">Swamphen</span></span>",
+  "namespace": {
+   "id": 0,
+   "text": ""
+  },
+  "wikibase_item": "Q1137291",
+  "titles": {
+   "canonical": "Swamphen",
+   "normalized": "Swamphen",
+   "display": "<span lang=\"en\" dir=\"ltr\"><span class=\"mw-page-title-main\">Swamphen</span></span>"
+  },
+  "pageid": 3263946,
+  "thumbnail": {
+   "source": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6c/Purpurhuhn.jpg/330px-Purpurhuhn.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
+   "width": 330,
+   "height": 330
+  },
+  "originalimage": {
+   "source": "https://upload.wikimedia.org/wikipedia/commons/6/6c/Purpurhuhn.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail_unscaled",
+   "width": 3320,
+   "height": 3320
+  },
+  "lang": "en",
+  "dir": "ltr",
+  "revision": "1355527292",
+  "tid": "be521199-55ca-11f1-b7b3-92ac83b0d38e",
+  "timestamp": "2026-05-22T10:41:09Z",
+  "description": "Genus of birds",
+  "description_source": "local",
+  "content_urls": {
+   "desktop": {
+    "page": "https://en.wikipedia.org/wiki/Swamphen",
+    "revisions": "https://en.wikipedia.org/wiki/Swamphen?action=history",
+    "edit": "https://en.wikipedia.org/wiki/Swamphen?action=edit",
+    "talk": "https://en.wikipedia.org/wiki/Talk:Swamphen"
+   },
+   "mobile": {
+    "page": "https://en.wikipedia.org/wiki/Swamphen",
+    "revisions": "https://en.wikipedia.org/wiki/Special:History/Swamphen",
+    "edit": "https://en.wikipedia.org/wiki/Swamphen?action=edit",
+    "talk": "https://en.wikipedia.org/wiki/Talk:Swamphen"
+   }
+  },
+  "extract": "Porphyrio, also known as swamphens or swamp hens, is a genus of semi-aquatic birds in the rail family Rallidae. It includes some smaller species of gallinules which are sometimes separated as the genus Porphyrula or united with the gallinules proper in the genus Gallinula. The Porphyrio gallinules are distributed in the warmer regions of the world. The group probably originated in Africa in the Middle Miocene, before spreading across the world in waves from the Late Miocene to the Pleistocene.",
+  "extract_html": "<p><i><b>Porphyrio</b></i>, also known as <b>swamphens</b> or <b>swamp hens</b>, is a genus of semi-aquatic birds in the rail family Rallidae. It includes some smaller species of gallinules which are sometimes separated as the genus <i>Porphyrula</i> or united with the gallinules proper in the genus <i>Gallinula</i>. The <i>Porphyrio</i> gallinules are distributed in the warmer regions of the world. The group probably originated in Africa in the Middle Miocene, before spreading across the world in waves from the Late Miocene to the Pleistocene.</p>"
+ }
+}

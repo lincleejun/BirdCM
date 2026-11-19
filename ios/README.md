@@ -2,7 +2,7 @@
 
 SwiftUI / iOS 17+，`cc.outman.birdcm`，无第三方 iOS 运行库。地点现在是首页常驻输入：定位、地图搜索/图钉、离线国家/地区与最近地点。初次识别采用 **照片 GPS > 首页地点 > 无地点**；缺少两者时先提示，也可直接识别。结果显示地点来源和拍摄日期；显式“改地点”可以纠正照片 GPS，并用每只鸟保存的完整视觉分布重排，不重复跑图像模型。旧记录没有缓存时会明确要求重新选片，不偷偷重跑。
 
-所有模型随安装包提供。首次打开只校验/加载，**没有下载、蜂窝开关或模型重下载修复**。完整性损坏提示重新安装。原图、地点、缓存与历史保存在本机；Apple 地图搜索和瓦片需要网络。只用仓库已有的 CC0 验收照片，不使用所有者照片。
+所有模型随安装包提供。首次打开只校验/加载，**没有下载、蜂窝开关或模型重下载修复**。完整性损坏提示重新安装。原图、地点、缓存与历史保存在本机；Apple 地图搜索和瓦片需要网络。物种页的“物种参考”（Wikipedia 简介 + 一张 Commons 参考图，`BirdCM/Reference.swift`，与桌面 `engine/birdcm/online.py` 同规则）默认开启、只在打开物种页时联网，首次显示披露，可在“设置 → 物种参考”关闭并删除网络缓存（Caches，上限 200 MiB）；只发送该鸟种映射里的条目名、QID 和 Commons 文件名。映射 `BirdCM/Resources/species-map.json` 由 `python3 ios/tools/build_species_map.py` 从 `data/species-map.sqlite` 生成。UI 测试默认关闭在线资料；`-referenceOnline YES -referenceFixtures <dir>`（仅 Debug）用引擎录制的夹具代替网络。只用仓库已有的 CC0 验收照片，不使用所有者照片。
 
 设计与颜色实测见 [DESIGN.md](DESIGN.md)，实际执行记录与限制见 [VALIDATION.md](VALIDATION.md)。改动清单见 [ROUND4_FILES.txt](ROUND4_FILES.txt)。
 

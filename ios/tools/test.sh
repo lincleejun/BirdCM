@@ -33,6 +33,7 @@ covers() {
       print -l U/LargestTypeFlows U/LargestTypeMoreFlows U/LayoutFlows T/Step4Snapshots T/AppearanceSnapshots T/LibraryTests T/CrossPlatformTests ;;
     BirdCM/Explore.swift) print -l U/LargestTypeMoreFlows U/LayoutFlows T/AppearanceSnapshots T/Step4Snapshots ;;
     BirdCM/Settings.swift|BirdCM/AboutView.swift|BirdCM/Diagnostics.swift) print -l U/RecordFlows U/LargestTypeMoreFlows T/AppearanceSnapshots T/Step4Snapshots ;;
+    BirdCM/Reference.swift|BirdCM/ReferenceView.swift) print -l T/ReferenceTests U/ReferenceFlows U/RecordFlows U/LargestTypeMoreFlows T/AppearanceSnapshots ;;
     BirdCM/Library.swift|BirdCM/Store.swift) print -l U/RecordFlows T/LibraryTests T/CrossPlatformTests T/LogicTests T/LaunchTests ;;
     BirdCM/Engine.swift|BirdCM/Pixels.swift) print -l U/EngineFlows U/LaunchFlows T/PipelineTests T/PerformanceTests T/LaunchTests T/LogicTests ;;
     BirdCM/SelfTest.swift) print -l T/PerformanceTests U/RecordFlows ;;

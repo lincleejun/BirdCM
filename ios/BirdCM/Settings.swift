@@ -41,6 +41,7 @@ struct SettingsView: View {
                 Button("关于与数据来源") { about = true }.accessibilityIdentifier("home.about")
                 Button("诊断") { diagnostics = true }.accessibilityIdentifier("home.diagnostics")
             } header: { Text("关于") } footer: { Text("系统选片无需相册访问授权；仅读取你选择的照片。") }
+            ReferenceSettingsSection()
             Section {
                 Button("清空本机记录", role: .destructive) { clear = true }.accessibilityIdentifier("history.clear").disabled(model.items.isEmpty)
             } footer: { Text("清空前可以先在“备份与恢复”导出一份备份。") }

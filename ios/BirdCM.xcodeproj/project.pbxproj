@@ -19,9 +19,11 @@
 		1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */; };
 		1C2F80AAEE04A12FA0F75EA5 /* EngineFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F3D99C88C09E23470F546F5 /* EngineFlows.swift */; };
 		219F6C9B1226AC94AA191468 /* Place.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33AB76EF2ADB0CA492710D4A /* Place.swift */; };
+		27AD93C33C40098D4DF1534F /* ReferenceFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246FA61DF41F5B697E11741E /* ReferenceFlows.swift */; };
 		2A828C1B4B1B72E430198DBA /* clear.json in Resources */ = {isa = PBXBuildFile; fileRef = F388947B5CEEA82620053E9B /* clear.json */; };
 		2E0EB25027086D0E70E11A7A /* LibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B835A1050E34974A411DD /* LibraryTests.swift */; };
 		2EDD95AB996DF54A5D203BA1 /* zh-names.json in Resources */ = {isa = PBXBuildFile; fileRef = 20D8D66AF2EC535FFE72EE59 /* zh-names.json */; };
+		3048775ADDE0D8E901868B74 /* ReferenceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AC49B0ABFF80A076374F0BA /* ReferenceView.swift */; };
 		3DFE8B3E5A4DE25D7CEAB691 /* region-grid.json in Resources */ = {isa = PBXBuildFile; fileRef = 5A6DCD5461A89C056E7DC1FB /* region-grid.json */; };
 		3EF7B5458D56604B318E839F /* boundaries.json in Resources */ = {isa = PBXBuildFile; fileRef = 28FFB8922A99A3057BEDFEC9 /* boundaries.json */; };
 		3F0C8C2446365780E1E3218B /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = F39911F570E6DA1264A3A0C3 /* libsqlite3.tbd */; };
@@ -35,6 +37,7 @@
 		52C02BC4B5CC59F2DBC86330 /* Records.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09BD3BF22BB3F1AF7E920435 /* Records.swift */; };
 		53B85BD0B2119F3AC655162B /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9D1CF395881BA4AB072705 /* SelfTest.swift */; };
 		5884EBDF66602F9226603C85 /* BirdPager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29FC5D8A8FA3896A6DF55FD1 /* BirdPager.swift */; };
+		59560C77DBF4BF7E4C2FB484 /* ReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97D5AD120762085EE3D2E0C7 /* ReferenceTests.swift */; };
 		5C513C60DD11A76149B503AC /* avilist-birdnet-geo3.json in Resources */ = {isa = PBXBuildFile; fileRef = 6613809CF4E907E63588615B /* avilist-birdnet-geo3.json */; };
 		5EDC084AC2BAA7096DDFF8DE /* photo-1.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 6F20053B55015FCB14BA09E9 /* photo-1.jpg */; };
 		68068F73FAC5F4BD355471E1 /* ebird-names.csv in Resources */ = {isa = PBXBuildFile; fileRef = 9844DA70F8616A0E09609DED /* ebird-names.csv */; };
@@ -65,9 +68,11 @@
 		C9EFAEFDE332676B38697CEC /* CLEAR-WEIGHTS-LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = 99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */; };
 		D9BFADAF391F3C425720B81D /* ResultFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07C949A99CD40163DA6B932C /* ResultFlows.swift */; };
 		DADEF10A81D28D1910D60BE0 /* PerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83C43C33A3EF0B135A96FBE0 /* PerformanceTests.swift */; };
+		DFA265AE50E5E5E01307A894 /* species-map.json in Resources */ = {isa = PBXBuildFile; fileRef = C3D96B5035F9D3A73CE37F12 /* species-map.json */; };
 		E7657A47BD69A3AFD48CF814 /* DisplayCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */; };
 		F87B6A3F0197E0A46960A68B /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931CDAA415795FBEA2C6BAEE /* AboutView.swift */; };
 		F94FC0B9917A5CB44B008CB7 /* regions.json in Resources */ = {isa = PBXBuildFile; fileRef = 141CE94CEBAFCE6C069382E5 /* regions.json */; };
+		FBF82BFCE2FCF643009D38CB /* Reference.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB4BF15BF0CC42FA7643F590 /* Reference.swift */; };
 		FE92CFE9F908780B7E494990 /* Editors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B10BE62A6B849B9592A5B4 /* Editors.swift */; };
 		FFB9D837C6DFC404F0E5F73C /* GeoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F52A403EFA257B3C771DFF3C /* GeoTests.swift */; };
 /* End PBXBuildFile section */
@@ -101,8 +106,10 @@
 		141CE94CEBAFCE6C069382E5 /* regions.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = regions.json; sourceTree = "<group>"; };
 		162A9647DADBC21DA38EAD0F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		19B70D6E1935812D02FE9A6A /* Explore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Explore.swift; sourceTree = "<group>"; };
+		1AC49B0ABFF80A076374F0BA /* ReferenceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceView.swift; sourceTree = "<group>"; };
 		1EA75BE835A9655F80493366 /* geo-graph.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "geo-graph.json"; sourceTree = "<group>"; };
 		20D8D66AF2EC535FFE72EE59 /* zh-names.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "zh-names.json"; sourceTree = "<group>"; };
+		246FA61DF41F5B697E11741E /* ReferenceFlows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceFlows.swift; sourceTree = "<group>"; };
 		28FFB8922A99A3057BEDFEC9 /* boundaries.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = boundaries.json; sourceTree = "<group>"; };
 		29AEB686E6F1243F4182D73E /* LargestTypeFlows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LargestTypeFlows.swift; sourceTree = "<group>"; };
 		29FC5D8A8FA3896A6DF55FD1 /* BirdPager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BirdPager.swift; sourceTree = "<group>"; };
@@ -133,6 +140,7 @@
 		931CDAA415795FBEA2C6BAEE /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		9333FC17867E9236B15D2411 /* Models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Models; sourceTree = SOURCE_ROOT; };
 		96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
+		97D5AD120762085EE3D2E0C7 /* ReferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceTests.swift; sourceTree = "<group>"; };
 		9844DA70F8616A0E09609DED /* ebird-names.csv */ = {isa = PBXFileReference; path = "ebird-names.csv"; sourceTree = "<group>"; };
 		99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "CLEAR-WEIGHTS-LICENSE.md"; sourceTree = "<group>"; };
 		A10C1720395468417D71FB48 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
@@ -144,9 +152,11 @@
 		BD4AE21924151FD44FAD9BD8 /* clear-training-photos.csv */ = {isa = PBXFileReference; path = "clear-training-photos.csv"; sourceTree = "<group>"; };
 		C05B99E1AEF8F35E781BE1E6 /* LaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchTests.swift; sourceTree = "<group>"; };
 		C064BA2F801B919462B1F37A /* Rarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rarity.swift; sourceTree = "<group>"; };
+		C3D96B5035F9D3A73CE37F12 /* species-map.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "species-map.json"; sourceTree = "<group>"; };
 		C8D7DD89DAFCEA3EDEE2505E /* Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library.swift; sourceTree = "<group>"; };
 		CD30D915D433AD16AEB6EEA9 /* EBird.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EBird.swift; sourceTree = "<group>"; };
 		DB2F58A4B3E992DA5D3423A1 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Fixtures; path = Tests/Fixtures; sourceTree = SOURCE_ROOT; };
+		DB4BF15BF0CC42FA7643F590 /* Reference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reference.swift; sourceTree = "<group>"; };
 		E23C9CA7E9EBF3F47CC033A2 /* Ledger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ledger.swift; sourceTree = "<group>"; };
 		F388947B5CEEA82620053E9B /* clear.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = clear.json; sourceTree = "<group>"; };
 		F39911F570E6DA1264A3A0C3 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
@@ -178,6 +188,7 @@
 				B89F3C9F14B2B2C9DB551141 /* LaunchFlows.swift */,
 				625BED0331D06D2245C4B8BE /* PlaceFlows.swift */,
 				4B11B83261C140FE60490723 /* RecordFlows.swift */,
+				246FA61DF41F5B697E11741E /* ReferenceFlows.swift */,
 				07C949A99CD40163DA6B932C /* ResultFlows.swift */,
 			);
 			path = UITests;
@@ -239,6 +250,7 @@
 				344DA05F98C2FC721F554253 /* LogicTests.swift */,
 				83C43C33A3EF0B135A96FBE0 /* PerformanceTests.swift */,
 				A4668201A11936E9A1AF6313 /* PipelineTests.swift */,
+				97D5AD120762085EE3D2E0C7 /* ReferenceTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -267,6 +279,8 @@
 				F5D329C1F374D5F15D27B885 /* Preview.swift */,
 				C064BA2F801B919462B1F37A /* Rarity.swift */,
 				09BD3BF22BB3F1AF7E920435 /* Records.swift */,
+				DB4BF15BF0CC42FA7643F590 /* Reference.swift */,
+				1AC49B0ABFF80A076374F0BA /* ReferenceView.swift */,
 				82CDA918FD5F9D910F73E852 /* ResultView.swift */,
 				0B9D1CF395881BA4AB072705 /* SelfTest.swift */,
 				6605517F489279F1009821D1 /* Settings.swift */,
@@ -292,6 +306,7 @@
 				5E173523A2A0C66AEEDC6C66 /* PrivacyInfo.xcprivacy */,
 				5A6DCD5461A89C056E7DC1FB /* region-grid.json */,
 				141CE94CEBAFCE6C069382E5 /* regions.json */,
+				C3D96B5035F9D3A73CE37F12 /* species-map.json */,
 				20D8D66AF2EC535FFE72EE59 /* zh-names.json */,
 			);
 			name = Resources;
@@ -428,6 +443,7 @@
 				73959C1F7CDF108629B8E4AF /* photo-3.jpg in Resources */,
 				3DFE8B3E5A4DE25D7CEAB691 /* region-grid.json in Resources */,
 				F94FC0B9917A5CB44B008CB7 /* regions.json in Resources */,
+				DFA265AE50E5E5E01307A894 /* species-map.json in Resources */,
 				2EDD95AB996DF54A5D203BA1 /* zh-names.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -497,6 +513,8 @@
 				6E1226DC86BB39731230074A /* Preview.swift in Sources */,
 				79BC1621027D5CA4C9B93431 /* Rarity.swift in Sources */,
 				52C02BC4B5CC59F2DBC86330 /* Records.swift in Sources */,
+				FBF82BFCE2FCF643009D38CB /* Reference.swift in Sources */,
+				3048775ADDE0D8E901868B74 /* ReferenceView.swift in Sources */,
 				ABD2528274041DD945C9663D /* ResultView.swift in Sources */,
 				53B85BD0B2119F3AC655162B /* SelfTest.swift in Sources */,
 				15546CD4D65177012FF3971F /* Settings.swift in Sources */,
@@ -515,6 +533,7 @@
 				005E90D7DC7FFA5B62F6F495 /* LaunchFlows.swift in Sources */,
 				4FC73A629513422F87D5EB9C /* PlaceFlows.swift in Sources */,
 				B8774D5CD18905C2169F923E /* RecordFlows.swift in Sources */,
+				27AD93C33C40098D4DF1534F /* ReferenceFlows.swift in Sources */,
 				D9BFADAF391F3C425720B81D /* ResultFlows.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -531,6 +550,7 @@
 				448BEEC9B2253191DCEE8565 /* LogicTests.swift in Sources */,
 				DADEF10A81D28D1910D60BE0 /* PerformanceTests.swift in Sources */,
 				9725D7A4088B49D6A47176DD /* PipelineTests.swift in Sources */,
+				59560C77DBF4BF7E4C2FB484 /* ReferenceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
