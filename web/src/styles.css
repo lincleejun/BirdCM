@@ -292,7 +292,7 @@ main.res-main { padding-top: 0; }
 .preview-info .ref { display: inline; }
 /* a place: its name, the point as a small grey caption (Location.tsx PlaceName) */
 .place-coords { margin-left: 6px; color: var(--text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ll-pick-place { margin: 8px 0 4px; font-size: 14px; }
+.ll-pick-place { display: block; font-size: 12px; }
 .panel-h { font: 600 14px/20px var(--sans); margin: 16px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 14px; line-height: 20px; }
 .facts dt { color: var(--text-secondary); }
@@ -455,7 +455,7 @@ dialog.map-dlg { width: min(860px, 96vw); }
 .ll-places { margin: 6px 0 0; padding-left: 20px; font-size: 15px; overflow-wrap: anywhere; }
 .ll-places small { color: var(--text-tertiary); }
 .ll-gallery { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; padding: 0; margin: 10px 0 0; }
-.ll-gallery button { display: grid; gap: 4px; width: 100%; padding: 0; border: 0; background: none; text-align: left; color: var(--text-tertiary); font-size: 12px; }
+.ll-gallery button { display: grid; gap: 4px; align-content: start; width: 100%; padding: 0; border: 0; background: none; text-align: left; color: var(--text-tertiary); font-size: 12px; }
 .ll-gallery .ll-thumb { width: 100%; height: auto; aspect-ratio: 1; }
 .ll-gallery button:hover .ll-thumb { filter: brightness(.94); }
 .ll-links a { margin: 0 6px; }

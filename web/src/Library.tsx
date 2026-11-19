@@ -458,7 +458,7 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
   const [shown, setShown] = useState(false);
   const [info, setInfo] = useState<{ regions: { code: string; observations: number }[]; no_place_observations: number; truncated: boolean } | null>(null);
   const [tiles, setTiles] = useState<boolean | null>(null);
-  const [pick, setPick] = useState<{ lat: number; lon: number; refs: Ref[] } | null>(null);
+  const [pick, setPick] = useState<(Ref & { lat: number; lon: number })[]>([]);
   useEffect(() => {
     if (!shown || gen === undefined) return;
     let dead = false, map: { remove: () => void } | null = null;
@@ -475,13 +475,13 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
         const b = m.getBounds(), w = ((b.getWest() + 540) % 360) - 180, e = ((b.getEast() + 540) % 360) - 180;
         const span = b.getEast() - b.getWest() >= 360;
         const bounds = [Math.max(-90, b.getSouth()), span ? -180 : w, Math.min(90, b.getNorth()), span ? 180 : e].map((x) => x.toFixed(5)).join(",");
-        get<{ clusters: { lat: number; lon: number; observations: number; refs: Ref[] }[]; regions: { code: string; observations: number }[]; no_place_observations: number; truncated: boolean }>(
+        get<{ clusters: { lat: number; lon: number; observations: number; refs: (Ref & { lat: number; lon: number })[] }[]; regions: { code: string; observations: number }[]; no_place_observations: number; truncated: boolean }>(
           `/api/library/map?${q({ bounds, from, to })}`).then((r) => {
           if (dead) return;
           layer.clearLayers(); setInfo(r);
           for (const c of r.clusters) {
             L.marker([c.lat, c.lon], { icon: L.divIcon({ className: "ll-pin", html: `<span>${c.observations}</span>`, iconSize: [30, 30] }),
-              title: `${c.observations} 条观察记录（照片位置）` }).on("click", () => setPick(c)).addTo(layer);
+              title: `${c.observations} 条观察记录（照片位置）` }).on("click", () => setPick(c.refs)).addTo(layer);
           }
           if (first && r.clusters.length) { first = false; m.fitBounds(L.latLngBounds(r.clusters.map((c) => [c.lat, c.lon] as [number, number])).pad(0.3), { maxZoom: 11 }); }
         }).catch(() => {});
@@ -498,9 +498,10 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
       {shown && <>
         <div ref={box} className="map-box ll-map" aria-label="观察记录地图（数字是该处的观察记录数）" />
         {tiles === false && <p className="hint">地图图块加载不了（可能离线）。下面的地区和列表仍然可用。</p>}
-        {pick && <p className="ll-pick-place"><PlaceName lat={pick.lat} lon={pick.lon} /></p>}
-        {pick && <div className="ll-gallery">{pick.refs.map((r) => <button key={r.asset_hash + r.subject_id} onClick={() => onOpen(r)}>
-          <Thumb r={r} alt="" /><small>{r.day} · <i>{r.sci}</i></small></button>)}</div>}
+        {pick.length > 0 && <div className="ll-gallery">{pick.map((r) => <button key={r.asset_hash + r.subject_id} onClick={() => onOpen(r)}>
+          <Thumb r={r} alt="" /><small>{r.day} · <i>{r.sci}</i></small>
+          {/* each photo's own place: a cluster's centre at a low zoom is no place at all */}
+          <small className="ll-pick-place"><PlaceName lat={r.lat} lon={r.lon} /></small></button>)}</div>}
         {info && <p className="hint">{info.truncated ? "点太多，只显示观察记录最多的 500 处；放大看更多。" : ""}
           {info.regions.length > 0 && <>只选了地区的观察记录（不在地图上标点）：{info.regions.map((x) => `${x.code} ${x.observations}`).join(" · ")}。</>}
           {info.no_place_observations > 0 && <>地点未知：{info.no_place_observations} 条（{NO_PLACE_NOTE}）。</>}</p>}
