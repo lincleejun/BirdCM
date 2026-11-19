@@ -70,20 +70,18 @@ def present(v):
     return v
 
 
-def slim_row(row: dict) -> dict:
-    """A photo row as the list needs it (snapshot, photo events): each box without its own species block (the subject's
+def slim(r: dict) -> dict:
+    """A result as the list needs it (snapshot, photo events): each box without its own species block (the subject's
     is the photo's species) and without the likeness thumbnail. The full row: GET /api/photos/{id}. Codex P2."""
-    r = row.get("result")
-    if not r:
-        return row
     r = {k: v for k, v in r.items() if k != "look"}
     r["boxes"] = [{k: v for k, v in b.items() if k != "species"} for b in r.get("boxes") or []]
-    return {**row, "result": r}
+    return r
 
 
-def photo_row(r: sqlite3.Row) -> dict:
+def photo_row(r: sqlite3.Row, slim_result: bool = False) -> dict:
+    """slim_result: the list's shape, cut before the names are joined (half the cost of a 5,000-photo snapshot)."""
     d = dict(r)
-    d["result"] = present(json.loads(d["result"])) if d["result"] else None
+    d["result"] = present((slim if slim_result else lambda x: x)(json.loads(d["result"]))) if d["result"] else None
     d["species_fix"] = present(json.loads(d["species_fix"])) if d.get("species_fix") else None
     d["quality"] = json.loads(d["quality"]) if d.get("quality") else None
     d["variants"] = json.loads(d["variants"]) if d.get("variants") else []
@@ -158,7 +156,7 @@ class Store:
 
     def _photo_event(self, db, photo_id: int) -> None:
         r = db.execute(f"SELECT scan_id, {PHOTO_COLS} FROM photo WHERE id = ?", (photo_id,)).fetchone()
-        row = slim_row(photo_row(r))
+        row = photo_row(r, slim_result=True)
         self._event(db, row.pop("scan_id"), "photo", row)
 
     # ---- scans --------------------------------------------------------------------------------------------------
@@ -235,7 +233,7 @@ class Store:
         r = self._db().execute("SELECT state FROM scan WHERE id = ?", (scan_id,)).fetchone()
         return r["state"] if r else None
 
-    def snapshot(self, scan_id: int) -> dict | None:
+    def snapshot(self, scan_id: int, slim_results: bool = False) -> dict | None:
         """Scan, counts, every photo row, and the last event number, all from one read transaction."""
         db = self._db()
         db.execute("BEGIN")
@@ -243,7 +241,7 @@ class Store:
             s = db.execute("SELECT * FROM scan WHERE id = ?", (scan_id,)).fetchone()
             if not s:
                 return None
-            rows = [photo_row(r) for r in db.execute(f"SELECT {PHOTO_COLS} FROM photo WHERE scan_id = ? ORDER BY seq", (scan_id,))]
+            rows = [photo_row(r, slim_results) for r in db.execute(f"SELECT {PHOTO_COLS} FROM photo WHERE scan_id = ? ORDER BY seq", (scan_id,))]
             cursor = db.execute("SELECT coalesce(max(n), 0) FROM event WHERE scan_id = ?", (scan_id,)).fetchone()[0]
             scan = dict(s)
             scan["ratio"] = json.loads(scan["ratio"])

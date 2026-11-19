@@ -18,7 +18,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -26,7 +26,7 @@ from starlette.concurrency import run_in_threadpool
 from birdcm import archive, config, decode, geo, library, models, stars
 from birdcm.pipeline import EQUIVALENT_DATA, EQUIVALENT_OLD_KEY, fingerprint, image_paths
 from birdcm.queue import Scheduler
-from birdcm.store import Store, slim_row
+from birdcm.store import Store
 
 WEB = Path(os.environ.get("BIRDCM_WEB_DIR") or Path(__file__).resolve().parents[2] / "web" / "dist")
 WRITE = {"POST", "PUT", "PATCH", "DELETE"}
@@ -365,11 +365,13 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
 
     @api.get("/api/scans/{sid}")
     def snapshot(sid: int):
-        snap = store.snapshot(sid)
+        snap = store.snapshot(sid, slim_results=True)
         if not snap:
             raise HTTPException(404, "没有这个扫描")
-        snap["photos"] = [slim_row(p) for p in snap["photos"]]
-        return {**snap, **store.related(sid), "stale": is_stale(snap["scan"])}
+        # plain JSON already: json.dumps directly (FastAPI's encoder walk was 2/3 of a 5,000-photo snapshot)
+        return Response(json.dumps({**snap, **store.related(sid), "stale": is_stale(snap["scan"])}, ensure_ascii=False,
+                                   separators=(",", ":")),
+                        media_type="application/json")
 
     @api.get("/api/scans/{sid}/related")
     def related(sid: int):
@@ -789,8 +791,8 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                              offset: int = 0, limit: int = 50):
         st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
         offset, limit = page(offset, limit)
-        items = ix.observations(frm, to, sci, day_arg(day, "day"), rare)
-        return {**st, "generation": ix.generation, "total": len(items), "items": items[offset:offset + limit]}
+        gs = ix.observation_groups(frm, to, sci, day_arg(day, "day"), rare)
+        return {**st, "generation": ix.generation, "total": len(gs), "items": [ix.observation(g) for g in gs[offset:offset + limit]]}
 
     @api.get("/api/library/calendar")
     def library_calendar(year: int):
