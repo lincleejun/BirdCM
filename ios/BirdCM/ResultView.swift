@@ -268,9 +268,11 @@ struct PlacePickerActions:View {
                 locating=true
                 if let p=await model.location.request() {onChoose(p)} else {denied=true;map=true}
                 locating=false
-            }}.disabled(locating).accessibilityIdentifier("place.locate").frame(minHeight:44)
+            }}.disabled(locating).accessibilityIdentifier("place.locate").frame(minHeight:44).buttonStyle(.borderless)
             if denied {Text("定位不可用，请在地图上选大致位置。").font(.footnote).accessibilityIdentifier("place.denied")}
-            Button("在地图上选",systemImage:"map"){map=true}.accessibilityIdentifier("place.map").frame(minHeight:44)
+            Button("在地图上选",systemImage:"map"){map=true}.accessibilityIdentifier("place.map").frame(minHeight:44).buttonStyle(.borderless)
+        // borderless: inside a List row (改地点) default-style buttons all fire on any tap in the row, so 在地图上选 also
+        // ran the location request, whose onChoose dismissed the sheet and the map with it
         }.sheet(isPresented:$map){MapPlacePicker(initial:initial,onChoose:onChoose)}
     }
 }
