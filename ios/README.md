@@ -48,7 +48,7 @@ ios/tools/test.sh quick     # 单元测试 + 外观快照 + 冒烟 UI 流程
 ios/tools/test.sh full      # 全部测试，'BirdCM 18 Pro' 与 'BirdCM 15' 同时跑（发版或大改前）
 ```
 
-`changed` 默认比较未提交的改动（工作区干净时比较上一个提交），`BASE=impl` 等可指定基准；`DRY_RUN=1` 只打印选中的测试。
+`changed` 对 App 源文件只选单元测试和快照，映射里的 UI 流程（`U/`）要加 `UI=1` 才跑；改了 UI 测试文件本身仍跑它的类。`changed` 默认比较未提交的改动（工作区干净时比较上一个提交），`BASE=impl` 等可指定基准；`DRY_RUN=1` 只打印选中的测试。
 映射写在 `tools/test.sh` 的 `covers()` 里：改了某个测试文件就跑该文件里的测试类；改了 App 源文件就跑覆盖它的类，例如
 `Stats.swift` / `Ledger.swift` / `EBird.swift` → `LargestTypeFlows`、`LargestTypeMoreFlows`、`LayoutFlows`、`Step4Snapshots`、
 `AppearanceSnapshots`、`LibraryTests`、`CrossPlatformTests`；`ResultView.swift` 等结果页文件 → `ResultFlows`、`ResultExtraFlows`、

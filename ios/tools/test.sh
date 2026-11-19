@@ -47,7 +47,9 @@ case $mode in
     base=${BASE:-}
     [[ -z $base ]] && { [[ -n $(git status --porcelain -- .) ]] && base=HEAD || base=HEAD~1 }
     files=(${(f)"$( { git diff --name-only --relative $base -- .; git ls-files --others --exclude-standard -- .; } | sort -u)"})
-    picked=($(for f in $files; do covers $f; done | sed -e 's#^U/#BirdCMUITests/#' -e 's#^T/#BirdCMTests/#' | sort -u))
+    # an App file's UI flows (U/) only with UI=1: unit tests and snapshots cover it on the Mac (owner, 2026-11-19);
+    # an edited UI test file still runs its own classes
+    picked=($(for f in $files; do covers $f; done | { [[ -n ${UI:-} ]] && cat || grep -v '^U/' } | sed -e 's#^U/#BirdCMUITests/#' -e 's#^T/#BirdCMTests/#' | sort -u))
     echo "changed since $base: ${#files} file(s) -> ${picked:-nothing to test}"
     (( ${#picked} )) || exit 0
     # xcodebuild narrows to the most specific identifier (BirdCMTests + BirdCMTests/X runs only X): never pass both.
