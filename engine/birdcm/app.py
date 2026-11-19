@@ -335,9 +335,12 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             raise HTTPException(502, f"在线地名搜索用不了：{e}")
 
     @api.get("/api/places/name")
-    def place_name(lat: float, lon: float):
-        """{label, online, pending}: the point's place name now (cached online name, else the offline region); pending =
-        an online lookup is queued, ask again in a moment."""
+    def place_name(lat: float | None = None, lon: float | None = None, code: str | None = None, label: str | None = None):
+        """{label, online, pending}: a point's place name now (cached online name, else the offline region; pending = an
+        online lookup is queued, ask again in a moment), or a chosen region's English name (code, or our region label)."""
+        if lat is None and lon is None:
+            from birdcm import rarity
+            return {"label": places.region_text(code or rarity.label_iso(label)) or label, "online": False, "pending": False}
         if not geo.valid(lat, lon):
             raise HTTPException(422, "经纬度不对")
         return names.name(lat, lon)

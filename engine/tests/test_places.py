@@ -108,3 +108,25 @@ def test_not_running_never_queues(tmp_path, monkeypatch):
     monkeypatch.setenv("BIRDCM_DATA_DIR", str(tmp_path / "data"))
     n = places.Names(Store(tmp_path / "t.db"), fetch=lambda req: pytest.fail("network"))
     assert n.name(33.70, -118.05)["pending"] is False and not n.todo
+
+
+def test_api_place_name_region_point_and_setting(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from birdcm.app import create_app
+    monkeypatch.setenv("BIRDCM_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("BIRDCM_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(rarity, "table", lambda: None)
+    store = Store(tmp_path / "data" / "t.db")
+    guarded, _ = create_app(8798, token="tok", store=store, start_scheduler=False)       # no worker: nothing asked
+    c, h = TestClient(guarded, base_url="http://127.0.0.1:8798"), {"host": "127.0.0.1:8798"}
+    assert c.get("/api/places/name?lat=36.6&lon=-121.9", headers=h).json() == {"label": "California · United States", "online": False, "pending": False}
+    assert c.get("/api/places/name?code=US-CA", headers=h).json()["label"] == "California · United States"
+    assert c.get("/api/places/name", params={"label": "美国 · 加利福尼亚州"}, headers=h).json()["label"] == "California · United States"
+    assert c.get("/api/places/name?lat=99&lon=0", headers=h).status_code == 422
+    store._write(lambda db: db.execute("INSERT INTO place_name VALUES ('36.60,-121.90', 'Monterey · Monterey Bay', 0)"))
+    assert c.get("/api/places/name?lat=36.6&lon=-121.9", headers=h).json()["label"] == "Monterey · Monterey Bay"
+    w = {**h, "x-birdcm-token": "tok"}
+    assert c.post("/api/online/settings", json={"places": False}, headers=w).json()["places"] is False
+    assert c.post("/api/online/settings", json={"places": "no"}, headers=w).status_code == 422
+    c.delete("/api/online/cache", headers=w)                                    # the cached names go with the cache
+    assert c.get("/api/places/name?lat=36.6&lon=-121.9", headers=h).json()["label"] == "California · United States"
