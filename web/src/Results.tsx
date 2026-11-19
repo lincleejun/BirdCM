@@ -408,8 +408,8 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const openViewer = () => { if (current && !viewerRef.current?.open) viewerRef.current?.showModal(); };
   const step = (d: number) => {
     const i = view.findIndex((p) => p.id === current?.id);
-    const p = view[i + d];
-    if (!p) return;
+    const p = view[Math.max(0, Math.min(view.length - 1, i + d))];        // down onto a short last row: its last card
+    if (!p || p.id === current?.id) return;
     setSelected(p.id);
     tiles.current.get(p.id)?.focus({ preventScroll: viewerRef.current?.open });
   };
@@ -676,6 +676,8 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
   const missing: Partial<Record<keyof MarkSet, string>> = r ? {
     eye: r.eye && r.eye_visible ? undefined : "这张没有", beak: r.beak && (r.beak_p ?? 0) >= 0.5 ? undefined : "这张没有",
     focus: r.focus ? undefined : "不可用", box: r.boxes.length ? undefined : "这张没有" } : {};
+  const stars = <div className="panel-stars"><div className="verdict stars">{complete && p.stars !== null ? starTxt(p.stars) : "待定星级"}</div>
+    {complete && p.star_reason && <p className="reason">{p.star_reason}</p>}</div>;
   return (
     <aside className="inspector" aria-label="所选照片的全部信息" ref={ref}>
       {ready && <MarkControls m={marks} set={setMarks} missing={missing} />}
@@ -690,10 +692,9 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
           </>
         ) : (
           <>
-            <div className="verdict stars">{complete && p.stars !== null ? starTxt(p.stars) : "待定星级"}</div>
-            {complete && p.star_reason && <p className="reason">{p.star_reason}</p>}
             {r!.rejected ? (
               <>
+                {stars}
                 <div className="sp-cn">{r!.reject_reason ?? "没有找到鸟"}</div>
                 <p className="preview-note">{r!.boxes.length ? `检测到 ${r!.boxes.length} 个框，但都没有通过"清楚的鸟"判断，标为淘汰（不参与标星）。` : "检测模型在这张照片里没有找到鸟，标为淘汰。"}</p>
                 {sp && <><p className="conf-line">照片淘汰，但鸟本身认得出：</p><SpName sp={sp} /><Verdict sp={sp} />
@@ -701,7 +702,10 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
               </>
             ) : sp ? (
               <>
+                {/* polish.md order: the name, local / IUCN status, the naming notes and match, the stars, then correcting */}
                 <SpName sp={sp} size="hero" />
+                {r!.rarity && <p className="facts-inline"><span title={RARITY_NOTE}>本地：<strong>{r!.rarity.label}</strong></span>
+                  {r!.rarity.iucn && <span>IUCN：<strong>{IUCN_ZH[r!.rarity.iucn] ?? r!.rarity.iucn} {r!.rarity.iucn}</strong></span>}</p>}
                 <Verdict sp={sp} />
                 {sp.manual && r!.species_own && (
                   <p className="fixed-note"><span className="tbd">主人改正</span> 应用自己认的是 {named(r!.species_own).title}
@@ -713,6 +717,7 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
                 )}
                 <p className="conf-line">{r!.species_own ? (sp.label?.p != null ? `这张自己给它 ${pct(sp.label.p)}` : "这张自己的前五里没有它")
                   : `${sure ? "把握" : "最高候选"} ${pct((sure || sp.level === "genus" ? sp.label!.p : sp.top5[0].p) ?? 0)}`} <span className="ref">· {!sp.geo ? "没有位置，只凭图像" : sp.prior?.unknown ? "地区模型里没有这个鸟种，没按地点修正" : "已按拍摄地点和季节修正"}</span></p>
+                {stars}
                 {correcting ? <CorrectPanel own={sp.top5} inScan={inScan} current={sp.level !== "uncertain" ? sp.label?.sci ?? null : null}
                     burst={(p.burst_size ?? 1) > 1} manual={!!sp.manual} onClose={() => setCorrecting(false)}
                     onApply={(sci, scope) => onCorrect(p.id, sci, scope)} onUndo={(scope) => onCorrect(p.id, undefined, scope)} />
@@ -720,7 +725,7 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
                 <h4 className="panel-h">{r!.species_own ? "这张自己的前 5 个候选" : "前 5 个候选"}</h4>
                 <Candidates sp={sp} />
               </>
-            ) : null}
+            ) : stars}
             <dl className="facts">
               <dt>在飞</dt><dd>{r!.flying == null ? "—" : r!.flying ? "是" : "否"}{r!.p_fly != null && <span className="ref"> · P = {r!.p_fly.toFixed(2)}</span>}</dd>
               <dt>眼睛</dt><dd>{r!.eye_visible == null ? "—" : r!.eye_visible ? "看得见" : "看不见"}</dd>

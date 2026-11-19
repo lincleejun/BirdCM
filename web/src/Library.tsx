@@ -355,9 +355,11 @@ export function Stats({ catalogue, onSpecies }: { catalogue: Country[]; onSpecie
         {list.kind === "species" ? <SpeciesGrid gen={s?.generation} text="" explore={false} sort="recent" onSpecies={onSpecies} from={rg.from} to={rg.to} />
           : <ObsList gen={s?.generation} from={list.day ?? rg.from} to={list.day ?? rg.to} rare={list.rare} onSpecies={onSpecies} onOpen={setOpen} onChanged={reload} />}
       </div>}
-      <Calendar p={p} gen={s?.generation} onDay={(d) => setList({ kind: "obs", day: d })} onMonth={(y, m) => { setP({ kind: "month", y, m }); setList(null); }} />
-      <MapView from={rg.from} to={rg.to} gen={s?.generation} onOpen={setOpen} />
-      <DataTools from={rg.from} to={rg.to} gen={s?.generation} onChanged={reload} />
+      <div className="ll-lower">{/* calendar beside the map and the data tools on a wide window */}
+        <Calendar p={p} gen={s?.generation} onDay={(d) => setList({ kind: "obs", day: d })} onMonth={(y, m) => { setP({ kind: "month", y, m }); setList(null); }} />
+        <div><MapView from={rg.from} to={rg.to} gen={s?.generation} onOpen={setOpen} />
+          <DataTools from={rg.from} to={rg.to} gen={s?.generation} onChanged={reload} /></div>
+      </div>
       {open && <Evidence r={open} catalogue={catalogue} onClose={() => setOpen(null)} onChanged={reload} />}
     </section>
   );
