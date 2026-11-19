@@ -263,7 +263,7 @@ struct SpeciesLocal: View {
                 case .unknown: Text("地点模型没有这个物种，无法估计在 \(name) 的可能性。").font(.subheadline).foregroundStyle(Palette.secondary)
                 case let .months(values, word, gbif):
                     Text("在 \(name) 本月：\(word)").font(.subheadline.weight(.semibold)).accessibilityIdentifier("species.localWord")
-                    Text(gbif ? "按 GBIF 观测记录的本地频次，与结果页一致。" : "这里本月没有观测数据，按地点模型估计。").font(.caption).foregroundStyle(Palette.secondary)
+                    Text(gbif ? "按 GBIF 观测记录的本地频次（与结果页同一套分级）。" : "这里本月没有观测数据，按地点模型估计。").font(.caption).foregroundStyle(Palette.secondary)
                     Chart(0..<12, id: \.self) { i in
                         BarMark(x: .value("月份", "\(i + 1)"), y: .value("可能性", values[i]))
                             .foregroundStyle(i + 1 == month ? Palette.accent : Palette.accent.opacity(0.3))

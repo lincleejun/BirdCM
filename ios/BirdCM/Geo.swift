@@ -121,7 +121,8 @@ extension Geo {
         if cache, let data = try? Data(contentsOf: file), data.count == grid.count * 12 { return [UInt8](data) }
         let rows = grid.flatMap { c in (1...12).map { [Float(c[0]), Float(c[1]), Float(Self.rangeWeek($0))] } }
         var out = [UInt8](repeating: 0, count: rows.count)
-        let chunk = 1024, chunks = (rows.count + chunk - 1) / chunk
+        // predict keeps every activation until it returns (~120 × 384 floats a row): small chunks bound memory per core.
+        let chunk = 256, chunks = (rows.count + chunk - 1) / chunk
         let lock = NSLock(); var done = 0; var failure: Error?
         out.withUnsafeMutableBufferPointer { buffer in
             let base = buffer.baseAddress!

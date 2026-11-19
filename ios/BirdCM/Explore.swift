@@ -114,7 +114,7 @@ struct ExploreView: View {
                 if computing { ProgressView("正在计算这里这个月的鸟…").accessibilityIdentifier("explore.computing") }
                 // Every row, no paging (owner 2026-11-19): List builds rows lazily; a row only reads precomputed values.
                 ForEach(results) { sp in row(sp) }
-                if results.isEmpty && !computing { Text(seen == "seen" ? "还没有已见的鸟种。" : "没有匹配的鸟种。").accessibilityIdentifier("explore.empty") }
+                if results.isEmpty && rareResults.isEmpty && !computing { Text(seen == "seen" ? "还没有已见的鸟种。" : "没有匹配的鸟种。").accessibilityIdentifier("explore.empty") }
             }
             if local && !rareResults.isEmpty {
                 Section {
@@ -175,17 +175,23 @@ struct ExploreView: View {
                 SpeciesThumb(key: sp.sci)
                 VStack(alignment: .leading, spacing: 8) {
                     SpeciesName(title: sp.name, alt: sp.alt, sci: sp.sci, size: .row)
-                    if let l {
-                        // Text carries the word; the colored capsule (罕见 / 少见, as on the result page) only reinforces it.
+                    // Facts under the name so the name keeps the row's width. Text carries the local word; the colored
+                    // capsule (罕见 / 少见, as on the result page) only reinforces it.
+                    let seen = model.ledger.allTime[sp.sci] != nil, code = iucn[sp.sci]
+                    if l != nil || seen || code != nil {
+                        let tags = Group {
+                            if let l { localTag(l) }
+                            if let code { IUCNChip(code: code, small: true) }
+                            if seen { Label("已见", systemImage: "checkmark.circle").font(.caption).foregroundStyle(Palette.secondary).fixedSize() }
+                        }
                         ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 8) { localTag(l); if let m = l.months { MonthStrip(values: m, current: month) } }
-                            VStack(alignment: .leading, spacing: 4) { localTag(l); if let m = l.months { MonthStrip(values: m, current: month) } }
+                            HStack(spacing: 8) { tags; if let m = l?.months { MonthStrip(values: m, current: month) } }
+                            VStack(alignment: .leading, spacing: 4) { HStack(spacing: 8) { tags }; if let m = l?.months { MonthStrip(values: m, current: month) } }
+                            VStack(alignment: .leading, spacing: 4) { tags; if let m = l?.months { MonthStrip(values: m, current: month) } }
                         }
                     }
                 }
-                Spacer()
-                if let code = iucn[sp.sci] { IUCNChip(code: code, small: true) }
-                if model.ledger.allTime[sp.sci] != nil { Label("已见", systemImage: "checkmark.circle").font(.caption).foregroundStyle(Palette.secondary) }
+                Spacer(minLength: 0)
             }.frame(minHeight: 64)
         }.accessibilityIdentifier("explore.row.\(sp.sci)")
     }

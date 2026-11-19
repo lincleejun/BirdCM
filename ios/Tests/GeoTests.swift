@@ -51,6 +51,10 @@ final class GeoTests: XCTestCase {
         let year=try geo.months(at:Place(lat:58.3,lon:-134.4,label:"Juneau",source:"map"))
         print(String(format:"PERF place year (all species, 48 weeks) %.3f s",Date().timeIntervalSince(t)))
         let eagle=try XCTUnwrap(year[j]);XCTAssertEqual(eagle.count,12);XCTAssertGreaterThan(eagle.max()!,0.2)
+        t=Date()
+        let region=try geo.months(at:Place(lat:39.8,lon:-98.6,label:"美国",source:"region",regionCode:"US"))
+        print(String(format:"PERF region year (美国, %d points) %.3f s",geo.cover(Place(lat:0,lon:0,label:"美国",source:"region")).count,Date().timeIntervalSince(t)))
+        XCTAssertGreaterThan(try XCTUnwrap(region[j]).max()!,0.05)
         if let none=geo.indices.firstIndex(where:\.isEmpty) {XCTAssertNil(year[none]);XCTAssertNil(try geo.range(none,sci:"none",cache:false))}
         t=Date()
         let v=try XCTUnwrap(geo.range(j,sci:"Haliaeetus leucocephalus",cache:false))
