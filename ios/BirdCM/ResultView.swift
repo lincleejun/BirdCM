@@ -30,13 +30,13 @@ struct ResultView: View {
                             Button(draw ? "取消画框":"手动画框"){draw.toggle()}.accessibilityIdentifier("result.draw").frame(minHeight:44)
                         }.font(.subheadline)
                         if draw {
-                            Text("在照片上拖出包含鸟的矩形；有选中的鸟时替换它的框，更正保留。").foregroundStyle(Palette.rust)
+                            Text("在照片上拖出包含鸟的矩形；有选中的鸟时替换它的框，更正保留。").foregroundStyle(Palette.warning)
                             Button("用整张照片识别") {draw=false;Task{await model.analyze(index:r.selected,box:[0,0,1,1],manual:true,newBox:true,place:r.place)}}.accessibilityIdentifier("result.wholePhoto").frame(minHeight:44)
                         }
                         if r.boxes.isEmpty {
                             Text("没找到鸟").font(.largeTitle.bold()).accessibilityIdentifier("result.name")
                             Text("在照片上画框，或使用整张照片重试。这张照片仍保留在记录里，不计入鸟种。").foregroundStyle(Palette.secondary)
-                            Button("用整张照片识别") {Task{await model.analyze(index:0,box:[0,0,1,1],manual:true,newBox:true,place:r.place)}}.accessibilityIdentifier("result.wholePhoto").buttonStyle(.borderedProminent).frame(minHeight:44)
+                            Button("用整张照片识别") {Task{await model.analyze(index:0,box:[0,0,1,1],manual:true,newBox:true,place:r.place)}}.accessibilityIdentifier("result.wholePhoto").buttonStyle(PrimaryActionStyle(height:44))
                         } else { identification(r) }
                         Divider()
                         VStack(alignment:.leading,spacing:14) {
@@ -61,26 +61,26 @@ struct ResultView: View {
                         }
                         let aliases=model.library?.aliases(r.id) ?? 0
                         if aliases>0 {Text("另有 \(aliases) 个旧识别版本：同一照片，只统计一次。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.aliases")}
-                        if item?.missing == true {Text("原图不可用；记录与识别仍保留。").foregroundStyle(Palette.rust)}
+                        if item?.missing == true {Text("原图不可用；记录与识别仍保留。").foregroundStyle(Palette.warning)}
                         Text("照片和识别记录仅保存在此设备。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.footer")
                     }.fixedSize(horizontal:false,vertical:true).padding(.horizontal,20).padding(.top,12).padding(.bottom,20)
                 }.padding(.bottom,24)
             }
             .accessibilityIdentifier("result.scroll")
-            .background(Palette.surface)
+            .background(Palette.canvas)
             .navigationTitle("识别结果").navigationBarTitleDisplayMode(.inline)
             .toolbar {ToolbarItem(placement:.topBarTrailing){Menu {
                 Button("删除这条记录",role:.destructive){deleting=true}
             } label:{Image(systemName:"ellipsis").frame(width:44,height:44).accessibilityLabel("结果操作")}}}
             .safeAreaInset(edge:.bottom) {
                 // One bar above the tab bar; actions stack vertically at accessibility sizes instead of clipping.
-                let photos=PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current){Label("再选一张",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:54)}.buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("result.photos")
+                let photos=PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current){Label("再选一张",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:54)}.buttonStyle(SecondaryActionStyle(height:54)).accessibilityIdentifier("result.photos")   // 保存 is the page's one high-emphasis action
                 let placeButton=Button("改地点",systemImage:"mappin.and.ellipse"){place=true}.accessibilityIdentifier("result.bottomPlace").frame(minHeight:44)
                 let delete=Button("删除",systemImage:"trash",role:.destructive){deleting=true}.labelStyle(.iconOnly).accessibilityIdentifier("result.delete").frame(minWidth:44,minHeight:44)
                 Group {
                     if typeSize.isAccessibilitySize {VStack(spacing:4){photos;HStack{placeButton;Spacer();delete}}}
                     else {HStack(spacing:16){photos;placeButton;delete}}
-                }.font(.subheadline).padding(.horizontal).padding(.vertical,8).background(Palette.paper).disabled(model.busy)
+                }.font(.subheadline).padding(.horizontal).padding(.vertical,8).background(Palette.canvas).disabled(model.busy)
             }
             .confirmationDialog("删除这条记录？",isPresented:$deleting,titleVisibility:.visible) {
                 Button("删除",role:.destructive){model.delete(r.id)}.accessibilityIdentifier("result.confirmDelete")
@@ -92,8 +92,7 @@ struct ResultView: View {
             .sheet(isPresented:$dating){if let item {DateSheet(item:item)}}
             .sheet(item:$candidate){c in
                 NavigationStack{ScrollView{VStack(alignment:.leading,spacing:16){
-                    Text(model.catalogue.name(c.value.scientific)).font(.title)
-                    Text(c.value.english);Text(c.value.scientific).italic()
+                    SpeciesName(key:c.value.scientific,size:.hero)
                     Text("候选把握 \(c.value.p.formatted(.percent.precision(.fractionLength(1))))")
                     let rarity=model.localRarity(c.value.scientific,r)
                     Text("当地当月：\(rarity.label)")
@@ -125,61 +124,45 @@ struct ResultView: View {
         }
     }
     @ViewBuilder func factChips(_ e:AppModel.Effective,_ r:Record) -> some View {
-        if e.model?.flying ?? 0 >= 0.5 && e.state != "uncertain" {Label("在飞",systemImage:"bird.fill").font(.subheadline).padding(8).background(Palette.paper,in:Capsule())}
+        if e.model?.flying ?? 0 >= 0.5 && e.state != "uncertain" {Label("在飞",systemImage:"bird.fill").font(.subheadline).foregroundStyle(Palette.secondary)}
         if let key=e.key {
             let value=model.localRarity(key,r)
-            let colors=ThemeContrast.rarity[value.label] ?? (0x000000,0xdddddd)
-            // GBIF reporting tier at this photo's place and month (read now, not stored).
-            Text("本地 · "+value.label).font(.subheadline).foregroundStyle(Palette.adaptive(colors.0,colors.0)).padding(8).background(Palette.adaptive(colors.1,colors.1),in:Capsule())
+            // GBIF reporting tier at this photo's place and month (read now, not stored). Neutral text; 罕见 / 少见 on their pair.
+            StateTag(text:"本地："+value.label,state:ThemeContrast.rarity[value.label] ?? ThemeContrast.unavailable,strong:["罕见","少见"].contains(value.label))
                 .accessibilityIdentifier("result.localRarity").accessibilityValue(value.label)
             if let code=model.iucn(key) {IUCNChip(code:code)}
         }
-        if e.state=="none",let m=e.model,m.level != "species" || m.reason != nil {Text("近似种请核对").font(.subheadline).foregroundStyle(Palette.rust)}
+        if e.state=="none",let m=e.model,m.level != "species" || m.reason != nil {Text("近似种请核对").font(.subheadline).foregroundStyle(Palette.warning)}
     }
     @ViewBuilder func identification(_ r: Record) -> some View {
         let e=model.effective(r,r.selected)
+        // polish.md order: name → 本地 / IUCN and checks → model match → candidates → corrections → place and date.
         VStack(alignment:.leading,spacing:8) {
-            Text(e.name).accessibilityIdentifier("result.name").accessibilityValue(e.state=="none" ? e.model?.level ?? "unclassified":e.state).font(.largeTitle.bold()).foregroundStyle(e.key == nil ? Palette.rust:Palette.ink).accessibilityAddTraits(.isHeader)
-            if let k=e.key,let sp=model.catalogue.species(k) {
-                if !sp.en.isEmpty {Text(sp.en).font(.title3)}
-                Text(sp.sci).italic().foregroundStyle(Palette.secondary)
-                if sp.zh.isEmpty {Text("暂无中文名").font(.caption).foregroundStyle(Palette.secondary)}
+            Group {
+                if let k=e.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.hero)}
+                else {SpeciesName(title:e.name,size:.hero,uncertain:e.key == nil)}
+            }.accessibilityIdentifier("result.name").accessibilityValue(e.state=="none" ? e.model?.level ?? "unclassified":e.state).accessibilityAddTraits(.isHeader)
+            if e.state=="species" {Label("已人工更正",systemImage:"person.crop.circle.badge.checkmark").font(.subheadline).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.corrected")}
+            ViewThatFits(in:.horizontal) {HStack(spacing:16) {factChips(e,r)};VStack(alignment:.leading) {factChips(e,r)}}.padding(.top,4)
+            if let result=e.model {
+                // Geo-prior warning from the model; separate from the GBIF tier above.
+                if result.rare {Label("地点模型：此地此季少见，请核对",systemImage:"exclamationmark.triangle").foregroundStyle(Palette.warning).font(.subheadline).accessibilityIdentifier("result.priorWarning")}
+                if let reason=result.reason {Text(reason).font(.subheadline).foregroundStyle(Palette.warning).accessibilityIdentifier(reason.contains("此地此季") ? "result.priorWarning":"result.reason")}
             }
-            if e.state=="species" {Label("已人工更正",systemImage:"person.crop.circle.badge.checkmark").font(.subheadline).foregroundStyle(Palette.green).accessibilityIdentifier("result.corrected")}
-            ViewThatFits(in:.horizontal) {HStack {factChips(e,r)};VStack(alignment:.leading) {factChips(e,r)}}
             if e.state=="none",let result=e.model {
                 if result.level=="species",let c=result.top5.first {
-                    ProgressView(value:c.p).tint(Palette.green)
-                    Text("把握 \(c.p.formatted(.percent.precision(.fractionLength(1))))").font(.subheadline).monospacedDigit()
-                    if result.clear == false {Text("鸟的特征不够清楚，暂不计入鸟种；可以更正。").font(.subheadline).foregroundStyle(Palette.rust)}
-                } else if result.level=="genus" {Text("可以判断到属，具体鸟种不确定。属级把握 \((result.genusP ?? 0).formatted(.percent.precision(.fractionLength(1))))")}
+                    Text("模型匹配 \(c.p.formatted(.percent.precision(.fractionLength(1))))").font(.subheadline.weight(.semibold)).monospacedDigit()
+                    ProgressView(value:c.p).tint(Palette.accent)
+                    if result.clear == false {Text("鸟的特征不够清楚，暂不计入鸟种；可以更正。").font(.subheadline).foregroundStyle(Palette.warning)}
+                } else if result.level=="genus" {Text("可以判断到属，具体鸟种不确定。属级把握 \((result.genusP ?? 0).formatted(.percent.precision(.fractionLength(1))))").monospacedDigit()}
                 else {Text("还不能确定是哪种鸟，看看这些可能。")}
             } else if e.state=="none" {
                 Text("这只还没识别。").foregroundStyle(Palette.secondary)
                 Button("识别这只"){Task{await model.select(r.selected)}}.accessibilityIdentifier("result.identifySubject").frame(minHeight:44)
             }
-            if e.excluded {Text("已排除这个主体，不计入统计。").foregroundStyle(Palette.rust).accessibilityIdentifier("result.excluded")}
-            let actions=Group {
-                Button("更正鸟种",systemImage:"pencil"){correcting=true}.accessibilityIdentifier("result.correctSpecies")
-                Button(e.count.map{"数量 \($0)（已改）"} ?? "数量 1",systemImage:"number"){counting=true}.accessibilityIdentifier("result.count")
-                Button(e.excluded ? "恢复这个主体":"不是鸟 · 排除",systemImage:e.excluded ? "arrow.uturn.backward":"xmark.circle"){if let s=e.subject {model.edit{try $0.exclude(s,!e.excluded)}}}.accessibilityIdentifier("result.exclude")
-            }.buttonStyle(.bordered).controlSize(.large)
-            ViewThatFits(in:.horizontal) {HStack{actions};VStack(alignment:.leading){actions}}.font(.subheadline).disabled(e.subject == nil || model.busy)
-            VStack(alignment:.leading,spacing:8) {
-                Text("\(model.placeName(r.place) ?? String(localized:"没有地点")) ·\(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline)
-                if let p=r.place {Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)}
-            }
-            if let result=e.model {
-                Button {place=true} label:{Text(result.priorUnknown == true ? "这个鸟种缺少当地资料，仅凭照片判断。" : r.place == nil ? "没有位置，只凭图像。":"已按拍摄地点和季节修正。") .font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.prior")}.buttonStyle(.plain).frame(minHeight:44).accessibilityHint("设置拍摄地点")
-                // Geo-prior warning from the model; separate from the GBIF tier above.
-                if result.rare {Label("地点模型：此地此季少见，请核对",systemImage:"exclamationmark.triangle").foregroundStyle(Palette.rust).font(.subheadline).accessibilityIdentifier("result.priorWarning")}
-                if let reason=result.reason {Text(reason).font(.subheadline).foregroundStyle(Palette.rust).accessibilityIdentifier(reason.contains("此地此季") ? "result.priorWarning":"result.reason")}
-            }
+            if e.excluded {Text("已排除这个主体，不计入统计。").foregroundStyle(Palette.warning).accessibilityIdentifier("result.excluded")}
         }
         if let result=e.model {
-            Divider()
-            Text("按 GBIF 观测记录的当地当月份额分级；记录数不是实际种群数量。覆盖不足的地区显示数据不足。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.facts")
-            Divider()
             // Owner rule: collapsed when the answer is settled (species, genus or a correction); open only for 不确定.
             let shown:Set<String>=e.state=="species" ? [e.key ?? ""] : e.state=="none" && result.level=="species" ? [result.top5.first?.scientific ?? ""] : []
             let others=Array(result.top5.enumerated()).filter{!shown.contains($0.element.scientific)}
@@ -193,24 +176,52 @@ struct ResultView: View {
                 }.frame(minHeight:44).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityIdentifier("result.candidates.toggle").padding(.bottom,open ? 8:0)
                 if open {ForEach(others,id:\.offset){i,c in
                         Button {candidate=CandidateSheet(value:c)} label:{HStack{
-                            VStack(alignment:.leading,spacing:4){Text(model.catalogue.name(c.scientific));Text(c.scientific).font(.caption).italic().foregroundStyle(Palette.secondary);ProgressView(value:c.p).tint(Palette.green)}
+                            VStack(alignment:.leading,spacing:8){SpeciesName(key:c.scientific,size:.row);ProgressView(value:c.p).tint(Palette.accent)}
                             Spacer();Text(c.p.formatted(.percent.precision(.fractionLength(1)))).font(.subheadline).monospacedDigit();Image(systemName:"chevron.right").font(.caption)
                         }.frame(minHeight:48)}.accessibilityIdentifier("result.candidate.\(i)").buttonStyle(.plain)
                         Divider()
                 }}
             }
         }
+        Divider()
+        VStack(alignment:.leading,spacing:8) {
+            let actions=Group {
+                Button("更正鸟种",systemImage:"pencil"){correcting=true}.accessibilityIdentifier("result.correctSpecies")
+                Button(e.count.map{"数量 \($0)（已改）"} ?? "数量 1",systemImage:"number"){counting=true}.accessibilityIdentifier("result.count")
+                Button(e.excluded ? "恢复这个主体":"不是鸟 · 排除",systemImage:e.excluded ? "arrow.uturn.backward":"xmark.circle"){if let s=e.subject {model.edit{try $0.exclude(s,!e.excluded)}}}.accessibilityIdentifier("result.exclude")
+            }.buttonStyle(.bordered).controlSize(.large)
+            ViewThatFits(in:.horizontal) {HStack{actions};VStack(alignment:.leading){actions}}.font(.subheadline).disabled(e.subject == nil || model.busy)
+            Text("\(model.placeName(r.place) ?? String(localized:"没有地点")) · \(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline).monospacedDigit().padding(.top,4)
+            if let p=r.place {Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)}
+            if let result=e.model {
+                Button {place=true} label:{Text(result.priorUnknown == true ? "这个鸟种缺少当地资料，仅凭照片判断。" : r.place == nil ? "没有位置，只凭图像。":"已按拍摄地点和季节修正。") .font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.prior")}.buttonStyle(.plain).frame(minHeight:44).accessibilityHint("设置拍摄地点")
+                Text("按 GBIF 观测记录的当地当月份额分级；记录数不是实际种群数量。覆盖不足的地区显示数据不足。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.facts")
+            }
+        }
     }
 }
 struct CandidateSheet: Identifiable {let id=UUID();let value:Candidate}
-/// The one IUCN label: standard Red List colours, the same on every screen.
+/// A state written as text (polish.md: neutral secondary text by default); `strong` sets it on its semantic fg/bg pair
+/// when the state needs attention. Never colour alone: the words and code are always there.
+struct StateTag: View {
+    let text:String
+    let state:ThemeContrast.Semantic
+    var strong=false
+    var small=false
+    var body:some View {
+        Text(text).font(small ? .caption:.subheadline).fontWeight(strong ? .semibold:.regular)
+            .foregroundStyle(strong ? Palette.fg(state):Palette.secondary)
+            .padding(.horizontal,strong ? 8:0).padding(.vertical,strong ? 3:0)
+            .background(strong ? Palette.bg(state):.clear,in:Capsule())
+    }
+}
+/// The one IUCN label, the same on every screen: neutral for LC / NT / DD / NE, the Red List state pair from VU up.
 struct IUCNChip: View {
     let code:String
     var small=false
     var body:some View {
-        let colors=ThemeContrast.iucn[code] ?? (0x000000,0xdddddd)
-        Text("IUCN · "+Rarity.iucnLabel(code)).font(small ? .caption.bold():.subheadline.bold()).foregroundStyle(Palette.adaptive(colors.0,colors.0))
-            .padding(.horizontal,8).padding(.vertical,4).background(Palette.adaptive(colors.1,colors.1),in:Capsule()).accessibilityIdentifier("iucn.\(code)")
+        StateTag(text:"IUCN："+Rarity.iucnLabel(code),state:ThemeContrast.iucn[code] ?? ThemeContrast.unavailable,
+                 strong:["VU","EN","CR","EW","EX"].contains(code),small:small).accessibilityIdentifier("iucn.\(code)")
     }
 }
 
@@ -304,13 +315,13 @@ struct MapPlacePicker: View {
                 Text("拖动地图或轻点放置图钉。圆圈约 25 公里，大致位置就够了。").font(.footnote).padding(.horizontal)
                 PlaceMap(pin:$pin,label:$label,loading:$tilesLoading)
                     .accessibilityIdentifier("place.mapCanvas")
-                    .overlay(alignment:.topTrailing){if tilesLoading {ProgressView("地图加载中").font(.caption).padding(8).background(Palette.paper,in:RoundedRectangle(cornerRadius:16)).padding(8)}}
+                    .overlay(alignment:.topTrailing){if tilesLoading {ProgressView("地图加载中").font(.caption).padding(8).background(Palette.canvas,in:RoundedRectangle(cornerRadius:16)).padding(8)}}
                 Text(String(format:"%.3f, %.3f",pin.latitude,pin.longitude)).font(.caption).monospacedDigit()
             }.navigationTitle("在地图上选").navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge:.bottom) {
                 Button("使用这个地点",systemImage:"checkmark") {
                     onChoose(Place(lat:pin.latitude,lon:pin.longitude,label:label+String(format:" · %.2f, %.2f",pin.latitude,pin.longitude),source:"map"));dismiss()
-                }.frame(maxWidth:.infinity).buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("place.usePin").padding().background(Palette.paper)
+                }.frame(maxWidth:.infinity).buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("place.usePin").padding().background(Palette.canvas)
             }
             .toolbar{Button("取消"){dismiss()}.accessibilityIdentifier("place.mapCancel")}
             .onAppear {
@@ -351,7 +362,7 @@ struct PlaceSnapshot: View {
                 shot.image.draw(at:.zero)
                 for p in points {
                     let c=shot.point(for:p),dot=UIBezierPath(ovalIn:CGRect(x:c.x-8,y:c.y-8,width:16,height:16))
-                    UIColor(Palette.button).setFill();UIColor.white.setStroke();dot.lineWidth=3;dot.fill();dot.stroke()
+                    UIColor(Palette.accent).setFill();UIColor.white.setStroke();dot.lineWidth=3;dot.fill();dot.stroke()
                 }
             }
         } catch {failed=true}
@@ -376,7 +387,7 @@ struct PlaceSnapshot: View {
         .sheet(isPresented:$full) {
             NavigationStack {
                 Map(initialPosition:.region(region)) {ForEach(points.indices,id:\.self) {i in Marker(label,coordinate:points[i])}}
-                    .safeAreaInset(edge:.bottom) {Text(coordinates).font(.caption).monospacedDigit().textSelection(.enabled).padding(8).frame(maxWidth:.infinity).background(Palette.paper)}
+                    .safeAreaInset(edge:.bottom) {Text(coordinates).font(.caption).monospacedDigit().textSelection(.enabled).padding(8).frame(maxWidth:.infinity).background(Palette.canvas)}
                     .navigationTitle(label).navigationBarTitleDisplayMode(.inline)
                     .toolbar {Button("完成") {full=false}.accessibilityIdentifier("sheet.done")}
                     .accessibilityIdentifier("place.fullMap")
@@ -432,7 +443,7 @@ struct PlaceMap:UIViewRepresentable {
             parent.pin=map.convert(gesture.location(in:map),toCoordinateFrom:map);parent.label="地图选点"
         }
         func mapView(_ mapView:MKMapView,rendererFor overlay:MKOverlay)->MKOverlayRenderer {
-            let renderer=MKCircleRenderer(overlay:overlay);renderer.fillColor=UIColor(Palette.green).withAlphaComponent(0.12);renderer.strokeColor=UIColor(Palette.green);renderer.lineWidth=2;return renderer
+            let renderer=MKCircleRenderer(overlay:overlay);renderer.fillColor=UIColor(Palette.accent).withAlphaComponent(0.12);renderer.strokeColor=UIColor(Palette.accent);renderer.lineWidth=2;return renderer
         }
     }
 }

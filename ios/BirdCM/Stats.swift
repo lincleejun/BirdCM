@@ -55,11 +55,12 @@ struct StatsView: View {
         default: period = .all
         }
     }
-    func tile(_ title: String, _ value: Int, _ id: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("\(value)").font(.largeTitle.bold()).monospacedDigit()
+    /// polish.md: open numbers, no box; tabular digits; orange only for the 新种 number.
+    func tile(_ title: String, _ value: Int, _ id: String, highlight: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)").font(.system(.largeTitle, weight: .bold)).monospacedDigit().foregroundStyle(highlight && value > 0 ? Palette.newSpecies : Palette.ink)
             Text(title).font(.subheadline).foregroundStyle(Palette.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
             .accessibilityElement(children: .combine).accessibilityIdentifier(id)
     }
     var body: some View {
@@ -80,12 +81,12 @@ struct StatsView: View {
                 }
                 Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                     GridRow { tile("鸟种", s.species, "stats.species"); tile("观察记录", s.observations, "stats.observations") }
-                    GridRow { tile("估计数量", s.estimate, "stats.estimate"); tile("新种", s.newSpecies, "stats.newSpecies") }
+                    GridRow { tile("估计数量", s.estimate, "stats.estimate"); tile("新种", s.newSpecies, "stats.newSpecies", highlight: true) }
                 }
-                Text("照片 \(s.photos) 张 · 待确认 \(s.pending) 个（\(s.pendingPhotos) 张）· 没找到鸟 \(s.noBird) 张").font(.subheadline).accessibilityIdentifier("stats.coverage")
+                Text("照片 \(s.photos) 张 · 待确认 \(s.pending) 个（\(s.pendingPhotos) 张）· 没找到鸟 \(s.noBird) 张").font(.subheadline).monospacedDigit().accessibilityIdentifier("stats.coverage")
                 Text("观察记录 = 同一鸟种、同一天、同一地点合为一次；估计数量取同日同地点单张照片的最大值，可能重复见到同一只鸟；地点未知的同日记录合并，可能低估次数。新种 = 这段时间里第一次记录到的鸟种。").font(.caption).foregroundStyle(Palette.secondary)
                 let future = model.ledger.observations.filter { $0.day > today && Ledger.inRange($0.day, period.range) }.count
-                if future > 0 { Label("\(future) 条观察记录的日期在今天之后，请检查相机时间", systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Palette.rust) }
+                if future > 0 { Label("\(future) 条观察记录的日期在今天之后，请检查相机时间", systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Palette.warning) }
                 if s.species == 0 {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("这段时间还没有确定到种的记录。").accessibilityIdentifier("stats.empty")
@@ -104,9 +105,9 @@ struct StatsView: View {
                     ForEach(s.list) { st in
                         NavigationLink(value: AppModel.Route.species(st.id)) {
                             HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(model.catalogue.name(st.id)).font(.body)
-                                    Text("\(st.observations) 次观察 · 估计 \(st.estimate) · \(st.photos.count) 张 · 最近 \(st.last)").font(.caption).foregroundStyle(Palette.secondary).monospacedDigit()
+                                VStack(alignment: .leading, spacing: 8) {
+                                    SpeciesName(key: st.id, size: .row)
+                                    Text("\(st.observations) 次观察 · 估计 \(st.estimate) · \(st.photos.count) 张 · 最近 \(st.last)").font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit()
                                 }
                                 Spacer()
                                 if Ledger.inRange(model.ledger.allTime[st.id]?.first ?? "", period.range) { NewBadge() }
@@ -118,7 +119,7 @@ struct StatsView: View {
                 }
             }.padding(16).padding(.bottom, 24)
         }
-        .background(Palette.paper)
+        .background(Palette.canvas)
         .navigationTitle("统计")
         .sheet(isPresented: $ebird) { EBirdSheet(title: period.title, range: period.range).debugAppearance() }
         .navigationDestination(item: $day) { d in SightingList(title: d, range: (d, d), day: d) }
@@ -136,7 +137,8 @@ struct StatsView: View {
                 let rare = obs.filter { book.rare($0.id) }
                 Text("本地罕见 / 少见：\(rare.count) 条观察记录").font(.subheadline).accessibilityIdentifier("stats.rare")
                 ForEach(rare.prefix(20)) { o in
-                    Text("· \(model.catalogue.name(o.species)) · \(o.day)").font(.caption)
+                    HStack(alignment: .firstTextBaseline) { SpeciesName(key: o.species, size: .row); Spacer(); Text(o.day).font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit() }
+                        .accessibilityElement(children: .combine)
                 }
                 let labels = ["无记录", "罕见", "少见", "不常见", "常见"]
                 let buckets = Dictionary(grouping: obs) { book.bucket($0.id) }.mapValues(\.count)
@@ -145,15 +147,16 @@ struct StatsView: View {
                 if !UserDefaults.standard.bool(forKey: "hideIUCN") {
                     let threatened = book.iucn.filter { RarityBook.threatened.contains($0.value) }.sorted { $0.key < $1.key }
                     Text("IUCN 受威胁（易危 / 濒危 / 极危）：\(threatened.count) 种").font(.subheadline).accessibilityIdentifier("stats.threatened")
-                    ForEach(threatened, id: \.key) { k, v in HStack { Text(model.catalogue.name(k)).font(.caption); IUCNChip(code: v, small: true) } }
+                    ForEach(threatened, id: \.key) { k, v in HStack { SpeciesName(key: k, size: .row); Spacer(); IUCNChip(code: v, small: true) }.accessibilityElement(children: .combine) }
                 }
             } else { ProgressView("正在查本地稀有度…").font(.caption) }
-        }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }.padding(12).frame(maxWidth: .infinity, alignment: .leading).overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.border))   // a resting panel: one quiet border, no fill, no shadow
     }
 }
 
 struct NewBadge: View {
-    var body: some View { Text("新种").font(.caption.bold()).padding(.horizontal, 6).padding(.vertical, 2).foregroundStyle(.white).background(Palette.button, in: Capsule()) }
+    /// polish.md: orange is kept for 新种 alone, as text.
+    var body: some View { Text("新种").font(.caption.bold()).foregroundStyle(Palette.newSpecies) }
 }
 
 /// Photo-first calendar (owner, 2026-11-18): month grid of cover crops with a species badge; year = 12 month tiles.
@@ -166,12 +169,14 @@ struct PhotoCalendar: View {
     func cell(_ d: Ledger.Day?, _ n: Int) -> some View {
         ZStack(alignment: .topLeading) {
             if let d, let c = d.cover {
-                if c.item.missing { RoundedRectangle(cornerRadius: 6).fill(Palette.green.opacity(0.35)).overlay(Text("\(d.species.count)").font(.caption.bold())) }
+                if c.item.missing { RoundedRectangle(cornerRadius: 6).fill(Palette.inset) }
                 else { CropThumbnail(url: model.url(c.item.id), id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal).clipShape(RoundedRectangle(cornerRadius: 6)) }
-            } else { Color.clear }
-            Text("\(n)").font(.caption2.bold()).padding(2).foregroundStyle(d == nil ? Palette.secondary : .white).shadow(color: d == nil ? .clear : .black, radius: 1)
+            } else { RoundedRectangle(cornerRadius: 6).fill(Palette.inset) }
+            // Every date on an opaque backing (polish.md): readable on any photo, no shadow.
+            Text("\(n)").font(.caption2.weight(.semibold)).monospacedDigit().foregroundStyle(d == nil ? Palette.secondary : Palette.ink).padding(.horizontal, 3).padding(.vertical, 1)
+                .background(d == nil ? Color.clear : Palette.surface, in: RoundedRectangle(cornerRadius: 4)).padding(3)
             if let d, d.species.count > 1 {
-                Text("\(d.species.count)").font(.caption2.bold()).padding(.horizontal, 4).foregroundStyle(.white).background(Palette.button, in: Capsule()).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(2)
+                Text("\(d.species.count)").font(.caption2.bold()).monospacedDigit().padding(.horizontal, 4).foregroundStyle(Palette.onAccent).background(Palette.accent, in: Capsule()).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(2)
             }
         }.aspectRatio(1, contentMode: .fit)
     }
@@ -208,7 +213,7 @@ struct PhotoCalendar: View {
             let lead = (Calendar(identifier: .gregorian).component(.weekday, from: first) + 5) % 7     // Monday first
             let count = Int(range.1.suffix(2))!
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
-                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { Text($0).font(.caption2).foregroundStyle(Palette.secondary) }
+                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { Text($0).font(.caption).foregroundStyle(Palette.secondary) }
                 ForEach(0..<(lead + count), id: \.self) { i in
                     if i < lead { Color.clear.aspectRatio(1, contentMode: .fit) } else {
                         let n = i - lead + 1, key = String(format: "%04d-%02d-%02d", y, m, n), d = days[key]
@@ -230,11 +235,11 @@ struct PhotoCalendar: View {
                 Button { period = .month(y, m) } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 8).fill(Palette.surface)
+                            RoundedRectangle(cornerRadius: 8).fill(Palette.inset)
                             if let cover, !cover.item.missing { CropThumbnail(url: model.url(cover.item.id), id: cover.item.id, boxes: cover.item.boxes, crops: cover.item.crops, index: cover.ordinal).clipShape(RoundedRectangle(cornerRadius: 8)) }
                         }.aspectRatio(1, contentMode: .fit)
                         Text("\(m) 月").font(.subheadline.bold())
-                        Text(obs == 0 ? "没有记录" : "\(species) 种 · \(obs) 条观察").font(.caption).foregroundStyle(Palette.secondary)
+                        Text(obs == 0 ? "无记录" : "\(species) 种 · \(obs) 条观察").font(.caption).foregroundStyle(Palette.secondary).monospacedDigit()
                     }
                 }.buttonStyle(.plain).accessibilityElement(children: .combine).accessibilityIdentifier("calendar.month.\(m)")
             }
@@ -270,16 +275,20 @@ struct SightingList: View {
                         if let item = model.ledger.evidence(o).first, let sub = item.subjects.first(where: { $0.key == o.species }) {
                             CropThumbnail(url: model.url(item.id), id: item.id, boxes: item.boxes, crops: item.crops, index: sub.ordinal).frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityHidden(true)
                         }
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack { Text(model.catalogue.name(o.species)); if model.ledger.allTime[o.species]?.first == o.day { NewBadge() } }
-                            Text("\(o.day) · \(place(o))").font(.caption).foregroundStyle(Palette.secondary)
-                            Text("估计 \(o.estimate)\(o.override != nil ? "（你改过）" : "") · \(o.frames.count) 张").font(.caption).monospacedDigit()
+                        // The reported bug: this list showed the Chinese name alone; it is the shared two-line block now.
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline) { SpeciesName(key: o.species, size: .row); if model.ledger.allTime[o.species]?.first == o.day { NewBadge() } }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(o.day) · \(place(o))").monospacedDigit()
+                                Text("估计 \(o.estimate)\(o.override != nil ? "（你改过）" : "") · \(o.frames.count) 张").monospacedDigit()
+                            }.font(.caption).foregroundStyle(Palette.tertiary)
                         }
                         Spacer()
                     }.contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityIdentifier("obs.row.\(o.species).\(o.day)")
             }
         }
+        .scrollContentBackground(.hidden).background(Palette.canvas)
         .navigationTitle(day.map { "\($0) 的观察" } ?? "观察记录 · \(title)").navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { o in SightingSheet(sighting: o).debugAppearance() }
     }
@@ -296,8 +305,8 @@ struct SightingSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    LabeledContent("鸟种", value: model.catalogue.name(o.species))
-                    LabeledContent("日期", value: o.day)
+                    SpeciesName(key: o.species, size: .row)
+                    LabeledContent("日期") { Text(o.day).monospacedDigit() }
                     LabeledContent("单张照片最多", value: "\(o.frames.values.max() ?? 0) 只")
                     LabeledContent("照片", value: "\(o.frames.count) 张")
                 }
@@ -357,7 +366,7 @@ struct SightingMap: View {
                         ForEach(clusters(pts)) { pin in
                             Annotation("", coordinate: CLLocationCoordinate2D(latitude: pin.lat, longitude: pin.lon)) {
                                 Button { picked = pin.sightings } label: {
-                                    Text("\(pin.sightings.count)").font(.caption.bold()).foregroundStyle(.white).frame(minWidth: 30, minHeight: 30).background(Palette.button, in: Circle()).overlay(Circle().stroke(.white, lineWidth: 2))
+                                    Text("\(pin.sightings.count)").font(.caption.bold()).monospacedDigit().foregroundStyle(Palette.onAccent).frame(minWidth: 30, minHeight: 30).background(Palette.accent, in: Circle()).overlay(Circle().stroke(Palette.surface, lineWidth: 2))
                                 }.accessibilityLabel("\(pin.sightings.count) 条观察记录的照片位置")
                             }
                         }
@@ -370,7 +379,10 @@ struct SightingMap: View {
             Section("有坐标的记录 · \(Set(pts.map(\.2.id)).count)") {
                 ForEach(Array(Set(pts.map(\.2.id))).sorted().prefix(100), id: \.self) { id in
                     if let o = obs.first(where: { $0.id == id }), let i = model.ledger.evidence(o).first(where: { $0.lat != nil }) {
-                        Text("\(model.catalogue.name(o.species)) · \(o.day) · \(String(format: "%.3f, %.3f", i.lat!, i.lon!))").font(.caption).monospacedDigit()
+                        VStack(alignment: .leading, spacing: 8) {
+                            SpeciesName(key: o.species, size: .row)
+                            Text("\(o.day) · \(String(format: "%.3f, %.3f", i.lat!, i.lon!))").font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit()
+                        }.accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -380,10 +392,16 @@ struct SightingMap: View {
             }
             Section("地点未知") { LabeledContent("同日合并的记录", value: "\(none) 条").accessibilityIdentifier("map.noPlace") }
         }
+        .scrollContentBackground(.hidden).background(Palette.canvas)
         .navigationTitle("地图").navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: Binding(get: { picked != nil }, set: { if !$0 { picked = nil } })) {
             NavigationStack {
-                List(picked ?? []) { o in Text("\(model.catalogue.name(o.species)) · \(o.day) · 估计 \(o.estimate)") }
+                List(picked ?? []) { o in
+                    VStack(alignment: .leading, spacing: 8) {
+                        SpeciesName(key: o.species, size: .row)
+                        Text("\(o.day) · 估计 \(o.estimate)").font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit()
+                    }.accessibilityElement(children: .combine)
+                }
                     .navigationTitle("照片位置").toolbar { Button("完成") { picked = nil } }
             }.presentationDetents([.medium]).debugAppearance()
         }

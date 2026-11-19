@@ -8,7 +8,7 @@ final class EngineFlows: FlowCase {
         XCTAssertTrue(element("home.photos").appears(timeout:45))
         // Readiness includes the bundled engine, not merely existence of the disabled picker.
         until("picker enabled",45) {self.element("home.photos").isEnabled}
-        fixture();XCTAssertTrue(element("result.name").appears(timeout:45));XCTAssertEqual(element("result.name").label,name)
+        fixture();XCTAssertTrue(element("result.name").appears(timeout:45));XCTAssertEqual(shownName(),name)
         try shot(number==0 ? "real-inference-eagle":"real-inference-egret")
     }
     func testRealInferenceEagle() throws {try realInference(0,name:"白头海雕")}
@@ -23,7 +23,7 @@ final class EngineFlows: FlowCase {
         element("home.camera").tap()
         // An in-app capture claims no GPS: without a home place it asks for one, exactly like a picked photo.
         outcome("place.skip");element("place.skip").tap()
-        XCTAssertTrue(element("result.name").appears(timeout:45));XCTAssertEqual(element("result.name").label,"白头海雕");try shot("camera-fixture")
+        XCTAssertTrue(element("result.name").appears(timeout:45));XCTAssertEqual(shownName(),"白头海雕");try shot("camera-fixture")
     }
     /// 10,000 synthetic photos / 30,000 subjects: cold relaunch to a usable records grid, statistics and search (simulator timings).
     func testTenThousandColdStart() throws {

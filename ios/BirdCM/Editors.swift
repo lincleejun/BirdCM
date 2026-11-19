@@ -14,14 +14,10 @@ struct CorrectionSheet: View {
     func row(_ sp: Catalogue.Species) -> some View {
         Button { picked = sp } label: {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(sp.zh.isEmpty ? "\(sp.en) · 暂无中文名" : sp.zh).font(.body)
-                    if !sp.zh.isEmpty { Text(sp.en).font(.caption) }
-                    Text(sp.sci).font(.caption).italic().foregroundStyle(Palette.secondary)
-                }
+                SpeciesName(title: sp.name, alt: sp.alt, sci: sp.sci, size: .row)
                 Spacer()
-                if model.ledger.allTime[sp.sci] != nil { Text("已见").font(.caption.bold()).foregroundStyle(Palette.green) }
-                if picked == sp { Image(systemName: "checkmark").foregroundStyle(Palette.green) }
+                if model.ledger.allTime[sp.sci] != nil { Text("已见").font(.caption).foregroundStyle(Palette.secondary) }
+                if picked == sp { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(Palette.accent).accessibilityLabel("已选") }
             }.frame(minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("correction.row.\(sp.sci)")
     }
@@ -35,7 +31,7 @@ struct CorrectionSheet: View {
                 if let picked {
                     Section("确认更正") {
                         Text("\(effective.name) → \(picked.name)").font(.headline).accessibilityIdentifier("correction.review")
-                        Text(picked.sci).italic().foregroundStyle(Palette.secondary)
+                        SpeciesName(title: picked.name, alt: picked.alt, sci: picked.sci, size: .row)
                         Button("保存更正") { save("species", picked.sci) }.buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("correction.save")
                     }
                 }
@@ -44,7 +40,7 @@ struct CorrectionSheet: View {
                     if effective.state != "none" { Button("恢复自动识别", systemImage: "arrow.uturn.backward") { save("none", nil) }.accessibilityIdentifier("correction.reset").frame(minHeight: 44) }
                 } footer: { Text("更正只代表你的判断，不改变模型把握；恢复自动识别不会重新运行模型。") }
                 if query.isEmpty, let top = effective.model?.top5, !top.isEmpty {
-                    Section("模型前五") { ForEach(top.compactMap { model.catalogue.species($0.scientific) }) { row($0) } }
+                    Section("模型建议") { ForEach(top.compactMap { model.catalogue.species($0.scientific) }) { row($0) } }
                 }
                 Section(query.isEmpty ? "全部 \(model.catalogue.all.count) 种（按学名）" : "搜索结果 · \(results.count)") {
                     ForEach(results.prefix(limit)) { row($0) }

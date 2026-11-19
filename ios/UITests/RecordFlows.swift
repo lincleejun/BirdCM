@@ -51,16 +51,16 @@ final class RecordFlows: FlowCase {
     func testCorrectSpeciesCountAndReset() throws {
         launch();pick()
         reveal("result.correctSpecies").tap();outcome("correction.uncertain");try shot("correction-sheet")
-        element("correction.cancel").tap();XCTAssertEqual(element("result.name").label,"白头海雕")
+        element("correction.cancel").tap();XCTAssertEqual(shownName(),"白头海雕")
         reveal("result.correctSpecies").tap();search("Elegant Tern");outcome("correction.row.Thalasseus elegans")
         app.searchFields.firstMatch.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:12)+"Royal Tern")
         element("correction.row.Thalasseus maximus").tap()
         outcome("correction.review");try shot("correction-review");element("correction.save").tap()
-        outcome("result.corrected");XCTAssertNotEqual(element("result.name").label,"白头海雕");try shot("corrected")
+        outcome("result.corrected");XCTAssertNotEqual(shownName(),"白头海雕");try shot("corrected")
         reveal("result.correctSpecies").tap();element("correction.uncertain").tap()
-        until("name 不确定",5) {self.element("result.name").label=="不确定"}
+        until("name 不确定",5) {self.shownName()=="不确定"}
         reveal("result.correctSpecies").tap();element("correction.reset").tap()
-        until("name 白头海雕",5) {self.element("result.name").label=="白头海雕"}
+        until("name 白头海雕",5) {self.shownName()=="白头海雕"}
         reveal("result.count").tap();let field=element("count.field");field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"3");element("count.save").tap()
         label(element("result.count"),contains:"数量 3",5)
         reveal("result.exclude").tap();outcome("result.excluded");try shot("excluded");element("result.exclude").tap()

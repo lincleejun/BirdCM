@@ -6,6 +6,8 @@ final class LaunchFlows: XCTestCase {
     let app=XCUIApplication()
     var image:String {Bundle(for:LaunchFlows.self).resourceURL!.appendingPathComponent("Fixtures/photo-0.jpg").path}
     override func setUp(){continueAfterFailure=false}
+    /// The name block's first line (its label reads every name).
+    func shownName()->String {element("result.name").label.components(separatedBy:"，")[0]}
     func element(_ id:String)->XCUIElement {
         let matches=app.descendants(matching:.any).matching(identifier:id)
         return matches.allElementsBoundByIndex.first(where:{$0.isHittable}) ?? matches.firstMatch
@@ -51,7 +53,7 @@ final class LaunchFlows: XCTestCase {
             XCTAssertTrue(element("identifying.cancel").exists);shot("waiting-for-models"+mode)
             // Progressive: the found boxes and count appear before the names.
             wait("identifying.found",60);XCTAssertEqual(element("identifying.found").label,"找到 1 只鸟");shot("found-boxes"+mode)
-            wait("result.name",90);XCTAssertEqual(element("result.name").label,"白头海雕");shot("result-after-progress"+mode)
+            wait("result.name",90);XCTAssertEqual(shownName(),"白头海雕");shot("result-after-progress"+mode)
         }
         // Back while it waits stops the identification and saves nothing.
         launch(["-delayModelLoad","15","-cameraFixture","YES"]);wait("home.camera",10)
@@ -70,7 +72,7 @@ final class LaunchFlows: XCTestCase {
         element("home.camera").tap();wait("place.skip",5);element("place.skip").tap()
         wait("identifying.retry",30)   // the failure shows on the result page that opened for the photo
         shot("waiting-photo-load-failed");element("identifying.retry").tap()
-        wait("result.name",90);XCTAssertEqual(element("result.name").label,"白头海雕")
+        wait("result.name",90);XCTAssertEqual(shownName(),"白头海雕")
         launch(["-failModelLoad","1","-largestType","YES"]);wait("home.modelRetry",30);XCTAssertTrue(element("home.modelStatus").label.contains("失败"))
         shot("home-error-largest-type");element("home.modelRetry").tap();status("就绪",90);shot("home-ready-largest-type")
     }

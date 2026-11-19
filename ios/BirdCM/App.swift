@@ -13,7 +13,7 @@ import UniformTypeIdentifiers
         #endif
         Perf.mark("app.init")
     }
-    var body: some Scene { WindowGroup { RootView().environment(model).tint(Palette.green)
+    var body: some Scene { WindowGroup { RootView().environment(model).tint(Palette.accent)
         .onReceive(NotificationCenter.default.publisher(for:UIApplication.didReceiveMemoryWarningNotification)) { _ in
             if let engine=model.engine { Task.detached { engine.releaseBioCLIP() } }
         }
@@ -26,12 +26,71 @@ enum Palette {
             return UIColor(red:Double((h>>16)&255)/255,green:Double((h>>8)&255)/255,blue:Double(h&255)/255,alpha:1)
         })
     }
-    static func token(_ pair:(UInt32,UInt32)) -> Color {adaptive(pair.0,pair.1)}
-    static let paper=token(ThemeContrast.paper), surface=token(ThemeContrast.surface)
-    static let green=token(ThemeContrast.accent), ink=token(ThemeContrast.ink), rust=token(ThemeContrast.warning)
-    static let secondary=token(ThemeContrast.secondary), button=token(ThemeContrast.button)
-
-
+    static func token(_ pair:ThemeContrast.Pair) -> Color {adaptive(pair.0,pair.1)}
+    /// polish.md roles: canvas (page), surface (rows, cards), inset (low-emphasis containers), ink / secondary / tertiary
+    /// text, border (decorative), accent (primary action, selection, focus) with onAccent on it, newSpecies (新种 only).
+    static let canvas=token(ThemeContrast.canvas), surface=token(ThemeContrast.surface), inset=token(ThemeContrast.inset)
+    static let ink=token(ThemeContrast.ink), secondary=token(ThemeContrast.secondary), tertiary=token(ThemeContrast.tertiary)
+    static let border=token(ThemeContrast.border), accent=token(ThemeContrast.accent), accentPressed=token(ThemeContrast.accentPressed)
+    static let onAccent=token(ThemeContrast.onAccent), newSpecies=token(ThemeContrast.newSpecies)
+    static let mat=token(ThemeContrast.mat), onMat=token(ThemeContrast.onMat)
+    static let warning=token(ThemeContrast.warning.fg), error=token(ThemeContrast.error.fg)
+    static func fg(_ s:ThemeContrast.Semantic) -> Color {token(s.fg)}
+    static func bg(_ s:ThemeContrast.Semantic) -> Color {token(s.bg)}
+}
+/// The one species name block (docs/design/polish/polish.md; web: names.tsx SpeciesName): line 1 the name in the UI
+/// language (Chinese; English when there is none), line 2 in secondary gray "other common name · *Latin*", 2 pt apart,
+/// never a third line for the Latin. Hero and row keep line 2 on one line: the common name gives way first and goes,
+/// with its dot, when not even two of its characters fit; the Latin truncates only when it alone is too wide. A card
+/// (owner 2026-11-18) and accessibility sizes let line 2 wrap to two lines. Text never shrinks; VoiceOver reads all names.
+/// Metadata is not part of it: callers put it 8–12 pt below.
+struct SpeciesName: View {
+    enum Size { case hero, row, card }
+    let title: String, alt: String, sci: String
+    var size: Size
+    var uncertain=false
+    @ScaledMetric private var primary: CGFloat
+    @ScaledMetric private var secondary: CGFloat
+    @Environment(\.dynamicTypeSize) private var typeSize
+    init(title:String,alt:String="",sci:String="",size:Size,uncertain:Bool=false) {
+        self.title=title;self.alt=alt;self.sci=sci;self.size=size;self.uncertain=uncertain
+        switch size {
+        case .hero: _primary=ScaledMetric(wrappedValue:28,relativeTo:.title);_secondary=ScaledMetric(wrappedValue:15,relativeTo:.subheadline)
+        case .row: _primary=ScaledMetric(wrappedValue:18,relativeTo:.body);_secondary=ScaledMetric(wrappedValue:13,relativeTo:.footnote)
+        case .card: _primary=ScaledMetric(wrappedValue:17,relativeTo:.headline);_secondary=ScaledMetric(wrappedValue:13,relativeTo:.footnote)
+        }
+    }
+    /// A catalogue key; an unknown key shows as itself.
+    init(key:String,size:Size) {
+        let sp=Catalogue.shared.species(key)
+        self.init(title:sp?.name ?? key,alt:sp?.alt ?? "",sci:sp?.sci ?? "",size:size)
+    }
+    var label:String {[title,alt,sci].filter{!$0.isEmpty}.joined(separator:"，")}
+    var body: some View {
+        VStack(alignment:.leading,spacing:2) {
+            Text(title).font(.system(size:primary,weight:.semibold)).foregroundStyle(uncertain ? Palette.warning:Palette.ink).lineLimit(1)
+            if !alt.isEmpty || !sci.isEmpty {second.font(.system(size:secondary)).foregroundStyle(Palette.secondary)}
+        }
+        .accessibilityElement(children:.ignore).accessibilityLabel(label)
+    }
+    // ponytail: the italic's 2 pt allowance is trailing padding on the Latin, not a measured overhang.
+    var latin: Text {Text(sci).italic()}
+    @ViewBuilder var second: some View {
+        let wraps=size == .card || typeSize.isAccessibilitySize
+        if wraps || alt.isEmpty || sci.isEmpty {
+            (alt.isEmpty ? latin:sci.isEmpty ? Text(alt):Text(alt)+Text(" · ")+latin).lineLimit(wraps ? 2:1).fixedSize(horizontal:false,vertical:true).padding(.trailing,2)
+        } else {
+            ViewThatFits(in:.horizontal) {
+                (Text(alt)+Text(" · ")+latin).lineLimit(1).padding(.trailing,2)
+                // Two characters of the common name, an ellipsis, the dot and the whole Latin fit: the hidden proxy sets the
+                // ideal width, the real line fills the width it gets (the common name truncating first).
+                (Text(String(alt.prefix(2))+"…")+Text(" · ")+latin).lineLimit(1).padding(.trailing,2).hidden()
+                    .frame(maxWidth:.infinity,alignment:.leading)
+                    .overlay(alignment:.leading) {HStack(spacing:0) {Text(alt).lineLimit(1);Text(" · ").fixedSize();latin.lineLimit(1).fixedSize().padding(.trailing,2)}}
+                latin.lineLimit(1).padding(.trailing,2)
+            }
+        }
+    }
 }
 /// Names are read-time derivations from the bundled catalogue, never the cached label in an old result.
 func title(_ r: Identification) -> String {
@@ -532,7 +591,7 @@ struct RootView: View {
                 .safeAreaInset(edge:.top) {if let progress=model.migration {MigrationView(progress:progress)}}
             }
         }
-        .background(Palette.paper)
+        .background(Palette.canvas)
         .onChange(of:phase) {_,p in if p == .active && model.migration == nil {Task{await FolderBackup.shared.runIfDue(model.library)}}}
         .sheet(isPresented:$model.needsPlace) {
             NavigationStack {VStack(alignment:.leading,spacing:20) {
@@ -546,7 +605,7 @@ struct RootView: View {
         .foregroundStyle(Palette.ink)
         // The app accent on the root itself (selected tab, links, toggles), not only on the window: every host of RootView
         // (the app, previews, appearance snapshots) gets it; AppearanceSnapshots fails on system blue in the tab bar.
-        .tint(Palette.green)
+        .tint(Palette.accent)
         .debugAppearance()
     }
 }
@@ -598,7 +657,7 @@ struct IdentifyView: View {
     }
     var body: some View {
         List {
-            HStack(spacing:10) {Image("Mark").resizable().scaledToFit().frame(width:32,height:32).clipShape(RoundedRectangle(cornerRadius:8)).accessibilityHidden(true);Text("观羽 · 留住每一次相遇").font(.headline)}.foregroundStyle(Palette.green).listRowBackground(Color.clear)
+            HStack(spacing:10) {Image("Mark").resizable().scaledToFit().frame(width:32,height:32).clipShape(RoundedRectangle(cornerRadius:8)).accessibilityHidden(true);Text("观羽 · 留住每一次相遇").font(.headline)}.foregroundStyle(Palette.accent).listRowBackground(Color.clear)
             Section {
                 VStack(alignment:.leading,spacing:12) {
                     Button {place=true} label: {
@@ -628,7 +687,7 @@ struct IdentifyView: View {
                 }
             }
         }
-        .scrollContentBackground(.hidden).background(Palette.paper)
+        .scrollContentBackground(.hidden).background(Palette.canvas)
         .navigationTitle("观羽")
         .onAppear{Perf.mark("home.visible",once:true);DispatchQueue.main.async{Perf.mark("home.interactive",once:true)}}
         .safeAreaInset(edge:.bottom) {
@@ -642,7 +701,7 @@ struct IdentifyView: View {
                 // Owner 2026-11-18: 拍照 left, 从相册选择 (still the filled primary) right.
                 if typeSize.isAccessibilitySize {VStack(spacing:8) {camera;photos}} else {HStack(spacing:10) {camera;photos}}
                 ModelStatusLine()
-            }.padding(.horizontal).padding(.vertical,6).background(Palette.paper)
+            }.padding(.horizontal).padding(.vertical,6).background(Palette.canvas)
         }
         .sheet(isPresented:$place) {PlacePicker(onChoose:{p in model.chooseHome(p)}).debugAppearance()}
         .sheet(isPresented:$map) {MapPlacePicker(initial:model.homePlace){p in model.chooseHome(p)}}
@@ -686,20 +745,22 @@ struct PrimaryActionStyle: ButtonStyle {
     @Environment(\.colorSchemeContrast) var contrast
     var height:CGFloat=54
     func makeBody(configuration:Configuration) -> some View {
-        configuration.label.font(.headline).foregroundStyle(Color.white)
+        // polish.md: the one high-emphasis action; disabled uses its own ink/background, never opacity.
+        configuration.label.font(.headline).foregroundStyle(enabled ? Palette.onAccent:Palette.tertiary)
             .padding(.horizontal,16).frame(minHeight:height)
-            .background(enabled ? Palette.button:Color(white:0.35),in:RoundedRectangle(cornerRadius:16))
-            .overlay {if contrast == .increased {RoundedRectangle(cornerRadius:16).stroke(.white,lineWidth:2)}}
-            .overlay {if configuration.isPressed {RoundedRectangle(cornerRadius:16).fill(.black.opacity(0.18))}}
+            .background(enabled ? (configuration.isPressed ? Palette.accentPressed:Palette.accent):Palette.inset,in:RoundedRectangle(cornerRadius:10))
+            .overlay {if contrast == .increased {RoundedRectangle(cornerRadius:10).stroke(Palette.ink,lineWidth:2)}}
     }
 }
-/// The tinted partner of PrimaryActionStyle (same shape and height), for a second action in the same row.
+/// The supporting partner of PrimaryActionStyle (same shape and height): neutral surface, quiet border, ink text.
 struct SecondaryActionStyle: ButtonStyle {
     @Environment(\.isEnabled) var enabled
+    var height:CGFloat=50
     func makeBody(configuration:Configuration) -> some View {
-        configuration.label.font(.headline).foregroundStyle(enabled ? Palette.green:Palette.secondary)
-            .padding(.horizontal,16).frame(minHeight:50)
-            .background(Palette.green.opacity(configuration.isPressed ? 0.25:0.14),in:RoundedRectangle(cornerRadius:16))
+        configuration.label.font(.headline).foregroundStyle(enabled ? Palette.ink:Palette.tertiary)
+            .padding(.horizontal,16).frame(minHeight:height)
+            .background(configuration.isPressed ? Palette.inset:Palette.surface,in:RoundedRectangle(cornerRadius:10))
+            .overlay {RoundedRectangle(cornerRadius:10).stroke(Palette.border)}
     }
 }
 /// Quiet one-line model state on home: 准备中 / 就绪 / 出错 with 重试. Never an overlay, never disables anything.
@@ -708,7 +769,7 @@ struct ModelStatusLine: View {
     var body:some View {
         HStack(spacing:6) {
             if let e=model.modelError {
-                Image(systemName:"exclamationmark.triangle").foregroundStyle(Palette.rust)
+                Image(systemName:"exclamationmark.triangle").foregroundStyle(Palette.warning)
                 Text(e).lineLimit(2).accessibilityIdentifier("home.modelStatus")
                 Button("重试"){model.retry()}.font(.caption.bold()).frame(minHeight:44).accessibilityIdentifier("home.modelRetry")
             } else if model.modelReady || model.previewing {
@@ -743,7 +804,7 @@ struct IdentifyingPage: View {
                         .accessibilityLabel("正在识别的照片")
                 }
                 if failed {
-                    Label("模型没有加载成功",systemImage:"exclamationmark.triangle").font(.headline).foregroundStyle(Palette.rust)
+                    Label("模型没有加载成功",systemImage:"exclamationmark.triangle").font(.headline).foregroundStyle(Palette.warning)
                     Text(model.modelError ?? "").font(.footnote)
                     Text("照片还在这里，重试后会接着识别。").font(.footnote).foregroundStyle(Palette.secondary)
                     Button("重试"){model.retry()}.buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("identifying.retry")
@@ -776,11 +837,12 @@ struct HistoryRow: View {
         HStack(spacing:14) {
             CropThumbnail(url:model.url(item.id),id:item.id,boxes:item.boxes,crops:item.crops).frame(width:64,height:64).clipShape(RoundedRectangle(cornerRadius:16)).accessibilityHidden(true)
             VStack(alignment:.leading,spacing:6) {
-                Text(model.label(item)).font(.headline)
+                if let s=item.subjects.first,!s.excluded,let k=s.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.row)}
+                else {SpeciesName(title:model.label(item),size:.row)}
                 Text(item.dateSource=="photo" || item.dateSource=="user" ? item.wall.replacingOccurrences(of:"T",with:" "):item.day+" · 按识别日期").font(.caption).monospacedDigit()
                 Text(model.placeName(item) ?? String(localized:"没有地点")).font(.caption).foregroundStyle(Palette.secondary)
-                if item.missing {Text("原图不可用").font(.caption).foregroundStyle(Palette.rust)}
-                if item.subjects.contains(where:{$0.state != "none"}) {Text("已人工更正").font(.caption).foregroundStyle(Palette.green)}
+                if item.missing {Text("原图不可用").font(.caption).foregroundStyle(Palette.warning)}
+                if item.subjects.contains(where:{$0.state != "none"}) {Text("已人工更正").font(.caption).foregroundStyle(Palette.secondary)}
             }
             Spacer();Image(systemName:"chevron.right").font(.caption).foregroundStyle(Palette.secondary)
         }.fixedSize(horizontal:false,vertical:true).padding(.vertical,6).accessibilityElement(children:.combine)
@@ -794,7 +856,7 @@ struct MigrationView: View {
             Text("正在整理旧记录 \(Int(progress*100))%").font(.subheadline.bold())
             ProgressView(value:progress).accessibilityIdentifier("migration.progress")
             Text("可以继续浏览和识别；旧记录核对完成后显示，期间修改会等它完成。原图与旧文件都保留。").font(.caption).foregroundStyle(Palette.secondary)
-            if let e=model.libraryError {Text(e).font(.caption).foregroundStyle(Palette.rust);Button("重试"){Task{await model.migrate()}}.frame(minHeight:44)}
+            if let e=model.libraryError {Text(e).font(.caption).foregroundStyle(Palette.warning);Button("重试"){Task{await model.migrate()}}.frame(minHeight:44)}
         }.padding(.horizontal).padding(.vertical,8).background(Palette.surface).accessibilityElement(children:.contain).accessibilityIdentifier("migration")
     }
 }

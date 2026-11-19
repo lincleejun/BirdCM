@@ -42,7 +42,7 @@ struct RecordsView: View {
             default: speciesGrid
             }
         }
-        .background(Palette.paper)
+        .background(Palette.canvas)
         .navigationTitle("记录")
         .confirmationDialog("删除这张照片的记录？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button("删除", role: .destructive) { if let d = deleting { model.delete(d.id) } }.accessibilityIdentifier("history.confirmDelete")
@@ -134,20 +134,17 @@ struct SpeciesCard: View {
     let stat: SpeciesStat
     let wide: Bool
     var body: some View {
-        let sp = model.catalogue.species(stat.id)
+        // An open photo card (polish.md): photo, the card name block, then the counts 8 pt below; no box, no shadow.
         let thumb = Group {
-            if let c = stat.cover { CropThumbnail(url: model.url(c.item.id), id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal) } else { Rectangle().fill(Palette.paper) }
-        }.clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityHidden(true)
-        let text = VStack(alignment: .leading, spacing: 4) {
-            Text(model.catalogue.name(stat.id)).font(.headline).lineLimit(wide ? nil : 2)
-            if let sp, !sp.en.isEmpty, !sp.zh.isEmpty { Text(sp.en).font(.caption).foregroundStyle(Palette.secondary).lineLimit(wide ? nil : 1) }
-            Text("\(stat.observations) 次观察 · \(stat.photos.count) 张").font(.caption).monospacedDigit()
-            Text("首次 \(stat.first)").font(.caption).foregroundStyle(Palette.secondary).monospacedDigit()
-        }
-        Group {
-            if wide { VStack(alignment: .leading, spacing: 8) { thumb.frame(height: 160); text } }
-            else { VStack(alignment: .leading, spacing: 8) { thumb.frame(height: 120); text }.frame(maxWidth: .infinity, alignment: .leading) }
-        }.padding(10).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16)).accessibilityElement(children: .combine)
+            if let c = stat.cover { CropThumbnail(url: model.url(c.item.id), id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal) } else { Rectangle().fill(Palette.inset) }
+        }.clipShape(RoundedRectangle(cornerRadius: 12)).accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 8) {
+            thumb.frame(height: wide ? 160 : 140)
+            VStack(alignment: .leading, spacing: 8) {
+                SpeciesName(key: stat.id, size: .card)
+                Text("\(stat.observations) 次观察 · \(stat.photos.count) 张 · 首次 \(stat.first)").font(.footnote).foregroundStyle(Palette.tertiary).monospacedDigit()
+            }.padding(.horizontal, 2)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 8).contentShape(Rectangle()).accessibilityElement(children: .combine)
     }
 }
 
@@ -164,13 +161,9 @@ struct SpeciesPage: View {
                 if let c = stat?.cover {
                     CropThumbnail(url: model.url(c.item.id), id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal).frame(height: 240).clipShape(RoundedRectangle(cornerRadius: 16)).accessibilityLabel("最近一次的照片")
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(sp?.zh.isEmpty == false ? sp!.zh : (sp?.en ?? key)).font(.largeTitle.bold()).accessibilityIdentifier("species.name")
-                    if sp?.zh.isEmpty == true { Text("暂无中文名").font(.caption).foregroundStyle(Palette.secondary) }
-                    if let en = sp?.en, !en.isEmpty { Text(en).font(.title3) }
-                    Text(key).italic().foregroundStyle(Palette.secondary)
-                }
-                Text(stat == nil ? "未见" : "已见").font(.headline).padding(.horizontal, 10).padding(.vertical, 4).foregroundStyle(stat == nil ? Palette.ink : Color.white).background(stat == nil ? Palette.paper : Palette.button, in: Capsule()).accessibilityIdentifier("species.seen")
+                SpeciesName(key: key, size: .hero).accessibilityIdentifier("species.name").accessibilityAddTraits(.isHeader)
+                // A plain state in gray (polish.md): accent is for actions and selection only.
+                Text(stat == nil ? "我的观察 · 未见" : "我的观察 · 已见").font(.subheadline).foregroundStyle(Palette.secondary).accessibilityIdentifier("species.seen")
                 VStack(alignment: .leading, spacing: 8) {
                     if let sp { LabeledContent("科", value: sp.family); LabeledContent("属", value: sp.genus) }
                     if let code = model.iucn(key) { IUCNChip(code: code) }
@@ -209,7 +202,7 @@ struct SpeciesPage: View {
                 Text("链接会在浏览器中打开，需要网络。").font(.caption).foregroundStyle(Palette.secondary)
             }.padding(20)
         }
-        .background(Palette.paper)
+        .background(Palette.canvas)
         .navigationTitle(model.catalogue.name(key)).navigationBarTitleDisplayMode(.inline)
     }
     @ViewBuilder func months(_ sightings: [Sighting]) -> some View {
@@ -220,7 +213,7 @@ struct SpeciesPage: View {
                 ForEach(0..<12, id: \.self) { i in
                     VStack(spacing: 2) {
                         Text("\(counts[i])").font(.caption2).monospacedDigit()
-                        RoundedRectangle(cornerRadius: 3).fill(counts[i] == 0 ? Palette.surface : Palette.green.opacity(0.35 + 0.65 * Double(counts[i]) / Double(max(1, counts.max()!)))).frame(height: 18)
+                        RoundedRectangle(cornerRadius: 3).fill(counts[i] == 0 ? Palette.surface : Palette.accent.opacity(0.35 + 0.65 * Double(counts[i]) / Double(max(1, counts.max()!)))).frame(height: 18)
                             .overlay(RoundedRectangle(cornerRadius: 3).stroke(Palette.secondary.opacity(0.5)))
                         Text("\(i + 1)").font(.caption2)
                     }.frame(maxWidth: .infinity).accessibilityElement(children: .ignore).accessibilityLabel("\(i + 1) 月 \(counts[i]) 次")
