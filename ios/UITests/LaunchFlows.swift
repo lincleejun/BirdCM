@@ -16,7 +16,7 @@ final class LaunchFlows: XCTestCase {
     func wait(_ id:String,_ timeout:Double,file:StaticString=#filePath,line:UInt=#line) {XCTAssertTrue(element(id).appears(timeout:timeout),"missing \(id)",file:file,line:line)}
     /// Settings → 诊断 → CC0 fixture: the real receive path with the bundled engine.
     func pickFixture() {
-        element("home.more").tap();wait("settings.done",5);element("home.diagnostics").tap()
+        app.tabBars.buttons["设置"].firstMatch.tap();wait("home.diagnostics",5);element("home.diagnostics").tap()
         wait("sheet.done",5)
         for _ in 0..<6 where !(element("diagnostics.fixture").exists && element("diagnostics.fixture").isHittable) {app.swipeUp()}
         element("diagnostics.fixture").tap()
@@ -31,12 +31,12 @@ final class LaunchFlows: XCTestCase {
         let end=Date().addingTimeInterval(timeout)
         while !done() {if Date()>end {XCTFail("timed out",file:file,line:line);return};usleep(100_000)}
     }
-    /// While the models load, home, its place controls, picker, camera and all four tabs work; the state is one quiet line.
+    /// While the models load, home, its place controls, picker, camera and all five tabs work; the state is one quiet line.
     func testHomeUsableWhileModelsLoad() throws {
         launch(["-delayModelLoad","60"]);wait("home.photos",10)
         XCTAssertTrue(element("home.photos").isEnabled);XCTAssertTrue(element("home.camera").isEnabled);XCTAssertTrue(element("home.map").isEnabled)
         XCTAssertTrue(element("home.modelStatus").label.contains("正在准备"));XCTAssertFalse(element("identifying").exists);shot("home-preparing")
-        for (label,id) in [("记录","records.mode"),("统计","stats.period"),("探索","explore.mode")] {app.tabBars.buttons[label].firstMatch.tap();wait(id,10)}
+        for (label,id) in [("探索","explore.mode"),("记录","records.mode"),("统计","stats.period"),("设置","settings.backup")] {app.tabBars.buttons[label].firstMatch.tap();wait(id,10)}
         app.tabBars.buttons["识别"].firstMatch.tap();wait("home.photos",5)
         element("home.map").tap();XCTAssertTrue(app.navigationBars.firstMatch.appears(timeout:5))
     }
@@ -108,7 +108,7 @@ final class LaunchFlows: XCTestCase {
         step("statistics year") {element("stats.period").buttons["本年"].tap()}
         step("statistics all") {element("stats.period").buttons["全部"].firstMatch.tap()}
         step("statistics scroll") {for _ in 0..<3 {app.swipeUp()}}
-        step("settings") {element("home.more").tap()}
-        step("home") {element("settings.done").tap();app.tabBars.buttons["识别"].firstMatch.tap()}
+        step("settings") {app.tabBars.buttons["设置"].firstMatch.tap()}
+        step("home") {app.tabBars.buttons["识别"].firstMatch.tap()}
     }
 }
