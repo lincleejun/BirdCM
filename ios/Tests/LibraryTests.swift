@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import BirdCM
 
 /// docs/design-lifelist.md §10 with synthetic sightings only (invented dates/places; bytes are labels or CC0 fixtures).
@@ -262,6 +263,23 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual([bare.name, bare.alt], ["Aus cus", ""])
         XCTAssertEqual(SpeciesName(title: zh.name, alt: zh.alt, sci: zh.sci, size: .row).label, "白头海雕，Bald Eagle，Haliaeetus leucocephalus")
         XCTAssertEqual(SpeciesName(title: en.name, alt: en.alt, sci: en.sci, size: .card).label, "Some Bird，Aus bus")
+    }
+    /// Narrow widths: a hero / row block stays two lines (same height as when everything fits); PNGs go to SCREENSHOT_DIR
+    /// to check the order by eye (common name gives way, then goes with its dot; the Latin last).
+    @MainActor func testSpeciesNameNarrowWidths() throws {
+        let long = SpeciesName(title: "北美黑啄木鸟", alt: "Northern Red-shafted Flicker", sci: "Colaptes auratus cafer", size: .row)
+        var heights = [CGFloat]()
+        for (size, w) in [(SpeciesName.Size.row, 380.0), (.row, 240), (.row, 150), (.hero, 380), (.hero, 260)] {
+            let v = SpeciesName(title: long.title, alt: long.alt, sci: long.sci, size: size).frame(width: w, alignment: .leading).padding(4).background(Color.white)
+            let r = ImageRenderer(content: v); r.scale = 2
+            let image = try XCTUnwrap(r.uiImage)
+            if size == .row { heights.append(image.size.height) }
+            if let dir = ProcessInfo.processInfo.environment["SCREENSHOT_DIR"] {
+                try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+                try image.pngData()?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("species-name-\(size)-\(Int(w)).png"))
+            }
+        }
+        XCTAssertEqual(Set(heights).count, 1, "row block height changes with width: \(heights)")
     }
     func testPinyinFullAndInitials() async throws {
         let c = Catalogue.shared; await c.preparePinyin()
