@@ -6,6 +6,8 @@ A local, private assistant for bird photographers. Your photos never leave your 
 
 ![观羽 BirdCM](docs/promo/promo.gif)
 
+<sub>高清版：[promo.mp4](docs/promo/promo.mp4)</sub>
+
 ## 能做什么
 
 **Mac 版**（网页界面，在本机运行）：一次拍了上千张 RAW，帮你筛片。
