@@ -274,6 +274,7 @@ struct SightingList: View {
                     HStack(spacing: 12) {
                         if let item = model.ledger.evidence(o).first, let sub = item.subjects.first(where: { $0.key == o.species }) {
                             CropThumbnail(url: model.url(item.id), id: item.id, boxes: item.boxes, crops: item.crops, index: sub.ordinal).frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityHidden(true)
+                                .opensImageViewer(.photo(id: item.id, boxes: item.boxes, crops: item.crops, index: sub.ordinal))
                         }
                         // The reported bug: this list showed the Chinese name alone; it is the shared two-line block now.
                         VStack(alignment: .leading, spacing: 8) {
@@ -321,7 +322,7 @@ struct SightingSheet: View {
                     ForEach(photos) { item in
                         let sub = item.subjects.first { $0.key == o.species }?.ordinal ?? 0
                         Button { dismiss(); model.open(item.id, subject: sub) } label: {
-                            HStack { CropThumbnail(url: model.url(item.id), id: item.id, boxes: item.boxes, crops: item.crops, index: sub).frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 6)); Text(item.wall.replacingOccurrences(of: "T", with: " ")).font(.caption).monospacedDigit() }
+                            HStack { CropThumbnail(url: model.url(item.id), id: item.id, boxes: item.boxes, crops: item.crops, index: sub).frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 6)).opensImageViewer(.photo(id: item.id, boxes: item.boxes, crops: item.crops, index: sub), before: { dismiss() }); Text(item.wall.replacingOccurrences(of: "T", with: " ")).font(.caption).monospacedDigit() }
                         }
                     }
                 }

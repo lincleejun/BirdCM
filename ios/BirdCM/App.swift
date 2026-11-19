@@ -836,6 +836,7 @@ struct HistoryRow: View {
     var body: some View {
         HStack(spacing:14) {
             CropThumbnail(url:model.url(item.id),id:item.id,boxes:item.boxes,crops:item.crops).frame(width:64,height:64).clipShape(RoundedRectangle(cornerRadius:16)).accessibilityHidden(true)
+                .opensImageViewer(.photo(id:item.id,boxes:item.boxes,crops:item.crops,index:0))
             VStack(alignment:.leading,spacing:6) {
                 if let s=item.subjects.first,!s.excluded,let k=s.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.row)}
                 else {SpeciesName(title:model.label(item),size:.row)}

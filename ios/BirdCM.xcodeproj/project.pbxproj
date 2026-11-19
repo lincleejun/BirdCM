@@ -18,6 +18,7 @@
 		16B3D2B0A4085940E4C15BF2 /* EBird.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD30D915D433AD16AEB6EEA9 /* EBird.swift */; };
 		1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */; };
 		1C2F80AAEE04A12FA0F75EA5 /* EngineFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F3D99C88C09E23470F546F5 /* EngineFlows.swift */; };
+		1C5A6757D4BDBAE777963B3B /* ImageViewerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C974BB3639AA88AF94DF3C39 /* ImageViewerTests.swift */; };
 		219F6C9B1226AC94AA191468 /* Place.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33AB76EF2ADB0CA492710D4A /* Place.swift */; };
 		27AD93C33C40098D4DF1534F /* ReferenceFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246FA61DF41F5B697E11741E /* ReferenceFlows.swift */; };
 		2A828C1B4B1B72E430198DBA /* clear.json in Resources */ = {isa = PBXBuildFile; fileRef = F388947B5CEEA82620053E9B /* clear.json */; };
@@ -72,6 +73,7 @@
 		DFA265AE50E5E5E01307A894 /* species-map.json in Resources */ = {isa = PBXBuildFile; fileRef = C3D96B5035F9D3A73CE37F12 /* species-map.json */; };
 		E33CFCA7E69FC3E60DDA65A7 /* ThumbTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 573A9D726D94AD185C076DCB /* ThumbTests.swift */; };
 		E7657A47BD69A3AFD48CF814 /* DisplayCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */; };
+		EADF94E7D1BDA9B1921E37CA /* ImageViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97AE83BE44246FF79A3D6C64 /* ImageViewer.swift */; };
 		F87B6A3F0197E0A46960A68B /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931CDAA415795FBEA2C6BAEE /* AboutView.swift */; };
 		F94FC0B9917A5CB44B008CB7 /* regions.json in Resources */ = {isa = PBXBuildFile; fileRef = 141CE94CEBAFCE6C069382E5 /* regions.json */; };
 		FBF82BFCE2FCF643009D38CB /* Reference.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB4BF15BF0CC42FA7643F590 /* Reference.swift */; };
@@ -143,6 +145,7 @@
 		931CDAA415795FBEA2C6BAEE /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		9333FC17867E9236B15D2411 /* Models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Models; sourceTree = SOURCE_ROOT; };
 		96BEE7BE2762CFCA4D68AA03 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
+		97AE83BE44246FF79A3D6C64 /* ImageViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewer.swift; sourceTree = "<group>"; };
 		97D5AD120762085EE3D2E0C7 /* ReferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceTests.swift; sourceTree = "<group>"; };
 		9844DA70F8616A0E09609DED /* ebird-names.csv */ = {isa = PBXFileReference; path = "ebird-names.csv"; sourceTree = "<group>"; };
 		99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "CLEAR-WEIGHTS-LICENSE.md"; sourceTree = "<group>"; };
@@ -157,6 +160,7 @@
 		C064BA2F801B919462B1F37A /* Rarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rarity.swift; sourceTree = "<group>"; };
 		C3D96B5035F9D3A73CE37F12 /* species-map.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "species-map.json"; sourceTree = "<group>"; };
 		C8D7DD89DAFCEA3EDEE2505E /* Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library.swift; sourceTree = "<group>"; };
+		C974BB3639AA88AF94DF3C39 /* ImageViewerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewerTests.swift; sourceTree = "<group>"; };
 		CD30D915D433AD16AEB6EEA9 /* EBird.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EBird.swift; sourceTree = "<group>"; };
 		DB2F58A4B3E992DA5D3423A1 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Fixtures; path = Tests/Fixtures; sourceTree = SOURCE_ROOT; };
 		DB4BF15BF0CC42FA7643F590 /* Reference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reference.swift; sourceTree = "<group>"; };
@@ -249,6 +253,7 @@
 				A35FDC1FA465D1CC38C0F99E /* AppearanceSnapshots.swift */,
 				FA8BBDCADCB779125FA7BEEF /* DisplayCropTests.swift */,
 				F52A403EFA257B3C771DFF3C /* GeoTests.swift */,
+				C974BB3639AA88AF94DF3C39 /* ImageViewerTests.swift */,
 				C05B99E1AEF8F35E781BE1E6 /* LaunchTests.swift */,
 				7A1B835A1050E34974A411DD /* LibraryTests.swift */,
 				344DA05F98C2FC721F554253 /* LogicTests.swift */,
@@ -276,6 +281,7 @@
 				19B70D6E1935812D02FE9A6A /* Explore.swift */,
 				51DFFBE6B207DECEEA343EA0 /* Geo.swift */,
 				92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */,
+				97AE83BE44246FF79A3D6C64 /* ImageViewer.swift */,
 				E23C9CA7E9EBF3F47CC033A2 /* Ledger.swift */,
 				C8D7DD89DAFCEA3EDEE2505E /* Library.swift */,
 				0D8171929D21E7139FA08AF9 /* PhotoView.swift */,
@@ -511,6 +517,7 @@
 				C875DFDF27ADB1A66DECF4C6 /* Explore.swift in Sources */,
 				C16F865DA367A307655882DF /* Geo.swift in Sources */,
 				1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */,
+				EADF94E7D1BDA9B1921E37CA /* ImageViewer.swift in Sources */,
 				74B6224118FFCFA12AD9BCDF /* Ledger.swift in Sources */,
 				8A482CF3CFA462D4E4BD830A /* Library.swift in Sources */,
 				05F9F7DD0B7AFB16A33E9B03 /* PhotoView.swift in Sources */,
@@ -552,6 +559,7 @@
 				746E4711EB7C6090F62F5905 /* AppearanceSnapshots.swift in Sources */,
 				E7657A47BD69A3AFD48CF814 /* DisplayCropTests.swift in Sources */,
 				FFB9D837C6DFC404F0E5F73C /* GeoTests.swift in Sources */,
+				1C5A6757D4BDBAE777963B3B /* ImageViewerTests.swift in Sources */,
 				8AD7DBBE750D2E66338F5453 /* LaunchTests.swift in Sources */,
 				2E0EB25027086D0E70E11A7A /* LibraryTests.swift in Sources */,
 				448BEEC9B2253191DCEE8565 /* LogicTests.swift in Sources */,

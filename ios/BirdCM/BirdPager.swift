@@ -94,8 +94,11 @@ struct BirdPager:View {
     @State private var working=false
     @State private var saving=false
     @State private var saved=false
+    /// The full-screen image viewer: a tap on the hero, or on the strip thumbnail of the page already shown.
+    @State private var viewer:ImageViewerSource?
     @Environment(\.dynamicTypeSize) private var typeSize
     var count:Int {min(6,record.boxes.count)}
+    func full(_ i:Int) -> ImageViewerSource {.photo(id:record.id,boxes:record.boxes,crops:record.displayCrops,index:i<count ? i:nil,record:false)}
     var source:CropSource? {model.url(record.id).flatMap{CropSource($0)}}
     func window(_ s:CropSource,_ i:Int) -> [Double] {record.displayCrops?[safe:i] ?? s.crop(record.boxes[i]).normalized(in:s.size)}
     /// Saved/shared captions use the effective (corrected) name.
@@ -114,7 +117,7 @@ struct BirdPager:View {
                 ForEach(0..<count,id:\.self) {i in
                     Group {
                         if i==page,let image,let s=source {
-                            PhotoView(image:UIImage(cgImage:removeBackground ? lifted ?? image:image),record:CropCoordinates(window:window(s,i)).record(record,index:i),marks:marks,drawing:false,neutral:true,onSelect:{_ in},onDraw:{_ in})
+                            PhotoView(image:UIImage(cgImage:removeBackground ? lifted ?? image:image),record:CropCoordinates(window:window(s,i)).record(record,index:i),marks:marks,drawing:false,neutral:true,onSelect:{_ in},onDraw:{_ in},onTap:{viewer=full(i)})
                                 .aspectRatio(CGSize(width:image.width,height:image.height),contentMode:.fit)
                                 .clipShape(RoundedRectangle(cornerRadius:12)).accessibilityIdentifier("result.crop.\(i)")
                                 .overlay(alignment:.topLeading) {if s.crop(record.boxes[i]).tiny {Text("鸟很小").font(.caption.bold()).foregroundStyle(Palette.onMat).padding(.horizontal,8).padding(.vertical,3).background(Palette.mat,in:Capsule()).padding(8).accessibilityIdentifier("result.tiny")}}
@@ -122,7 +125,7 @@ struct BirdPager:View {
                     }.frame(maxWidth:.infinity,maxHeight:.infinity).padding(.horizontal,16).tag(i)
                 }
                 if let image=model.preview {
-                    PhotoView(image:image,record:record,marks:marks,drawing:drawing,onSelect:{i in if i<count {page=i}},onDraw:{box in drawing=false;let i=record.boxes.isEmpty ? 0:record.selected;Task{await model.analyze(index:i,box:box,manual:true,newBox:true,place:record.place);page=i}})
+                    PhotoView(image:image,record:record,marks:marks,drawing:drawing,onSelect:{i in if i<count {page=i}},onDraw:{box in drawing=false;let i=record.boxes.isEmpty ? 0:record.selected;Task{await model.analyze(index:i,box:box,manual:true,newBox:true,place:record.place);page=i}},onTap:{viewer=full(count)})
                         .aspectRatio(image.size,contentMode:.fit).clipShape(RoundedRectangle(cornerRadius:12)).accessibilityIdentifier("result.photo")
                         .frame(maxWidth:.infinity,maxHeight:.infinity).padding(.horizontal,16).tag(count)
                 }
@@ -146,18 +149,19 @@ struct BirdPager:View {
                 if !Task.isCancelled {image=decoded}
             }
             .task(id:removeBackground) {if removeBackground,mask==nil {await lift()}}
+            .fullScreenCover(item:$viewer) {ImageViewer(source:$0).tint(Palette.accent).debugAppearance()}
     }
     var strip:some View {
         ScrollView(.horizontal) {
             HStack(spacing:12) {ForEach(0...count,id:\.self) {i in
-                Button {page=i} label:{VStack(spacing:3) {
+                Button {if page==i {viewer=full(i)} else {page=i}} label:{VStack(spacing:3) {
                     // Selected: an accent outline and accent label, not a tinted block.
                     CropThumbnail(url:model.url(record.id),record:record,index:i,original:i==count)
                         .frame(width:48,height:38).clipShape(RoundedRectangle(cornerRadius:8))
                         .overlay {RoundedRectangle(cornerRadius:8).stroke(page==i ? Palette.accent:.clear,lineWidth:2)}
                     Text(i==count ? "原图":"鸟 \(i+1)").font(.caption.weight(page==i ? .semibold:.regular)).foregroundStyle(page==i ? Palette.accent:Palette.secondary)
                 }.padding(4)}
-                    .buttonStyle(.plain).accessibilityIdentifier(i==count ? "result.original":"result.subject.\(i)").accessibilityAddTraits(page==i ? .isSelected:[])
+                    .buttonStyle(.plain).accessibilityIdentifier(i==count ? "result.original":"result.subject.\(i)").accessibilityAddTraits(page==i ? .isSelected:[]).accessibilityHint(page==i ? "再点一次查看大图":"")
             }}
         }.scrollIndicators(.hidden).fixedSize(horizontal:false,vertical:true)
     }

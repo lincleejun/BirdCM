@@ -7,10 +7,15 @@ struct PhotoView: UIViewRepresentable {
     let marks: Bool
     let drawing: Bool
     var neutral=false
+    /// Opened zoomed onto this normalized window (once per record id); nil = the whole photo.
+    var focus:[Double]?=nil
     var onSelect: (Int)->Void
     var onDraw: ([Double])->Void
+    /// A single tap outside every box (not drawing): the result hero opens the image viewer with it.
+    var onTap:(()->Void)?=nil
     func makeUIView(context: Context) -> ZoomPhoto {ZoomPhoto()}
     func updateUIView(_ view: ZoomPhoto,context:Context) {
+        view.onTap=onTap;if view.id != record.id {view.focus=focus}
         view.update(image:image,record:record,marks:marks,drawing:drawing)
         view.backgroundColor=neutral ? .secondarySystemBackground:.black
         view.canvas.backgroundColor=view.backgroundColor
@@ -44,6 +49,8 @@ final class ZoomPhoto: UIScrollView,UIScrollViewDelegate,UIGestureRecognizerDele
     let canvas=PhotoCanvas()
     var select: ((Int)->Void)?
     var drawBox: (([Double])->Void)?
+    var onTap: (()->Void)?
+    var focus: [Double]?
     var drawing=false
     var start=CGPoint.zero
     var id: UUID?
@@ -61,20 +68,36 @@ final class ZoomPhoto: UIScrollView,UIScrollViewDelegate,UIGestureRecognizerDele
     }
     required init?(coder:NSCoder){fatalError()}
     func update(image:UIImage,record:Record,marks:Bool,drawing:Bool) {
-        if id != record.id {setZoomScale(1,animated:false);id=record.id}
+        if id != record.id {setZoomScale(1,animated:false);id=record.id;canvas.contentScaleFactor=traitCollection.displayScale}
         canvas.image=image;canvas.record=record;canvas.marks=marks;self.drawing=drawing;manual.isEnabled=drawing
         panGestureRecognizer.isEnabled = !drawing && zoomScale>1
         canvas.setNeedsDisplay();setNeedsLayout()
         canvas.accessibilityCustomActions=[UIAccessibilityCustomAction(name:"放大或还原照片",actionHandler:{[weak self] _ in guard let self else{return false};self.setZoomScale(self.zoomScale>1 ? 1:2,animated:true);return true})]
+            + (onTap == nil ? []:[UIAccessibilityCustomAction(name:"查看大图",actionHandler:{[weak self] _ in self?.onTap?();return true})])
     }
-    override func layoutSubviews(){super.layoutSubviews();if zoomScale==1{canvas.frame=bounds;contentSize=bounds.size}}
+    /// The canvas is the image aspect-fitted in the bounds and kept centred, so a full-screen viewer zooms the whole photo
+    /// (callers that already size the view to the image's aspect see no change).
+    override func layoutSubviews(){
+        super.layoutSubviews()
+        if zoomScale==1{canvas.frame=CGRect(origin:.zero,size:ImageViewer.fit(canvas.image?.size ?? bounds.size,in:bounds.size));contentSize=canvas.frame.size}
+        recenter()
+        if let f=focus,bounds.width>0,canvas.bounds.width>0 {focus=nil;zoom(to:ImageViewer.zoomRect(f,in:canvas.bounds.size),animated:false);sharpen()}
+    }
+    func recenter(){canvas.center=CGPoint(x:max(contentSize.width,bounds.width)/2,y:max(contentSize.height,bounds.height)/2)}
+    /// draw(_:) renders at the canvas's own size; when zoomed, render more pixels (never more than the image has).
+    func sharpen(){
+        let px=(canvas.image.map{$0.size.width*$0.scale} ?? 0)/max(1,canvas.bounds.width), screen=traitCollection.displayScale
+        let want=max(screen,min(zoomScale*screen,px))
+        if abs(canvas.contentScaleFactor-want)>0.01 {canvas.contentScaleFactor=want;canvas.setNeedsDisplay()}
+    }
     func viewForZooming(in scrollView:UIScrollView)->UIView?{canvas}
-    func scrollViewDidZoom(_ scrollView:UIScrollView){panGestureRecognizer.isEnabled = !drawing && zoomScale>1}
+    func scrollViewDidZoom(_ scrollView:UIScrollView){panGestureRecognizer.isEnabled = !drawing && zoomScale>1;recenter()}
+    func scrollViewDidEndZooming(_ scrollView:UIScrollView,with view:UIView?,atScale scale:CGFloat){sharpen()}
     @objc func zoom(_ g:UITapGestureRecognizer){guard !drawing else{return};setZoomScale(zoomScale>1 ? 1:2,animated:!UIAccessibility.isReduceMotionEnabled)}
     @objc func tap(_ g:UITapGestureRecognizer){
         guard !drawing,let r=canvas.record else{return}
         let p=g.location(in:canvas),x=p.x/canvas.bounds.width,y=p.y/canvas.bounds.height
-        if let i=r.boxes.indices.reversed().first(where:{let b=r.boxes[$0];return x>=b[0] && x<=b[2] && y>=b[1] && y<=b[3]}) {select?(i)}
+        if let i=r.boxes.indices.reversed().first(where:{let b=r.boxes[$0];return x>=b[0] && x<=b[2] && y>=b[1] && y<=b[3]}) {select?(i)} else {onTap?()}
     }
     @objc func drag(_ g:UIPanGestureRecognizer){
         let raw=g.location(in:canvas),p=CGPoint(x:min(max(0,raw.x),canvas.bounds.width),y:min(max(0,raw.y),canvas.bounds.height))
