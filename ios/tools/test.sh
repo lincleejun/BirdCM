@@ -10,13 +10,13 @@ cd "$(dirname "$0")/.."
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 mode=${1:-quick}
 case $mode in
-  quick) default_devices='BirdCM 18 Pro'; default_workers=4
+  quick) default_devices='BirdCM 18 Pro'; default_workers=3
     only=(-only-testing:BirdCMTests
       -only-testing:BirdCMUITests/ResultFlows/testResultNormal
       -only-testing:BirdCMUITests/ResultFlows/testResultSeveralBirds
       -only-testing:BirdCMUITests/PlaceFlows/testGPSHomeAndNoPlace
-      -only-testing:BirdCMUITests/RecordFlows/testHistorySearchSortDeleteClear
-      -only-testing:BirdCMUITests/LayoutFlows/testResultFooterAboveBars
+      -only-testing:BirdCMUITests/RecordFlows/testCorrectSpeciesCountAndReset
+      -only-testing:BirdCMUITests/LayoutFlows/testAlaskaRowAtLargestType
       -only-testing:BirdCMUITests/EngineFlows/testRealInferenceEagle) ;;
   full) default_devices='BirdCM 18 Pro;BirdCM 15'; default_workers=3; only=() ;;
   *) echo "usage: $0 quick|full" >&2; exit 2 ;;

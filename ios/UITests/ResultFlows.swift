@@ -61,7 +61,8 @@ final class ResultExtraFlows: FlowCase {
         let spring=XCUIApplication(bundleIdentifier:"com.apple.springboard")
         XCTAssertTrue(spring.alerts.firstMatch.appears(timeout:5))
         spring.alerts.firstMatch.buttons.element(boundBy:spring.alerts.firstMatch.buttons.count-1).tap()
-        label(element("result.save"),contains:"已保存")
+        // The first save on a fresh simulator clone starts the photo library service: slow under parallel load.
+        label(element("result.save"),contains:"已保存",30)
         element("result.share").tap();XCTAssertTrue(app.otherElements["ActivityListView"].appears(timeout:5) || app.buttons["Copy"].exists || app.buttons["拷贝"].exists || app.buttons["AirDrop"].exists);try shot("share")
     }
     func testBackgroundMaskFixtures() throws {

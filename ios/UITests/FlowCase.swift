@@ -64,6 +64,8 @@ class FlowCase: XCTestCase {
     }
     func shot(_ name:String) throws {
         dismissTypingTip()
+        // Pictures, not assertions: let photo crops (spinner while decoding) and 120 px thumbnails (no signal) arrive.
+        _=poll(3) {self.app.activityIndicators.count==0};usleep(300_000)
         let s=XCUIScreen.main.screenshot(),a=XCTAttachment(screenshot:s);a.name=name;a.lifetime = .keepAlways;add(a)
         if let folder=env["SCREENSHOT_DIR"] {
             let dir=URL(fileURLWithPath:folder);try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
