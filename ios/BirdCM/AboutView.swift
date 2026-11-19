@@ -71,6 +71,24 @@ struct DiagnosticsView: View {
                 Text("每 20 ms 采样 phys_footprint；可能漏掉瞬时峰值。已有历史里的指标来自识别当时。") .font(.caption)
             }
         }
+        Section {
+            NavigationLink("性能自测") { SelfTestView() }.accessibilityIdentifier("diagnostics.selfTest")
+            ForEach(Diagnostics.models, id: \.self) { m in ComputePicker(model: m) }
+        } header: { Text("计算单元") } footer: { Text("每个模型可单独选择；重新打开 App 后生效。先用“性能自测”比较各设置。模拟器始终只用 CPU。") }
         Section("真机验收") {Text("测冷/热启动、每图耗时、峰值内存、连续 50 张、断网、相册/定位权限与 HEIC，并在完整评测集上测准确率。启动参数 -computeUnits all / cpuAndGPU / cpuAndNeuralEngine / cpuOnly。")}
     }.navigationTitle("诊断") .toolbar{ToolbarItem(placement:.confirmationAction){Button("完成"){dismiss()}.accessibilityIdentifier("sheet.done")}}}}
+}
+
+/// 诊断: one model's compute units (Diagnostics.unitName), stored per model; the engine reads it when it loads the model.
+struct ComputePicker: View {
+    let model: String
+    @State private var value = ""
+    var body: some View {
+        Picker(SelfTestView.shortModels[model] ?? model, selection: $value) {
+            ForEach(Diagnostics.unitNames, id: \.self) { Text(SelfTestView.shortUnits[$0] ?? $0).tag($0) }
+        }
+        .onAppear { value = Diagnostics.unitName(model) }
+        .onChange(of: value) { _, v in if v != Diagnostics.unitName(model) { UserDefaults.standard.set(v, forKey: "computeUnits." + model) } }
+        .accessibilityIdentifier("diagnostics.units." + model)
+    }
 }

@@ -32,7 +32,7 @@ import Darwin
         let photo=Photo(data:try Data(contentsOf:fixtures.appendingPathComponent(c["path"] as! String)))!
         if i==4 {
             let w=Double(photo.frame.w),h=Double(photo.frame.h)
-            let crop=engine.crop(photo,[w*0.4,h*0.4,w*0.41,h*0.41])
+            let crop=Engine.crop(photo,[w*0.4,h*0.4,w*0.41,h*0.41])
             precondition(max(crop.source.w,crop.source.h)>2048)
             let ref=RGB.load(try Data(contentsOf:fixtures.appendingPathComponent("small-highres.png")))!
             let err=Double(zip(crop.image.px,ref.px).reduce(0){$0+abs(Int($1.0)-Int($1.1))})/Double(ref.px.count)
@@ -44,7 +44,7 @@ import Darwin
         guard let b=boxes.first else {throw NSError(domain:"CoreCheck",code:1,userInfo:[NSLocalizedDescriptionKey:"No detection for fixture \(i)"])}
         let want=c["box"] as! [Double]
         let overlap=iou(b,want);precondition(overlap>0.95,"IoU \(overlap)")
-        let mine=engine.crop(photo,want).image, theirs=RGB.load(try Data(contentsOf:fixtures.appendingPathComponent("\(i).png")))!
+        let mine=Engine.crop(photo,want).image, theirs=RGB.load(try Data(contentsOf:fixtures.appendingPathComponent("\(i).png")))!
         let mean=Double(zip(mine.px,theirs.px).reduce(0){$0+abs(Int($1.0)-Int($1.1))})/Double(mine.px.count);precondition(mean<1,"224 mean \(mean)")
         print("IoU \(overlap), input mean \(mean)")
         let result=try engine.identify(photo,box:want)

@@ -20,6 +20,11 @@ targets:
       - path: Models
         type: folder
         buildPhase: resources
+      # CC0 photos (Tests/Fixtures/photos.json) for 设置 → 诊断 → 性能自测.
+      - { path: Tests/Fixtures/photo-0.jpg, buildPhase: resources }
+      - { path: Tests/Fixtures/photo-1.jpg, buildPhase: resources }
+      - { path: Tests/Fixtures/photo-2.jpg, buildPhase: resources }
+      - { path: Tests/Fixtures/photo-3.jpg, buildPhase: resources }
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cc.outman.birdcm

@@ -10,32 +10,61 @@ struct RGB {
     var w: Int, h: Int
     var px: [UInt8]
 
-    static func decodingEdge(width:Int,height:Int,limit:Int?) -> Int {
-        guard let limit, Double(width)*Double(height)>24_000_000 else {return max(width,height)}
-        return min(max(width,height),limit)
-    }
-    /// The photo upright (EXIF orientation applied), values as stored: no colour management, like PIL.
-    static func load(_ data: Data, largePhotoLimit: Int? = nil) -> RGB? {
-        guard let src = CGImageSourceCreateWithData(data as CFData, nil),
-              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
-              let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int,
+    /// The photo upright (EXIF orientation applied), at most `edge` px on its long side, values as stored: no colour
+    /// management, like PIL. ImageIO decodes straight to that size (JPEG/HEIC at a reduced scale), never the whole original.
+    static func load(_ data: Data, edge: Int? = nil) -> RGB? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil), let size = uprightSize(src),
               let img = CGImageSourceCreateThumbnailAtIndex(src, 0, [
                   kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-                  kCGImageSourceThumbnailMaxPixelSize: decodingEdge(width:w,height:h,limit:largePhotoLimit)] as CFDictionary)
+                  kCGImageSourceThumbnailMaxPixelSize: min(edge ?? Int.max, max(size.w, size.h))] as CFDictionary)
         else { return nil }
+        return draw(img, CGRect(x: 0, y: 0, width: img.width, height: img.height), orientation: 1)
+    }
+    /// Upright pixels `region` of the original at full resolution (clamped to the photo). Only that region is decoded:
+    /// the lazy ImageIO image is cropped in stored pixels before drawing, as `CropSource.image(window:)` does for display.
+    static func load(_ data: Data, region: CGRect) -> RGB? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil), let size = uprightSize(src),
+              let raw = CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCache: false, kCGImageSourceShouldCacheImmediately: false] as CFDictionary)
+        else { return nil }
+        let r = region.integral.intersection(CGRect(x: 0, y: 0, width: size.w, height: size.h))
+        guard !r.isEmpty else { return nil }
+        return draw(raw, r, orientation: size.orientation)
+    }
+    /// Upright width and height of the original, and its EXIF orientation.
+    static func uprightSize(_ src: CGImageSource) -> (w: Int, h: Int, orientation: Int)? {
+        guard let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = p[kCGImagePropertyPixelWidth] as? Int, let h = p[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        let o = p[kCGImagePropertyOrientation] as? Int ?? 1
+        return o >= 5 ? (h, w, o) : (w, h, o)
+    }
+    /// `r` (upright pixels) of `img` (stored pixels, EXIF `orientation`), drawn 1:1 in the image's own RGB space.
+    private static func draw(_ img: CGImage, _ r: CGRect, orientation: Int) -> RGB? {
+        let t = uprightTransform(orientation, size: CGSize(width: img.width, height: img.height))
+        guard let part = img.cropping(to: r.applying(t.inverted()).integral) else { return nil }
+        let w = Int(r.width), h = Int(r.height)
         let space = img.colorSpace?.model == .rgb ? img.colorSpace! : CGColorSpace(name: CGColorSpace.sRGB)!
-        var rgba = [UInt8](repeating: 0, count: img.width * img.height * 4)
-        guard let ctx = CGContext(data: &rgba, width: img.width, height: img.height, bitsPerComponent: 8, bytesPerRow: img.width * 4,
-                                  space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
-        ctx.draw(img, in: CGRect(x: 0, y: 0, width: img.width, height: img.height))
-        var px = [UInt8](repeating: 0, count: img.width * img.height * 3)
-        for i in 0..<(img.width * img.height) {
+        var rgba = [UInt8](repeating: 0, count: w * h * 4)
+        let drawn: Bool = rgba.withUnsafeMutableBytes { buf in
+            guard let ctx = CGContext(data: buf.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+            ctx.interpolationQuality = .none
+            // Top-left upright coordinates, then the EXIF transform of the cropped part (as CropSource.image(window:)).
+            ctx.translateBy(x: 0, y: CGFloat(h)); ctx.scaleBy(x: 1, y: -1)
+            ctx.concatenate(uprightTransform(orientation, size: CGSize(width: part.width, height: part.height)))
+            ctx.translateBy(x: 0, y: CGFloat(part.height)); ctx.scaleBy(x: 1, y: -1)
+            ctx.draw(part, in: CGRect(x: 0, y: 0, width: part.width, height: part.height))
+            return true
+        }
+        guard drawn else { return nil }
+        var px = [UInt8](repeating: 0, count: w * h * 3)
+        for i in 0..<(w * h) {
             px[i * 3] = rgba[i * 4]; px[i * 3 + 1] = rgba[i * 4 + 1]; px[i * 3 + 2] = rgba[i * 4 + 2]
         }
-        return RGB(w: img.width, h: img.height, px: px)
+        return RGB(w: w, h: h, px: px)
     }
 
-    /// gardener decode.fit: long edge to `edge` (Lanczos), never enlarged.
+    /// gardener decode.fit: long edge to `edge` (Lanczos), never enlarged. The app decodes the frame with ImageIO instead
+    /// (`load(_:edge:)`); this PIL port stays as the reference PerformanceTests measures that drift against.
     func fit(_ edge: Int) -> RGB {
         let s = Double(edge) / Double(max(w, h))
         if s >= 1 { return self }

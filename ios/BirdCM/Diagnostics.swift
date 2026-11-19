@@ -1,3 +1,4 @@
+import CoreML
 import Foundation
 import Darwin
 
@@ -7,11 +8,36 @@ struct DiagnosticRun: Codable {
     var compute: String = Diagnostics.compute
 }
 enum Diagnostics {
+    static let models = ["Detector", "BioCLIP", "Heads"]
+    static let unitNames = ["all", "cpuAndNeuralEngine", "cpuAndGPU", "cpuOnly"]
+    /// Per-model default until the 性能自测 on a real phone says otherwise (the simulator is CPU-only and decides nothing).
+    static let defaultUnits = ["Detector": "all", "BioCLIP": "all", "Heads": "all"]
+    /// 诊断 picker (UserDefaults "computeUnits.<model>"), else the launch argument -computeUnits, else the default.
+    static func unitName(_ model: String) -> String {
+        UserDefaults.standard.string(forKey: "computeUnits." + model) ?? UserDefaults.standard.string(forKey: "computeUnits") ?? defaultUnits[model] ?? "all"
+    }
+    static func units(_ name: String) -> MLComputeUnits {
+        switch name {
+        case "cpuOnly": .cpuOnly
+        case "cpuAndGPU": .cpuAndGPU
+        case "cpuAndNeuralEngine": .cpuAndNeuralEngine
+        default: .all
+        }
+    }
+    static func configuration(_ model: String) -> MLModelConfiguration {
+        let cfg = MLModelConfiguration()
+        #if targetEnvironment(simulator)
+        cfg.computeUnits = .cpuOnly
+        #else
+        cfg.computeUnits = units(unitName(model))
+        #endif
+        return cfg
+    }
     static var compute: String {
         #if targetEnvironment(simulator)
         return "cpuOnly（模拟器）"
         #else
-        return UserDefaults.standard.string(forKey:"computeUnits") ?? "all"
+        return models.map { $0 + " " + unitName($0) }.joined(separator: " · ")
         #endif
     }
     static func footprint() -> UInt64 {

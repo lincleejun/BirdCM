@@ -4,18 +4,17 @@ import Foundation
 import UniformTypeIdentifiers
 import ImageIO
 
-/// One photo, decoded the way gardener's decode does: `frame` has a long edge <= 2048 (boxes live in its pixels),
-/// Small boxes decode the original again only when needed, matching desktop pipeline.SMALL_BOX.
+/// One photo, decoded the way gardener's decode does: `frame` has a long edge <= 2048 (boxes live in its pixels).
+/// Only `frame` is held in memory; a small box decodes just its region of the original (desktop pipeline.SMALL_BOX).
 struct Photo {
     let frame: RGB
     let data: Data
-
+    let size: (w: Int, h: Int)      // the original, upright
     init?(data: Data) {
         guard let source=CGImageSourceCreateWithData(data as CFData,nil),
               let kind=CGImageSourceGetType(source), let type=UTType(kind as String), !type.conforms(to:.rawImage),
-              let full = RGB.load(data,largePhotoLimit:4096) else { return nil }
-        frame = full.fit(2048)
-        self.data=data
+              let size=RGB.uprightSize(source), let frame=RGB.load(data,edge:2048) else { return nil }
+        self.frame=frame; self.data=data; self.size=(size.w,size.h)
     }
 }
 
@@ -50,7 +49,6 @@ final class Engine: @unchecked Sendable {
     /// One prediction at a time, so the background warm-up never runs alongside a real identification.
     private let inference=NSLock()
     private let modelDir: URL
-    private let configuration: MLModelConfiguration
     private var bioclip: MLModel?
     private var loadedHeads: MLModel??, loadedGeo: Geo??, loadedRarity: Rarity??    // .some(nil): file not installed
     /// Memory warning: drop the 600 MB tower; the next identification reloads it off the main actor.
@@ -60,7 +58,7 @@ final class Engine: @unchecked Sendable {
         modelLock.lock(); defer{modelLock.unlock()}
         if let bioclip {return bioclip}
         let started=Date()
-        let model=try MLModel(contentsOf:Self.compiled(modelDir,"BioCLIP"),configuration:configuration)
+        let model=try MLModel(contentsOf:Self.compiled(modelDir,"BioCLIP"),configuration:Diagnostics.configuration("BioCLIP"))
         Perf.mark("load.bioclip",Date().timeIntervalSince(started))
         bioclip=model; return model
     }
@@ -74,7 +72,7 @@ final class Engine: @unchecked Sendable {
         self[keyPath:slot] = .some(value); return value
     }
     func headsModel() throws -> MLModel? {
-        try once(\.loadedHeads,"heads",modelDir.appendingPathComponent("Heads.mlmodelc")) { try MLModel(contentsOf:Self.compiled(modelDir,"Heads"),configuration:configuration) }
+        try once(\.loadedHeads,"heads",modelDir.appendingPathComponent("Heads.mlmodelc")) { try MLModel(contentsOf:Self.compiled(modelDir,"Heads"),configuration:Diagnostics.configuration("Heads")) }
     }
     func geoModel() throws -> Geo? { try once(\.loadedGeo,"geo",Models.geoURL) { try Geo(weights:Models.geoURL,scientific:rows.map{$0[0]}) } }
     func rarityTable() throws -> Rarity? { try once(\.loadedRarity,"rarity",Models.rarityURL) { try Rarity(path:Models.rarityURL) } }
@@ -87,17 +85,7 @@ final class Engine: @unchecked Sendable {
 
     /// Names and the detector only (enough to start finding birds); `prepare()` loads the rest in the order identification needs it.
     init(dir: URL) throws {
-        let cfg = MLModelConfiguration()
-        switch Diagnostics.compute {
-        case "cpuOnly": cfg.computeUnits = .cpuOnly
-        case "cpuAndGPU": cfg.computeUnits = .cpuAndGPU
-        case "cpuAndNeuralEngine": cfg.computeUnits = .cpuAndNeuralEngine
-        default: cfg.computeUnits = .all
-        }
-        #if targetEnvironment(simulator)
-        cfg.computeUnits = .cpuOnly
-        #endif
-        modelDir=dir; configuration=cfg
+        modelDir=dir
         var tick=Date()
         func lap(_ n:String) { Perf.mark("load."+n,Date().timeIntervalSince(tick)); tick=Date() }
         let raw = try Data(contentsOf: dir.appendingPathComponent("names.f16"))
@@ -108,7 +96,7 @@ final class Engine: @unchecked Sendable {
         guard names.count == rows.count * 1024, rows.count == 11172, rows.allSatisfy({$0.count >= 5}) else { throw CocoaError(.fileReadCorruptFile) }
         rows = rows.map { r in var row = r; row[2] = zh[row[0]] ?? ""; return row }
         lap("names")
-        detector = try MLModel(contentsOf: try Self.compiled(dir, "Detector"), configuration: cfg); lap("detector")
+        detector = try MLModel(contentsOf: try Self.compiled(dir, "Detector"), configuration: Diagnostics.configuration("Detector")); lap("detector")
     }
     /// BioCLIP, then heads, then the place model and rarity table; call off the main actor right after `init`.
     func prepare() throws {
@@ -179,70 +167,86 @@ final class Engine: @unchecked Sendable {
     /// What BioCLIP sees for one box (gardener species_crops + open_clip's framing), and where that crop sits.
     static func needsHighResolution(_ box:[Double]) -> Bool {max(box[2]-box[0],box[3]-box[1]) < 128}
 
-    func crop(_ photo: Photo, _ box: [Double]) -> (image: RGB, origin: (Double, Double), size: (Double, Double), source: RGB) {
-        var src = photo.frame, b = box, minSide = 320.0
-        if Self.needsHighResolution(box), let d=RGB.load(photo.data), max(d.w,d.h)>max(src.w,src.h) {
-            let sx = Double(d.w) / Double(src.w), sy = Double(d.h) / Double(src.h)
-            b = [box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy]
-            minSide = 320
-            src = d
+    static func crop(_ photo: Photo, _ box: [Double]) -> (image: RGB, origin: (Double, Double), size: (Double, Double), source: (w: Int, h: Int)) {
+        let f = photo.frame
+        if Self.needsHighResolution(box), max(photo.size.w, photo.size.h) > max(f.w, f.h) {
+            let (w, h) = photo.size, sx = Double(w) / Double(f.w), sy = Double(h) / Double(f.h)
+            let (x0, y0, x1, y1) = cropWithContext(w, h, [box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy], minSide: 320)
+            let left = max(0, x0), top = max(0, y0)
+            if let part = RGB.load(photo.data, region: CGRect(x: left, y: top, width: min(w, x1) - left, height: min(h, y1) - top)) {
+                let image = part.paddedCrop(x0 - left, y0 - top, x1 - left, y1 - top).frame224()
+                return (image, (Double(x0), Double(y0)), (Double(x1 - x0), Double(y1 - y0)), photo.size)
+            }
         }
-        let (x0, y0, x1, y1) = cropWithContext(src.w, src.h, b, minSide: minSide)
-        return (src.paddedCrop(x0, y0, x1, y1).frame224(), (Double(x0), Double(y0)), (Double(x1 - x0), Double(y1 - y0)), src)
+        let (x0, y0, x1, y1) = cropWithContext(f.w, f.h, box, minSide: 320)
+        return (f.paddedCrop(x0, y0, x1, y1).frame224(), (Double(x0), Double(y0)), (Double(x1 - x0), Double(y1 - y0)), (f.w, f.h))
     }
 
     func identify(_ photo: Photo, box: [Double], place: Place? = nil, shooting: Shooting? = nil, manual: Bool = false) throws -> Identification {
+        try identify(photo, boxes: [box], place: place, shooting: shooting, manual: manual)[0]
+    }
+
+    /// Several birds of one photo with one BioCLIP and one heads call (Core ML batch). The models take one image each
+    /// (fixed batch 1), so Core ML still runs them one after another; the batch saves the per-call overhead only.
+    func identify(_ photo: Photo, boxes: [[Double]], place: Place? = nil, shooting: Shooting? = nil, manual: Bool = false) throws -> [Identification] {
         let memory = MemorySample(), started = Date()
         defer { _ = memory.stop() }
         var diag = DiagnosticRun()
         var tick = Date()
-        let c = crop(photo, box)
-        let species = try speciesModel(), input = try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: c.image.pixelBuffer())])
-        let out = try inference.withLock { try species.prediction(from: input) }
+        let crops = boxes.map { Self.crop(photo, $0) }
+        let inputs: [MLFeatureProvider] = try crops.map { try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: $0.image.pixelBuffer())]) }
+        diag.stages["裁剪与缩放"] = Date().timeIntervalSince(tick); tick = Date()
+        let species = try speciesModel()
+        let outs = try inference.withLock { try species.predictions(fromBatch: MLArrayBatchProvider(array: inputs)) }
         diag.stages["BioCLIP"] = Date().timeIntervalSince(tick); tick = Date()
-        let e = floats(out.featureValue(for: "embedding")!.multiArrayValue!)
-        modelLock.lock(); embedding = e; modelLock.unlock()
-        var logits = [Float](repeating: 0, count: rows.count)
-        vDSP_mmul(names, 1, e, 1, &logits, 1, vDSP_Length(rows.count), 1, 1024)
-        let m = logits.max()!
-        var p = logits.map { exp(Self.logitScale * ($0 - m)) }
-        let sum = p.reduce(0, +)
-        p = p.map { $0 / sum }
-        let visual = p.map(Double.init)
-        diag.stages["名录"] = Date().timeIntervalSince(tick); tick = Date()
         let spread = try place.map { p -> GeoSpread in
             guard let geo = try geoModel() else { throw NSError(domain:"BirdCM",code:1,userInfo:[NSLocalizedDescriptionKey:"安装包缺少地点模型，请重新安装完整 App。"] ) }
             return try geo.spread(p,date:shooting?.takenAt)
         }
         diag.stages["地点先验"] = Date().timeIntervalSince(tick); tick = Date()
-        var id = Confirm.decide(p:Confirm.posterior(visual,spread?.wide), rows:rows, wide:spread?.wide,typical:spread?.typical)
-        let h = clearWeights
-        let z = e.indices.reduce(h["bias"]![0]) { $0 + ((Double(e[$1])-h["mean"]![$1])/h["std"]![$1])*h["weight"]![$1] }
-        id.clear = z >= h["z_min"]![0] && Double(m) >= h["cos_min"]![0]
-        if !manual && id.clear == false { id.reason = "鸟的特征不够清楚，请核对候选或手动画框。" }
-        id.visual=visual
-        if id.level == "species" { id.rarity = try rarityTable()?.lookup(id.top5[0].scientific,place:place,month:shooting?.month) ?? RarityValue(label:"数据不足",iucn:nil) }
-        if let heads = try headsModel() {
-            let input = try MLDictionaryFeatureProvider(dictionary: ["tokens15": out.featureValue(for: "tokens15")!])
-            let h = try inference.withLock { try heads.prediction(from: input) }
-            let pts = Self.points(h)
-            id.visibility = pts.visible
-            id.flying = Double(floats(h.featureValue(for: "flying")!.multiArrayValue!)[0])
-            // 224 frame -> crop -> source image -> 0..1 (the same for frame and detail: one is a scaled copy of the other)
-            let rw = c.size.0 <= c.size.1 ? 224 : Double(Int(224 * c.size.0 / c.size.1)), rh = c.size.0 <= c.size.1 ? Double(Int(224 * c.size.1 / c.size.0)) : 224
-            let left = ((rw - 224) / 2).rounded(.toNearestOrEven), top = ((rh - 224) / 2).rounded(.toNearestOrEven)
-            let place = { (q: [Double]) -> [Double] in
-                [((q[0] + left) * c.size.0 / rw + c.origin.0) / Double(c.source.w), ((q[1] + top) * c.size.1 / rh + c.origin.1) / Double(c.source.h)]
+        let tokens: [MLFeatureProvider] = try (0..<outs.count).map { try MLDictionaryFeatureProvider(dictionary: ["tokens15": outs.features(at: $0).featureValue(for: "tokens15")!]) }
+        let heads = try headsModel().map { model in try inference.withLock { try model.predictions(fromBatch: MLArrayBatchProvider(array: tokens)) } }
+        let rarity = try rarityTable()
+        var ids = [Identification]()
+        for (i, c) in crops.enumerated() {
+            let e = floats(outs.features(at: i).featureValue(for: "embedding")!.multiArrayValue!)
+            if i == 0 { modelLock.lock(); embedding = e; modelLock.unlock() }
+            var logits = [Float](repeating: 0, count: rows.count)
+            vDSP_mmul(names, 1, e, 1, &logits, 1, vDSP_Length(rows.count), 1, 1024)
+            let m = logits.max()!
+            var p = logits.map { exp(Self.logitScale * ($0 - m)) }
+            let sum = p.reduce(0, +)
+            p = p.map { $0 / sum }
+            let visual = p.map(Double.init)
+            var id = Confirm.decide(p:Confirm.posterior(visual,spread?.wide), rows:rows, wide:spread?.wide,typical:spread?.typical)
+            let h = clearWeights
+            let z = e.indices.reduce(h["bias"]![0]) { $0 + ((Double(e[$1])-h["mean"]![$1])/h["std"]![$1])*h["weight"]![$1] }
+            id.clear = z >= h["z_min"]![0] && Double(m) >= h["cos_min"]![0]
+            if !manual && id.clear == false { id.reason = "鸟的特征不够清楚，请核对候选或手动画框。" }
+            id.visual=visual
+            if id.level == "species" { id.rarity = rarity?.lookup(id.top5[0].scientific,place:place,month:shooting?.month) ?? RarityValue(label:"数据不足",iucn:nil) }
+            if let heads {
+                let h = heads.features(at: i)
+                let pts = Self.points(h)
+                id.visibility = pts.visible
+                id.flying = Double(floats(h.featureValue(for: "flying")!.multiArrayValue!)[0])
+                // 224 frame -> crop -> source image -> 0..1 (the same for frame and detail: one is a scaled copy of the other)
+                let rw = c.size.0 <= c.size.1 ? 224 : Double(Int(224 * c.size.0 / c.size.1)), rh = c.size.0 <= c.size.1 ? Double(Int(224 * c.size.1 / c.size.0)) : 224
+                let left = ((rw - 224) / 2).rounded(.toNearestOrEven), top = ((rh - 224) / 2).rounded(.toNearestOrEven)
+                let place = { (q: [Double]) -> [Double] in
+                    [((q[0] + left) * c.size.0 / rw + c.origin.0) / Double(c.source.w), ((q[1] + top) * c.size.1 / rh + c.origin.1) / Double(c.source.h)]
+                }
+                if pts.visible[0] >= 0.5 { id.beak = place(pts.xy[0]) }
+                let eye = pts.visible[1] >= pts.visible[2] ? 1 : 2      // the more confident eye (parts.py score())
+                if pts.visible[eye] >= 0.5 { id.eye = place(pts.xy[eye]) }
             }
-            if pts.visible[0] >= 0.5 { id.beak = place(pts.xy[0]) }
-            let eye = pts.visible[1] >= pts.visible[2] ? 1 : 2      // the more confident eye (parts.py score())
-            if pts.visible[eye] >= 0.5 { id.eye = place(pts.xy[eye]) }
+            if id.clear == false { id.flying = nil; id.eye = nil; id.beak = nil; id.visibility = nil }
+            ids.append(id)
         }
-        if id.clear == false { id.flying = nil; id.eye = nil; id.beak = nil; id.visibility = nil }
-        diag.stages["小头与查表"] = Date().timeIntervalSince(tick)
+        diag.stages["名录、小头与查表"] = Date().timeIntervalSince(tick)
         diag.stages["当前主体总计"] = Date().timeIntervalSince(started)
-        diag.peakBytes = memory.stop(); id.diagnostics = diag
-        return id
+        diag.peakBytes = memory.stop()
+        return ids.map { var id = $0; id.diagnostics = diag; return id }
     }
 
     /// Beak / left eye / right eye in the 224 px frame and their visible probabilities.

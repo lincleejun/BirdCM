@@ -24,12 +24,21 @@ final class PipelineTests: XCTestCase {
             let photo = try XCTUnwrap(Photo(data: Data(contentsOf: URL(fileURLWithPath: path))))
             let size = c["size"] as! [Int]
             XCTAssertEqual([photo.frame.w, photo.frame.h], size, name)
+            if name == "photo-4.png" {
+                // A tiny bird in the 3000 x 4000 original: only its region is decoded, at full resolution, as the desktop does.
+                let w = Double(photo.frame.w), h = Double(photo.frame.h), small = Engine.crop(photo, [w * 0.4, h * 0.4, w * 0.41, h * 0.41])
+                XCTAssertEqual([small.source.w, small.source.h], [3000, 4000])
+                let ref = try XCTUnwrap(RGB.load(Data(contentsOf: expDir.appendingPathComponent("small-highres.png"))))
+                let d = zip(small.image.px, ref.px).map { abs(Int($0) - Int($1)) }
+                print("small-highres: 224 px input mean |diff| \(Double(d.reduce(0, +)) / Double(d.count)), max \(d.max()!), exact \(d.filter { $0 == 0 }.count)/\(d.count)")
+                XCTAssertLessThan(Double(d.reduce(0, +)) / Double(d.count), 1.0)
+            }
             let box = try XCTUnwrap(engine.detect(photo).first, name)
             let want = c["box"] as! [Double]
             XCTAssertGreaterThan(iou(box, want), 0.95, "\(name) box \(box) vs \(want)")
 
             // the 224 px input, pixel by pixel
-            let mine = engine.crop(photo, want).image
+            let mine = Engine.crop(photo, want).image
             let theirs = try XCTUnwrap(RGB.load(Data(contentsOf: expDir.appendingPathComponent("\(i).png"))))
             let diffs = zip(mine.px, theirs.px).map { abs(Int($0) - Int($1)) }
             let mean = Double(diffs.reduce(0, +)) / Double(diffs.count)

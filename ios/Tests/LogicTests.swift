@@ -137,10 +137,27 @@ final class LogicTests: XCTestCase {
         XCTAssertEqual(shooting.fields["光圈"],"f/6.3")
         XCTAssertEqual([photo.frame.w,photo.frame.h],[20,40])
     }
-    func testHugePhotoDecodeBudget() {
-        XCTAssertEqual(RGB.decodingEdge(width:8064,height:6048,limit:4096),4096)
-        XCTAssertEqual(RGB.decodingEdge(width:4000,height:3000,limit:4096),4000)
-        XCTAssertEqual(RGB.decodingEdge(width:8064,height:6048,limit:nil),8064)
+    /// A small bird decodes only its region of the original: the same pixels as the whole upright photo cropped, for all
+    /// eight EXIF orientations (lossless TIFF, so the decoder cannot differ), clamped at the edges.
+    func testRegionDecodeEqualsUprightCrop() throws {
+        var px=[UInt8](repeating:0,count:40*30*3)
+        for i in px.indices {px[i]=UInt8((i*37+i/3*11)%251)}
+        let stored=RGB(w:40,h:30,px:px)
+        for orientation in 1...8 {
+            let data=NSMutableData()
+            let dest=try XCTUnwrap(CGImageDestinationCreateWithData(data,UTType.tiff.identifier as CFString,1,nil))
+            CGImageDestinationAddImage(dest,stored.cgImage(),[kCGImagePropertyOrientation:orientation] as CFDictionary)
+            XCTAssertTrue(CGImageDestinationFinalize(dest))
+            let whole=try XCTUnwrap(RGB.load(data as Data))
+            XCTAssertEqual([whole.w,whole.h],orientation>=5 ? [30,40]:[40,30])
+            for r in [CGRect(x:3,y:5,width:11,height:7),CGRect(x:0,y:0,width:whole.w,height:whole.h),CGRect(x:whole.w-4,y:whole.h-6,width:9,height:9)] {
+                let part=try XCTUnwrap(RGB.load(data as Data,region:r),"orientation \(orientation)")
+                let c=r.intersection(CGRect(x:0,y:0,width:whole.w,height:whole.h))
+                let want=whole.cropped(Int(c.minX),Int(c.minY),Int(c.maxX),Int(c.maxY))
+                XCTAssertEqual([part.w,part.h],[want.w,want.h]);XCTAssertEqual(part.px,want.px,"orientation \(orientation) \(r)")
+            }
+            XCTAssertEqual(try XCTUnwrap(RGB.load(data as Data,edge:20)).w,orientation>=5 ? 15:20)
+        }
     }
     func testGlobalRegionAtMatchesPythonAndCoverage() throws {
         struct Point:Decodable {let lat:Double;let lon:Double;let division:String?;let country:String?}

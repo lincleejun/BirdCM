@@ -34,7 +34,8 @@ covers() {
     BirdCM/Explore.swift) print -l U/LargestTypeMoreFlows U/LayoutFlows T/AppearanceSnapshots T/Step4Snapshots ;;
     BirdCM/Settings.swift|BirdCM/AboutView.swift|BirdCM/Diagnostics.swift) print -l U/RecordFlows U/LargestTypeMoreFlows T/AppearanceSnapshots T/Step4Snapshots ;;
     BirdCM/Library.swift|BirdCM/Store.swift) print -l U/RecordFlows T/LibraryTests T/CrossPlatformTests T/LogicTests T/LaunchTests ;;
-    BirdCM/Engine.swift|BirdCM/Pixels.swift) print -l U/EngineFlows U/LaunchFlows T/PipelineTests T/LaunchTests T/LogicTests ;;
+    BirdCM/Engine.swift|BirdCM/Pixels.swift) print -l U/EngineFlows U/LaunchFlows T/PipelineTests T/PerformanceTests T/LaunchTests T/LogicTests ;;
+    BirdCM/SelfTest.swift) print -l T/PerformanceTests U/RecordFlows ;;
     BirdCM/Rarity.swift) print -l U/ResultFlows U/ResultExtraFlows T/LogicTests T/Step4Snapshots ;;
     BirdCM/Preview.swift) print -l U/ResultFlows U/ResultExtraFlows T/AppearanceSnapshots T/Step4Snapshots ;;
     BirdCM/App.swift) print -l QUICK U/LaunchFlows T/LaunchTests ;;

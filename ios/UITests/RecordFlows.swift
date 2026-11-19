@@ -63,7 +63,11 @@ final class RecordFlows: FlowCase {
         launch();tab("tab.settings","设置");element("home.about").tap();try shot("about")
         reveal("about.licences").tap();try shot("licences");element("resource.back").tap()
         XCTAssertTrue(element("sheet.done").appears(timeout:5));element("sheet.done").tap()
-        XCTAssertTrue(element("home.diagnostics").appears(timeout:5));element("home.diagnostics").tap();try shot("diagnostics");element("sheet.done").tap()
+        XCTAssertTrue(element("home.diagnostics").appears(timeout:5));element("home.diagnostics").tap();try shot("diagnostics")
+        // 性能自测 (the simulator runs the CPU setting only) fills its table from the bundled CC0 photos.
+        reveal("diagnostics.selfTest").tap();element("selfTest.start").tap()
+        XCTAssertTrue(element("selfTest.table").appears(timeout:120));try shot("diagnostics-self-test")
+        app.navigationBars.buttons.firstMatch.tap();element("sheet.done").tap()
     }
     /// history.sort is a menu: 最近查看 (default) / 拍摄日期 / 鸟种名称.
     func sortPhotos(_ label:String) {element("history.sort").tap();let b=app.buttons[label].firstMatch;XCTAssertTrue(b.waitForExistence(timeout:5));b.tap()}
