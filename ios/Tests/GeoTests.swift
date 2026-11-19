@@ -32,9 +32,10 @@ final class GeoTests: XCTestCase {
         XCTAssertEqual(Geo.seasonMap(v,grid:[[40,0],[-40,0]],season:.year),[1,1])
     }
     func testExploreInclusion() {
-        XCTAssertEqual(Likelihood.inclusion(typical:0.5,tier:nil),.main)
-        XCTAssertEqual(Likelihood.inclusion(typical:0.6,tier:0),.main)
-        XCTAssertEqual(Likelihood.inclusion(typical:0.001,tier:3),.main)     // reported often enough (不常见)
+        XCTAssertEqual(Likelihood.inclusion(typical:0.5,tier:nil),.main)     // no GBIF coverage: the model alone
+        XCTAssertEqual(Likelihood.inclusion(typical:0.6,tier:3),.main)       // likely and reported often enough
+        XCTAssertEqual(Likelihood.inclusion(typical:0.6,tier:0),.rare)       // the model says yes, GBIF has nothing
+        XCTAssertEqual(Likelihood.inclusion(typical:0.001,tier:4),.rare)     // common state-wide, not here
         XCTAssertEqual(Likelihood.inclusion(typical:0.2,tier:2),.rare)       // 少见 with a middling model value
         XCTAssertEqual(Likelihood.inclusion(typical:0.04,tier:nil),.rare)    // low model value
         XCTAssertEqual(Likelihood.inclusion(typical:nil,tier:1),.rare)       // a single vagrant record

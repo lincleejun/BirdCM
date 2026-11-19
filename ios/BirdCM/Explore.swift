@@ -18,16 +18,16 @@ struct LikelyResult { var rows: [Likely]; var geo: Bool; var gbif: Bool; var cov
 
 enum Likelihood {
     static let tierNames = ["无记录", "罕见", "少见", "不常见", "常见"]
-    /// Main list: this month's model value at the place at least this… (owner, 2026-11-19: Confirm.tau 0.05 listed 462
-    /// species in San Francisco in November; 0.5 with 不常见 and up gives about 285, near what is really seen there)
+    /// Main list: this month's model value at the place at least typicalFloor AND, where GBIF covers the region-month,
+    /// a tier of 不常见 and up (owner, 2026-11-19, Cupertino in November: either-or listed 287–462 species because the
+    /// tier is state-wide and the model is generous; both together list 196). No GBIF coverage: the model alone. The
+    /// rest with a model value ≥ rareFloor or any GBIF record (罕见, single vagrants included) goes to 罕见 / 偶见.
     static let typicalFloor = 0.5
     static let mainTier = 3
-    /// …or a GBIF tier of 不常见 and up. Below that, a model value ≥ rareFloor or any GBIF record (罕见,
-    /// single vagrants included) goes to the collapsed 罕见 / 偶见 section; nothing else is listed.
     static let rareFloor = 0.01
     enum Inclusion: Equatable { case main, rare }
     static func inclusion(typical: Double?, tier: Int?) -> Inclusion? {
-        if (typical ?? 0) >= typicalFloor || (tier ?? 0) >= mainTier { return .main }
+        if (typical ?? 0) >= typicalFloor && (tier.map { $0 >= mainTier } ?? true) { return .main }
         if (typical ?? 0) >= rareFloor || (tier ?? 0) >= 1 { return .rare }
         return nil
     }
