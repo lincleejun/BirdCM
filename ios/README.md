@@ -38,26 +38,74 @@ xcodebuild -project ios/BirdCM.xcodeproj -scheme BirdCM -configuration Release \
 
 `-disable-sandbox` 是本次受限宿主运行 Swift 宏所需参数，不加入 Swift 常设编译选项；正常 reviewer 机器可省略。工程中的脚本沙盒设置用于构建期拷贝/裁剪 SQLite，与该编译器参数不同。
 
-指定的 iOS 27.0 模拟器上完整跑 unit + UI，并输出每台设备独立截图：
+### 测试：只测增量（`changed`），`quick` 与 `full`
+
+日常只跑改动涉及的测试，不要每次全量：
 
 ```sh
-for device in 'BirdCM 18 Pro' 'BirdCM 15'; do
-  slug=$(printf '%s' "$device" | tr ' ' '-')
-  shots="$PWD/ios/screenshots/round4-$slug"
-  mkdir -p "$shots"
-  TEST_RUNNER_SCREENSHOT_DIR="$shots" \
-  xcodebuild -project ios/BirdCM.xcodeproj -scheme BirdCM -configuration Debug \
-    -destination "platform=iOS Simulator,name=$device,OS=27.0" \
-    -derivedDataPath ios/DerivedData -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
-    -resultBundlePath "ios/build/round4-$slug.xcresult" \
-    OTHER_SWIFT_FLAGS='$(inherited) -disable-sandbox' \
-    -only-testing:BirdCMTests -only-testing:BirdCMUITests test
- done
+ios/tools/test.sh           # = changed：只跑覆盖改动文件的测试类，一台模拟器（默认 'BirdCM 18 Pro'）
+ios/tools/test.sh quick     # 单元测试 + 外观快照 + 冒烟 UI 流程
+ios/tools/test.sh full      # 全部测试，'BirdCM 18 Pro' 与 'BirdCM 15' 同时跑（发版或大改前）
 ```
 
-再次执行需换 resultBundlePath（Xcode 不覆盖现有 xcresult）。测试会生成来源明确的 UI 夹具截图，以及 `testRealInferenceEagle` / `testRealInferenceEgret` 的真实推理截图；这两项没有 `-modelDir`，会加载 App 内模型。每个普通等待最多 10 秒，真实模型加载/识别各最多 45 秒，失败立即结束当前测试。多状态与真实推理拆成独立测试，便于直接定位失败。
+`changed` 默认比较未提交的改动（工作区干净时比较上一个提交），`BASE=impl` 等可指定基准；`DRY_RUN=1` 只打印选中的测试。
+映射写在 `tools/test.sh` 的 `covers()` 里：改了某个测试文件就跑该文件里的测试类；改了 App 源文件就跑覆盖它的类，例如
+`Stats.swift` / `Ledger.swift` / `EBird.swift` → `LargestTypeFlows`、`LargestTypeMoreFlows`、`LayoutFlows`、`Step4Snapshots`、
+`AppearanceSnapshots`、`LibraryTests`、`CrossPlatformTests`；`ResultView.swift` 等结果页文件 → `ResultFlows`、`ResultExtraFlows`、
+`RecordFlows`、`LayoutFlows`、`AppearanceSnapshots`、`LogicTests`。`App.swift`、`FlowCase.swift`、资源、模型、工程文件和表里没有的
+App 文件退回 quick 冒烟集（App.swift 另加启动测试）；只改文档或脚本时不跑测试。新增 App 文件或测试类时顺手补一行映射。
 
-如果只需要逻辑测试可用 `-only-testing:BirdCMTests`，只截图用 `-only-testing:BirdCMUITests`。真实模型测试默认使用 App 内资源；可选 `TEST_RUNNER_MODELDIR` / `TEST_RUNNER_GEOMODEL` 覆盖。UI fixtures 是 Debug-only，入口在“设置（齿轮）→ 诊断”，不是首页；多鸟夹具使用 photo-1 的两只鹈鹕，历史过滤测试用 `-historyFixtureCount 8` 一次播种八条。`locationFixture=allowed|denied` 用于确定性测试；另有真正系统权限弹窗流程。普通 pick helper 只等待最终结果，不等待短暂的识别中状态；加载截图使用固定 loading 状态。
+两者都先 `build-for-testing` 一次（增量构建几秒），再对每台模拟器 `test-without-building`，用
+`-parallel-testing-enabled YES -parallel-testing-worker-count N` 让 Xcode 自动克隆模拟器、按测试类分发。
+环境变量：`DEVICES='名称;名称'` 换模拟器，`WORKERS` 每台模拟器的克隆数（默认见下表），`SKIP_BUILD=1` 跳过构建，
+`DERIVED_DATA` 换构建目录，`SLOWEST=n` 另列最慢的 n 个测试和每个测试类的秒数（`tools/xcresult_summary.py` 读结果包）。截图在 `ios/screenshots/<quick|full>-<模拟器>/`（每次运行前清空），
+结果包与日志在 `ios/build/<模式>-<模拟器>-<时间>.{xcresult,log}`。等价的手动命令：
+
+```sh
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+xcodebuild -project ios/BirdCM.xcodeproj -scheme BirdCM -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/DerivedData CODE_SIGNING_ALLOWED=NO build-for-testing
+TEST_RUNNER_SCREENSHOT_DIR="$PWD/ios/screenshots/full-BirdCM-15" \
+xcodebuild test-without-building -xctestrun ios/DerivedData/Build/Products/*.xctestrun \
+  -destination 'platform=iOS Simulator,name=BirdCM 15' \
+  -parallel-testing-enabled YES -parallel-testing-worker-count 3 \
+  -resultBundlePath ios/build/full-BirdCM-15.xcresult   # 加 -only-testing:BirdCMUITests/ResultFlows 等只跑一部分
+```
+
+本机（M4 Max，16 核）实测见下表；不要再让两台模拟器各自串行跑，也不要超过表中的克隆数，CPU 争用会让每个流程都变慢。
+
+| 运行（墙钟时间，同一台机器） | 之前 | 现在 |
+|---|---|---|
+| 全部测试，一台模拟器（BirdCM 18 Pro B）串行 | 2049 s（34 分钟；UI 2017 s，单元 21 s） | — |
+| `quick`：构建 + 单元 + 外观快照 + 6 个冒烟流程，3 / 4 个克隆 | 没有对应命令 | 143 s / 151 s |
+| `changed`：只跑改动涉及的类 | — | 取决于改动；最多与 quick + 相关类相当 |
+| `full`：两台模拟器同时，每台 2 / 3 / 4 个克隆 | 审阅者实测两台同时各约 26–30 分钟 | 809 s / **617–709 s（三次，约 11 分钟）** / 693 s |
+
+`full` 每台 3 个克隆最快（默认）；4 个克隆时 8 台模拟器争 CPU，整体更慢，还出现过一次测试运行器启动被系统拒绝。
+`quick` 3 个与 4 个克隆几乎相同，默认 3 个。
+
+**分类**（UI 流程原来都在一个 `Flows` 类里，现按区域拆分；并行按测试类分发，所以长测试各占一类）：
+`ResultFlows`（结果页各夹具状态）、`ResultExtraFlows`（GBIF / 范围提示、去背景、保存分享、手动画框）、`PlaceFlows`（地点）、
+`RecordFlows`（记录、更正、备份、关于）、`LargestTypeFlows` + `LargestTypeMoreFlows`（最大字号下把原外观矩阵的每个页面真实走一遍：
+第 4 步统计 / 日历 / 地图 / 观察记录，eBird / 这里这个月 / 文件夹备份，以及各标签页、物种页、更正与地点弹窗、设置）、
+`LayoutFlows`（底栏不遮挡内容）、`EngineFlows`（真实推理、相机注入、一万张、主屏图标）、`LaunchFlows`。
+外观矩阵的浅色 / 深色 / 深色 + 最大字号由单元测试 `AppearanceSnapshots`、`Step4Snapshots` 在测试宿主里直接渲染同一批预览夹具
+（不重启 App，约 80 秒）；只有私有状态才能打开的弹窗和二级页单独渲染（背后没有标签栏）。
+
+**截图文件名不变**：仍是 `-[Flows <测试方法>]-<名称>.png`，例如 `-[Flows testDarkLargestAndLoading]-result-light.png`
+（快照）与 `-[Flows testDarkLargestAndLoading]-result--largestTypeYES.png`（真实 App，最大字号）。
+
+去掉的重复：`testResultNormalCandidatesCollapsed`（断言并入 `testResultNormal`）、`testResultUncertain` 的第二次启动；
+外观矩阵在浅色 / 深色下的真实 App 遍历（同样的导航与操作在最大字号下仍完整跑一遍）；文件夹备份“出错 / 关闭”两次启动
+改由快照测试用同一个 `backupFolderFixture` 跑真实备份逻辑并截图。
+
+UI 测试模式（`-uiTesting YES`，仅 Debug）关闭 UIKit / SwiftUI 动画；等待一律 0.1 秒轮询（`appears(timeout:)`、`until`），
+不用每秒才检查一次的 `waitForExistence` / 谓词 expectation，也不靠等超时来证明某物不存在。并行时 PERF 行受其他克隆影响，
+要可比的数字请单独跑 `-only-testing:BirdCMUITests/LaunchFlows -parallel-testing-enabled NO`。
+
+再次执行需换 resultBundlePath（Xcode 不覆盖现有 xcresult；脚本按时间命名）。测试会生成来源明确的 UI 夹具截图，以及 `testRealInferenceEagle` / `testRealInferenceEgret` 的真实推理截图；这两项没有 `-modelDir`，会加载 App 内模型。每个普通等待最多 10 秒，真实模型加载/识别各最多 45 秒，失败立即结束当前测试。多状态与真实推理拆成独立测试，便于直接定位失败。
+
+如果只需要逻辑测试可用 `-only-testing:BirdCMTests`，只截图用 `-only-testing:BirdCMUITests`。真实模型测试默认使用 App 内资源；可选 `TEST_RUNNER_MODELDIR` / `TEST_RUNNER_GEOMODEL` 覆盖。UI fixtures 是 Debug-only，入口在“设置（齿轮）→ 诊断”，不是首页；多鸟夹具使用 photo-1 的两只鹈鹕，历史过滤测试用 `-historyFixtureCount 8` 一次播种八条。`locationFixture=allowed|denied` 用于确定性测试；另有真正系统权限弹窗流程。普通 pick helper 只等待最终结果，不等待短暂的识别中状态；加载截图 `loading-preview` 由快照测试按固定 loading 状态渲染。
 
 Mac 共享逻辑与脚本检查（不能替代 iOS 测试）：
 
