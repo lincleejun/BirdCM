@@ -3,6 +3,31 @@ import XCTest
 /// 记录 and settings: photo search/sort/delete/clear, correction and count, pending, migration, backup, about.
 final class RecordFlows: FlowCase {
     func openPhotos() {back();tab("tab.records","记录");segment("照片");outcome("history.sort")}
+    var firstRow:XCUIElement {app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'")).firstMatch}
+    /// The species card shown first (top row, leftmost): grid elements keep their creation order in the query, not the screen's.
+    var firstSpecies:String {
+        app.descendants(matching:.any).matching(NSPredicate(format:"identifier BEGINSWITH 'records.species.'")).allElementsBoundByIndex
+            .filter{$0.exists && $0.frame.height>0}.min{a,b in abs(a.frame.minY-b.frame.minY)<40 ? a.frame.minX<b.frame.minX:a.frame.minY<b.frame.minY}?.identifier ?? ""   // cards in one row differ in height
+    }
+    /// Owner 2026-11-18 (我最近识别了某只鸟，它就要排到第一位): the photo identified last is first in 照片 and 最近记录 and its
+    /// species first in 鸟种; opening an older photo or correcting it does the same — all without relaunching.
+    func testJustIdentifiedComesFirst() throws {
+        launch("normal");pick();back()                                  // A: Bald Eagle
+        launch("multiple",reset:false);pick();back()                    // B: Brown Pelican, identified later
+        until("B first in 最近记录") {self.firstRow.label.contains("褐鹈鹕")};try shot("first-home-after-B")
+        tab("tab.records","记录");segment("鸟种")
+        until("B's species first") {self.firstSpecies == "records.species.Pelecanus occidentalis"};try shot("first-species-after-B")
+        segment("照片");until("B first in 照片") {self.firstRow.label.contains("褐鹈鹕")}
+        app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.' AND label CONTAINS '白头海雕'")).firstMatch.tap();outcome();back()
+        until("opened A first in 照片") {self.firstRow.label.contains("白头海雕")};try shot("first-photo-after-opening-A")
+        segment("鸟种");until("A's species first") {self.firstSpecies == "records.species.Haliaeetus leucocephalus"}
+        // A correction counts as identifying now: B corrected to Elegant Tern puts the tern first.
+        segment("照片");app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.' AND label CONTAINS '褐鹈鹕'")).firstMatch.tap();outcome()
+        reveal("result.correctSpecies").tap();search("Elegant Tern");outcome("correction.row.Thalasseus elegans")
+        element("correction.row.Thalasseus elegans").tap();outcome("correction.review");element("correction.save").tap();outcome("result.corrected");back()
+        segment("鸟种");until("the corrected photo's species lead (tern and the second pelican tie: same photo)") {["records.species.Thalasseus elegans","records.species.Pelecanus occidentalis"].contains(self.firstSpecies)};XCTAssertTrue(element("records.species.Thalasseus elegans").exists);try shot("first-species-after-correction")
+        tab("tab.identify","识别");until("corrected photo first in 最近记录") {!self.firstRow.label.contains("白头海雕")}
+    }
     /// history.sort is reachable at 0, 1, 7 and 8 records and while filtered, under 记录, and actually reorders.
     func testHistorySearchSortDeleteClear() throws {
         launch();tab("tab.records","记录");segment("照片");outcome("history.search");outcome("history.sort");try shot("photos-empty")

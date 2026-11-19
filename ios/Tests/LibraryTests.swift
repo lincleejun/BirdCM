@@ -60,6 +60,23 @@ final class LibraryTests: XCTestCase {
         let archive = dir.appendingPathComponent("x.birdcm"); try lib.export(to: archive)
         XCTAssertTrue(try SQL(archive.path, readOnly: true).rows("SELECT 1 FROM sqlite_master WHERE name='ll_place_name'").isEmpty, "not exported")
     }
+    /// 鸟种 default 最近识别: the species whose photo was identified (or corrected / opened) last comes first, even when
+    /// that photo was taken long ago; 最近见到 still orders by capture date.
+    @MainActor func testSpeciesRecentlyIdentifiedOrder() throws {
+        let lib = try Library(dir: tmp()), A = "Sterna hirundo", B = "Ardea alba"
+        func add(_ sci: String, _ wall: String, _ identified: String, _ n: Int) throws -> UUID {
+            var r = record([bird(sci)], wall, "-08:00", P); r.date = date(identified)
+            return try lib.save(r, data: Data("frame \(n)".utf8), zone: pst, now: date(identified)).id
+        }
+        _ = try add(A, "2026-06-01T08:00:00", "2026-06-01T20:00:00Z", 1)
+        let old = try add(B, "2024-01-01T08:00:00", "2026-07-01T20:00:00Z", 2)     // an old photo identified later
+        func order() throws -> [String] { RecordsView.recentlyIdentified(Array(try ledger(lib).allTime.values), items: try lib.items()).map(\.id) }
+        XCTAssertEqual(try order(), [B, A], "identified last, although taken first")
+        _ = try add(A, "2023-05-01T08:00:00", "2026-08-01T20:00:00Z", 3)
+        XCTAssertEqual(try order(), [A, B])
+        try lib.markViewed(old, now: date("2026-09-01T00:00:00Z"))     // opened, or corrected (edit() marks it)
+        XCTAssertEqual(try order(), [B, A])
+    }
     func testDeterministicFixture() throws {
         let lib = try Library(dir: tmp()), A = "Sterna hirundo", B = "Ardea alba"
         var n = 0

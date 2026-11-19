@@ -8,15 +8,23 @@ struct RecordsView: View {
     @State private var search = ""
     /// 照片 order: 最近查看 (default, the order of model.items), capture date, or species name.
     @State private var photoSort = "viewed"
-    @State private var sort = "recent"
+    /// 鸟种 order: 最近识别 (default; owner 2026-11-18: a bird just identified comes first), 最近见到, 首次见到, 名称.
+    @State private var sort = "identified"
     @State private var deleting: PhotoItem?
     var species: [SpeciesStat] {
         let all = Array(model.ledger.allTime.values)
         switch sort {
         case "first": return all.sorted { $0.first != $1.first ? $0.first > $1.first : $0.id < $1.id }
         case "name": return all.sorted { model.catalogue.name($0.id).localizedStandardCompare(model.catalogue.name($1.id)) == .orderedAscending }
-        default: return all.sorted { $0.last != $1.last ? $0.last > $1.last : $0.id < $1.id }
+        case "recent": return all.sorted { $0.last != $1.last ? $0.last > $1.last : $0.id < $1.id }
+        default: return Self.recentlyIdentified(all, items: model.items)
         }
+    }
+    /// Each species by its newest photo's last identification, correction or opening (the 照片 order's key), newest first.
+    static func recentlyIdentified(_ all: [SpeciesStat], items: [PhotoItem]) -> [SpeciesStat] {
+        let byPhoto = Dictionary(items.map { ($0.hash, $0.viewed ?? $0.identified) }, uniquingKeysWith: max)
+        let key = Dictionary(uniqueKeysWithValues: all.map { s in (s.id, s.photos.compactMap { byPhoto[$0] }.max() ?? "") })
+        return all.sorted { key[$0.id]! != key[$1.id]! ? key[$0.id]! > key[$1.id]! : $0.id < $1.id }
     }
     var photos: [PhotoItem] {
         let found = model.items.filter { model.matches($0, search) }
@@ -55,7 +63,7 @@ struct RecordsView: View {
             ScrollView {
                 modePicker.padding(.horizontal).padding(.vertical, 8)
                 let count = Text("\(model.ledger.allTime.count) 种").font(.headline)
-                let picker = Picker("排序", selection: $sort) { Text("最近见到").tag("recent"); Text("首次见到").tag("first"); Text("名称").tag("name") }.accessibilityIdentifier("records.sort")
+                let picker = Picker("排序", selection: $sort) { Text("最近识别").tag("identified"); Text("最近见到").tag("recent"); Text("首次见到").tag("first"); Text("名称").tag("name") }.accessibilityIdentifier("records.sort")
                 ViewThatFits(in: .horizontal) { HStack { count; Spacer(); picker }; VStack(alignment: .leading) { count; picker } }.padding(.horizontal)
                 LazyVGrid(columns: typeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
                     ForEach(species) { s in

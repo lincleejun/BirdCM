@@ -250,6 +250,8 @@ func title(_ r: Identification) -> String {
         guard migration == nil else {self.error=String(localized:"旧记录还在整理，完成后再修改。");return false}
         do {
             try body(library)
+            // A correction (or any edit) of the open photo counts as identifying it now: first in 记录 and 最近记录.
+            if let id=current?.id {viewed(id)}
             if let id=current?.id,let r=try library.record(id) {var v=r;v.selected=current?.selected ?? r.selected;if let s=v.results[String(v.selected)] {v.result=s};current=v}
             refresh();UINotificationFeedbackGenerator().notificationOccurred(.success);return true
         } catch {self.error=String(localized:"保存失败：\(error.localizedDescription)");return false}
