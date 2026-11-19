@@ -287,7 +287,7 @@ struct FolderBackupSection: View {
                 if let e = backup.lastError { Text(e).font(.footnote).foregroundStyle(Palette.rust).accessibilityIdentifier("backup.folderError") }
                 else if backup.lastSuccess != nil { Text("备份文件已写入；云端上传由文件提供方处理。").font(.footnote).accessibilityIdentifier("backup.folderOK") }
                 if backup.running { ProgressView("正在备份…") }
-                Button("立即备份", systemImage: "arrow.clockwise") { Task { await backup.runIfDue(model.library, force: true) } }.disabled(backup.running).accessibilityIdentifier("backup.now").frame(minHeight: 44)
+                Button("立即备份", systemImage: "arrow.clockwise") { Task { await backup.runIfDue(model.library, force: true) } }.disabled(backup.running || model.migration != nil).accessibilityIdentifier("backup.now").frame(minHeight: 44)
                 Button("换一个文件夹…") { choosing = true }.frame(minHeight: 44)
                 Button("停止定期备份", role: .destructive) { backup.stop() }.accessibilityIdentifier("backup.stopFolder").frame(minHeight: 44)
             }

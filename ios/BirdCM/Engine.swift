@@ -117,10 +117,11 @@ final class Engine: @unchecked Sendable {
         loadPeakBytes = memory.stop()
     }
     /// One prediction per model on a flat grey frame, so Core ML's first-run specialisation (large on the Neural Engine)
-    /// happens before the first real photo. Returns its duration.
-    func warmUp() throws -> Double {
+    /// happens before the first real photo. Returns its duration; nil when BioCLIP was released (memory warning) meanwhile.
+    func warmUp() throws -> Double? {
         let started = Date(), grey = RGB(w: 224, h: 224, px: [UInt8](repeating: 128, count: 224 * 224 * 3))
-        let species = try speciesModel(), heads = try headsModel()
+        guard let species = modelLock.withLock({ bioclip }) else { return nil }
+        let heads = try headsModel()
         // Locked per prediction, so a real photo can go between the steps.
         let image = try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: grey.resized(640, 640, .bilinear).pixelBuffer())])
         _ = try inference.withLock { try detector.prediction(from: image) }

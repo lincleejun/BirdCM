@@ -30,7 +30,7 @@ final class LaunchFlows: XCTestCase {
     func testHomeUsableWhileModelsLoad() throws {
         launch(["-delayModelLoad","60"]);wait("home.photos",10)
         XCTAssertTrue(element("home.photos").isEnabled);XCTAssertTrue(element("home.camera").isEnabled);XCTAssertTrue(element("home.map").isEnabled)
-        XCTAssertTrue(element("home.modelStatus").label.contains("正在准备"));XCTAssertFalse(element("identifying").exists)
+        XCTAssertTrue(element("home.modelStatus").label.contains("正在准备"));XCTAssertFalse(element("identifying").exists);shot("home-preparing")
         for (label,id) in [("记录","records.mode"),("统计","stats.period"),("探索","explore.mode")] {app.tabBars.buttons[label].firstMatch.tap();wait(id,10)}
         app.tabBars.buttons["识别"].firstMatch.tap();wait("home.photos",5)
         element("home.map").tap();XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout:5))
@@ -40,18 +40,21 @@ final class LaunchFlows: XCTestCase {
         launch(["-delayModelLoad","15","-cameraFixture","YES"]);wait("home.camera",10)
         element("home.camera").tap();wait("place.skip",5);element("place.skip").tap()
         wait("identifying",5);XCTAssertEqual(element("identifying.stage").label,"正在准备模型…")
-        XCTAssertTrue(element("identifying.cancel").exists)
+        XCTAssertTrue(element("identifying.cancel").exists);shot("waiting-for-models")
+        // Progressive: the found boxes and count appear before the names.
+        wait("identifying.found",60);XCTAssertEqual(element("identifying.found").label,"找到 1 只鸟");shot("found-boxes")
         wait("result.name",90);XCTAssertEqual(element("result.name").label,"白头海雕")
     }
+    func shot(_ name:String) {let a=XCTAttachment(screenshot:XCUIScreen.main.screenshot());a.name=name;a.lifetime = .keepAlways;add(a)}
     /// The first load fails: the waiting photo stays with the error and 重试 continues it; home shows its own 重试.
     func testLoadFailureThenRetry() throws {
         launch(["-delayModelLoad","2","-failModelLoad","1","-cameraFixture","YES"]);wait("home.camera",10)
         element("home.camera").tap();wait("place.skip",5);element("place.skip").tap()
         wait("identifying.retry",30);XCTAssertTrue(element("home.modelStatus").label.contains("失败") || !element("home.modelStatus").isHittable)
-        element("identifying.retry").tap()
+        shot("waiting-photo-load-failed");element("identifying.retry").tap()
         wait("result.name",90);XCTAssertEqual(element("result.name").label,"白头海雕")
-        launch(["-failModelLoad","1"]);wait("home.modelRetry",30);XCTAssertTrue(element("home.modelStatus").label.contains("失败"))
-        element("home.modelRetry").tap();status("就绪",90)
+        launch(["-failModelLoad","1","-largestType","YES"]);wait("home.modelRetry",30);XCTAssertTrue(element("home.modelStatus").label.contains("失败"))
+        shot("home-error-largest-type");element("home.modelRetry").tap();status("就绪",90);shot("home-ready-largest-type")
     }
 
     /// First launch after install, then a relaunch: picker usable → models ready; then first and second real identification.

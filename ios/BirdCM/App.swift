@@ -287,7 +287,7 @@ func title(_ r: Identification) -> String {
                 modelReady=true;Perf.mark("models.ready")
                 // A photo already waiting is its own warm-up; a second pass would only hold it up.
                 if !busy {Task.detached(priority:.utility) {
-                    guard let s=try? e.warmUp() else {return}
+                    guard let s=(try? e.warmUp()) ?? nil else {return}
                     Perf.mark("models.warmup",s);Perf.mark("models.warm")
                     await MainActor.run {self.warmUpSeconds=s}
                 }}
