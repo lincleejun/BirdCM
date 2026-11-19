@@ -78,4 +78,33 @@ final class ResultExtraFlows: FlowCase {
         photo.coordinate(withNormalizedOffset:CGVector(dx:0.3,dy:0.2)).press(forDuration:0.1,thenDragTo:photo.coordinate(withNormalizedOffset:CGVector(dx:0.8,dy:0.7)))
         outcome();outcome("result.crop.0");XCTAssertTrue(element("result.original").exists);try shot("manual-box")
     }
+    /// Result hero across photo shapes (owner 2026-11-18: the buttons rode on the image): it starts below the navigation
+    /// bar, the save row sits below the pager, and at rest the name and chips clear the bottom bar.
+    func testResultHeroShapes() throws {
+        for extra in [[String](),["-darkMode","YES"],["-largestType","YES"]] {
+            for photo in ["photo-1","photo-2","photo-3"] {
+                app.terminate();app.launchArguments=["-uiTesting","YES","-resetHistory","YES","-fixtureImage",image.replacingOccurrences(of:"photo-0",with:photo),"-fixtureState",photo=="photo-1" ? "multiple":"normal"]+extra;app.launch()
+                XCTAssertTrue(element("home.photos").waitForExistence(timeout:20));pick();outcome("result.crop.0");sleep(1)
+                try shot("hero-\(photo)"+(extra.first.map{"-"+$0} ?? "-light"))
+                let pager=element("result.pager").frame
+                XCTAssertGreaterThanOrEqual(pager.minY,app.navigationBars.firstMatch.frame.maxY-1,"hero under the navigation bar")
+                XCTAssertGreaterThanOrEqual(element("result.save").frame.minY,pager.maxY-1,"save row on the image")
+                if extra.isEmpty {XCTAssertLessThanOrEqual(element("result.localRarity").frame.maxY,element("result.photos").frame.minY+1,"chips under the bottom bar")}
+            }
+        }
+    }
+    /// One species, one IUCN chip on every screen (owner 2026-11-18): corrected to Steller's Sea Eagle (VU), the result
+    /// page, its species page and the 探索 row all show the same yellow VU chip, light and dark.
+    func testIUCNSameOnEveryScreen() throws {
+        for extra in [[String](),["-darkMode","YES"]] {
+            let mode=extra.isEmpty ? "-light":"-dark"
+            launch(extra:extra);pick()
+            reveal("result.correctSpecies").tap();search("Steller");element("correction.row.Haliaeetus pelagicus").tap();outcome("correction.review");element("correction.save").tap()
+            outcome("result.corrected");XCTAssertTrue(reveal("iucn.VU").exists);try shot("iucn-result"+mode)
+            back();tab("tab.records","记录");segment("鸟种");reveal("records.species.Haliaeetus pelagicus").tap();outcome("species.name")
+            XCTAssertTrue(reveal("iucn.VU").exists);try shot("iucn-species"+mode);back()
+            tab("tab.explore","探索");segment("全部物种");search("Steller");outcome("explore.row.Haliaeetus pelagicus")
+            XCTAssertTrue(element("explore.row.Haliaeetus pelagicus").label.contains("易危"),"the row carries the VU chip");try shot("iucn-explore"+mode)
+        }
+    }
 }

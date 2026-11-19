@@ -48,7 +48,7 @@ final class LargestTypeMoreFlows: LargestTypeCase {
         let likely=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'explore.row.'")).firstMatch
         for _ in 0..<40 where !likely.appears(timeout:1) {app.swipeUp()}
         XCTAssertTrue(likely.appears(timeout:30));try shot("explore-local"+mode)
-        reveal("home.more").tap();reveal("settings.backup").tap()
+        settings();reveal("settings.backup").tap()
         let now=element("backup.now");for _ in 0..<30 where !(now.exists && now.isHittable) {app.swipeUp()}
         now.tap();let ok=element("backup.folderOK")
         for _ in 0..<10 where !ok.appears(timeout:1) {app.swipeDown()}
@@ -61,8 +61,8 @@ final class LargestTypeMoreFlows: LargestTypeCase {
         segment("照片");outcome("history.sort");try shot("records-photos"+mode)
         segment("待确认");try shot("records-pending"+mode);segment("鸟种")
         tab("tab.stats","统计");outcome("stats.species");try shot("stats"+mode)
-        element("home.more").tap();outcome("settings.backup");try shot("settings"+mode);element("settings.backup").tap();try shot("backup"+mode)
-        app.navigationBars.buttons.element(boundBy:0).tap();element("settings.done").tap()
+        settings();outcome("settings.backup");try shot("settings"+mode);element("settings.backup").tap();try shot("backup"+mode)
+        app.navigationBars.buttons.element(boundBy:0).tap()
         tab("tab.explore","探索");outcome("explore.filter");try shot("explore"+mode)
         search("tern");try shot("explore-search"+mode)
     }
@@ -103,5 +103,17 @@ final class LayoutFlows: FlowCase {
         launch(extra:["-largestType","YES"]);reveal("home.place").tap();XCTAssertTrue(app.searchFields.firstMatch.appears(timeout:5));try shot("alaska-sheet-largest");search("Alaska")
         let row=element("place.region.US-AK");XCTAssertTrue(row.appears(timeout:5));XCTAssertTrue(row.isHittable);try shot("alaska-largest");row.tap()
         label(element("home.place"),contains:"阿拉斯加",5)
+    }
+    /// Each tab root at rest (title right under the status bar) and scrolled (only the title stays), light and dark.
+    func testTabRootsAtRestAndScrolled() throws {
+        for extra in [[String](),["-darkMode","YES"]] {
+            let mode=extra.isEmpty ? "-light":"-dark"
+            launch(extra:extra+["-historyFixtureCount","8"]);pick();back()
+            for (id,label) in [("tab.identify","识别"),("tab.explore","探索"),("tab.records","记录"),("tab.stats","统计"),("tab.settings","设置")] {
+                tab(id,label);if label=="记录" {segment("照片")};sleep(1);try shot("root-"+label+mode)
+                for _ in 0..<2 {app.swipeUp(velocity:.slow)};sleep(1);try shot("root-"+label+"-scrolled"+mode)
+                XCTAssertTrue(app.navigationBars.staticTexts.count>0,"\(label): the title stays when scrolled")
+            }
+        }
     }
 }

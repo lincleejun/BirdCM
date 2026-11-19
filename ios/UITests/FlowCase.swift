@@ -76,7 +76,7 @@ class FlowCase: XCTestCase {
         }
     }
     func fixture() {
-        reveal("home.more").tap();XCTAssertTrue(element("settings.done").appears(timeout:5));reveal("home.diagnostics").tap()
+        tab("tab.settings","设置");reveal("home.diagnostics").tap()
         XCTAssertTrue(element("diagnostics.fixture").appears(timeout:5));element("diagnostics.fixture").tap()
     }
     func outcome(_ id:String="result.name",file:StaticString=#filePath,line:UInt=#line) {XCTAssertTrue(element(id).appears(timeout:10),"missing \(id)",file:file,line:line)}
@@ -94,9 +94,12 @@ class FlowCase: XCTestCase {
         until("label contains \(text)",timeout,file:file,line:line) {e.exists && e.label.contains(text)}
     }
     func tab(_ id:String,_ label:String) {
+        if app.keyboards.firstMatch.exists {app.typeText("\n")}
         let byID=app.buttons[id]
         if byID.exists && byID.isHittable {byID.tap()} else {app.tabBars.buttons[label].firstMatch.tap()}
     }
+    /// The 设置 tab keeps its scroll position (诊断 is below the fold at the largest type): back to the top first.
+    func settings() {tab("tab.settings","设置");let b=element("settings.backup");for _ in 0..<8 where !(b.exists && b.isHittable) {app.swipeDown()}}
     func endSearch() {for label in ["取消","Cancel"] {let b=app.navigationBars.buttons[label].firstMatch;if b.exists && b.isHittable {b.tap();return}}}
     func segment(_ label:String) {app.segmentedControls.buttons[label].firstMatch.tap()}
     func search(_ text:String) {let f=app.searchFields.firstMatch;XCTAssertTrue(f.appears(timeout:5));f.tap();f.typeText(text);dismissTypingTip()}

@@ -94,9 +94,8 @@ final class AppearanceSnapshots: SnapshotCase {
             try await shot("records-pending", mode, RootView().environment(m))
             m.recordsMode = "species"; m.tab = .stats
             try await shot("stats", mode, RootView().environment(m))
-            m.settings = true
+            m.tab = .settings
             try await shot("settings", mode, RootView().environment(m))
-            m.settings = false
             try await shot("backup", mode, sheet(m, NavigationStack { BackupView() }))
             m.tab = .explore
             try await shot("explore", mode, RootView().environment(m))
@@ -105,7 +104,9 @@ final class AppearanceSnapshots: SnapshotCase {
             UserDefaults.standard.removeObject(forKey: "exploreQuery")
         }
         // The spinner never settles: a fixed short wait.
-        try await shot("loading-preview", nil, wait: 0.5, RootView().environment(model("loading")))
+        // A photo being identified opens its result page at once (no overlay card).
+        let loading = model("loading"); loading.paths[.identify] = [.identifying]
+        try await shot("loading-preview", nil, wait: 0.5, RootView().environment(loading))
     }
 
 }

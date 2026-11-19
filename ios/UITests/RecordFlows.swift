@@ -8,10 +8,10 @@ final class RecordFlows: FlowCase {
         launch();tab("tab.records","记录");segment("照片");outcome("history.search");outcome("history.sort");try shot("photos-empty")
         for n in [1,7] {launch(extra:["-historyFixtureCount","\(n)"]);pick();openPhotos();XCTAssertTrue(element("history.search").isHittable)}
         launch(extra:["-historyFixtureCount","8"]);pick();openPhotos()
-        let before=rows;element("history.sort").tap()
+        let before=rows;sortPhotos("鸟种名称")
         until("rows reorder",5) {self.rows != before}
         let after=rows;XCTAssertNotEqual(before,after);try shot("history-sorted")
-        element("history.sort").tap()
+        sortPhotos("最近查看")
         let search=element("history.search");search.tap();search.typeText("Bald");dismissTypingTip()
         XCTAssertTrue(element("history.sort").isHittable);try shot("history-search")
         app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'")).firstMatch.tap();outcome();back()
@@ -19,7 +19,7 @@ final class RecordFlows: FlowCase {
         let doomed=rows[0];element(doomed).tap();outcome()
         reveal("result.delete").tap();element("result.confirmDelete").tap();XCTAssertTrue(element("history.sort").appears(timeout:5))
         XCTAssertTrue(app.buttons[doomed].waitForNonExistence(timeout:5))
-        element("home.more").tap();element("history.clear").tap();element("history.confirmClear").tap();element("settings.done").tap()
+        tab("tab.settings","设置");reveal("history.clear").tap();element("history.confirmClear").tap();tab("tab.records","记录")
         XCTAssertTrue(element("history.sort").appears(timeout:5));until("rows cleared",5) {self.rows.isEmpty};try shot("history-cleared")
     }
     /// Correction: Royal and Elegant Tern independently searchable; save, uncertain, reset; count edit.
@@ -48,11 +48,11 @@ final class RecordFlows: FlowCase {
     func testMigrationFromOldStore() throws {
         launch(extra:["-legacyFixture","3"]);tab("tab.records","记录");outcome("records.species.Haliaeetus leucocephalus");try shot("migrated-species")
         segment("照片");XCTAssertEqual(rows.count,3)
-        element("home.more").tap();element("settings.backup").tap();XCTAssertTrue(reveal("backup.issues").label.contains("1"));try shot("migration-recovery")
+        settings();element("settings.backup").tap();XCTAssertTrue(reveal("backup.issues").label.contains("1"));try shot("migration-recovery")
     }
     func testBackupExportPreviewMerge() throws {
         launch(extra:["-historyFixtureCount","3"]);pick();back()
-        element("home.more").tap();try shot("settings");element("settings.backup").tap();try shot("backup")
+        settings();try shot("settings");element("settings.backup").tap();try shot("backup")
         reveal("backup.selfTest").tap();let merge=element("backup.merge")
         for _ in 0..<20 where !(merge.appears(timeout:1) && merge.isHittable) {app.swipeUp()};try shot("backup-preview")
         merge.tap();let message=element("backup.message")
@@ -60,10 +60,19 @@ final class RecordFlows: FlowCase {
         label(message,contains:"新增 0",20)
     }
     func testAboutLicencesAndDiagnostics() throws {
-        launch();element("home.more").tap();element("home.about").tap();try shot("about")
+        launch();tab("tab.settings","设置");element("home.about").tap();try shot("about")
         reveal("about.licences").tap();try shot("licences");element("resource.back").tap()
         XCTAssertTrue(element("sheet.done").appears(timeout:5));element("sheet.done").tap()
         XCTAssertTrue(element("home.diagnostics").appears(timeout:5));element("home.diagnostics").tap();try shot("diagnostics");element("sheet.done").tap()
-        element("settings.done").tap()
+    }
+    /// history.sort is a menu: 最近查看 (default) / 拍摄日期 / 鸟种名称.
+    func sortPhotos(_ label:String) {element("history.sort").tap();let b=app.buttons[label].firstMatch;XCTAssertTrue(b.waitForExistence(timeout:5));b.tap()}
+    /// 最近查看 is the default: the photo opened last comes first in 照片 and in the home 最近记录.
+    func testPhotosRecentlyViewedFirst() throws {
+        launch(extra:["-historyFixtureCount","8"]);pick();openPhotos()
+        let opened=try XCTUnwrap(rows.last);XCTAssertNotEqual(rows.first,opened)
+        element(opened).tap();outcome();back()
+        expectation(for:NSPredicate{_,_ in self.rows.first == opened},evaluatedWith:nil);waitForExpectations(timeout:5);try shot("photos-recently-viewed")
+        tab("tab.identify","识别");expectation(for:NSPredicate{_,_ in self.rows.first == opened},evaluatedWith:nil);waitForExpectations(timeout:5);try shot("home-recently-viewed")
     }
 }

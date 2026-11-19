@@ -48,4 +48,14 @@ final class PlaceFlows: FlowCase {
         back();app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'")).firstMatch.tap()
         outcome();XCTAssertEqual(element("result.name").label,"红翅黑鹂")
     }
+    /// Photo GPS shows as a map snapshot with the place under it (owner 2026-11-18), opens a full map; offline keeps the text.
+    func testResultPlaceMap() throws {
+        for extra in [[String](),["-darkMode","YES"]] {
+            launch("photo-gps",extra:extra);pick();_=reveal("place.coordinates");outcome("place.snapshot");sleep(3)
+            try shot("result-place-map"+(extra.isEmpty ? "":"-dark"))
+            reveal("place.snapshot").tap();outcome("place.fullMap");sleep(2);try shot("result-place-fullmap"+(extra.isEmpty ? "":"-dark"));element("sheet.done").tap()
+        }
+        launch("photo-gps",extra:["-mapOffline","YES"]);pick();_=reveal("place.coordinates")
+        XCTAssertFalse(element("place.snapshot").exists);try shot("result-place-offline")
+    }
 }
