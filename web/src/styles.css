@@ -108,7 +108,7 @@ input[type=number] { width: 76px; }
 .spn-2 { display: flex; margin-top: 2px; color: var(--text-secondary); font-weight: 400; white-space: nowrap; min-width: 0; }
 .spn-alt { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* the common name gives way first */
 .spn-dot { flex: none; white-space: pre; }
-.spn-sci { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-right: 2px; font-style: italic; }
+.spn-sci { flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; padding-right: 2px; font-style: italic; }
 .spn-hero .spn-1 { font-size: 28px; line-height: 34px; }
 .spn-hero .spn-2 { font-size: 15px; line-height: 20px; }
 .spn-row .spn-1 { font-size: 18px; line-height: 24px; }
@@ -416,7 +416,7 @@ dialog.map-dlg { width: min(860px, 96vw); }
 .bird-hit { position: absolute; transform: translate(-50%, -50%); border: 0; background: transparent; padding: 0; cursor: pointer; }
 .result-content { padding: 18px 2px; }
 .identity-result { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; }
-.identity-result h1 { min-width: 0; flex: 1; }
+.identity-result h1 { min-width: 0; flex: 1 1 260px; }
 .conf { font-size: 13px; font-weight: 600; padding: 3px 8px; background: var(--surface-2); color: var(--text-secondary); border-radius: 6px; }
 .result-content > .btn { margin-top: 10px; }
 .facts-inline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; margin-top: 12px; color: var(--text-secondary); font-size: 14px; }
