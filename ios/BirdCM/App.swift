@@ -39,9 +39,20 @@ func title(_ r: Identification) -> String {
 }
 
 @MainActor @Observable final class AppModel {
+    /// Names + detector (enough to start finding birds); `modelReady` once BioCLIP, heads and tables are in too.
     var engine: Engine?
     var previewing=false
-    var ready: Bool { engine != nil || previewing }
+    /// Model loading never blocks the UI and is not `busy` (an identification or re-rank in progress).
+    var modelReady=false
+    var modelError: String?
+    /// A photo picked before the models were ready; kept through a load failure so 重试 continues it.
+    var queued: Data?
+    var picked: UIImage?
+    var warmUpSeconds: Double?
+    static let preparing=String(localized:"正在准备模型…")
+    private var loading=false
+    /// Bumped by cancel(): a cancelled identification or re-rank drops its result.
+    private var run=0
     var status=""
     var busy=false
     var items=[PhotoItem]()
@@ -67,7 +78,6 @@ func title(_ r: Identification) -> String {
         get {paths.values.contains{$0.contains{if case .result=$0 {true} else {false}}}}
         set {if newValue,let id=current?.id {show(id,on:.identify)} else if !newValue {for t in paths.keys {paths[t]?.removeAll{if case .result=$0 {true} else {false}}}}}
     }
-    var loadSeconds: Double=0
     var homePlace: Place? = UserDefaults.standard.data(forKey:"homePlace").flatMap {try? JSONDecoder().decode(Place.self,from:$0)}
     var pendingData: Data?
     var needsPlace=false
@@ -101,7 +111,8 @@ func title(_ r: Identification) -> String {
     var library: Library?
     var sessionSeconds: Double=0
     var error: String?
-    init(previewState:String? = nil) {
+    /// `history`: a separate store name for unit tests.
+    init(previewState:String? = nil,history:String? = nil) {
         var historyName="History"
         #if DEBUG
         if previewState != nil {historyName="PreviewHistory"}
@@ -109,6 +120,7 @@ func title(_ r: Identification) -> String {
         #if DEBUG
         if UserDefaults.standard.bool(forKey:"uiTesting") || UserDefaults.standard.string(forKey:"fixtureState") != nil || UserDefaults.standard.string(forKey:"previewState") != nil {historyName="UITestHistory"}
         #endif
+        if let history {historyName=history}
         let dir=Models.support.appendingPathComponent(historyName)
         #if DEBUG
         if UserDefaults.standard.bool(forKey:"uiTesting") && UserDefaults.standard.bool(forKey:"resetHistory") {try? FileManager.default.removeItem(at:dir);homePlace=nil;UserDefaults.standard.removeObject(forKey:"homePlace");UserDefaults.standard.removeObject(forKey:"recentPlaceData")
@@ -130,8 +142,9 @@ func title(_ r: Identification) -> String {
         #if DEBUG
         // Hosted XCTest loads its own engine; avoid a second 600 MB tower in the test host UI.
         if NSClassFromString("XCTestCase") != nil {return}
+        if let path=UserDefaults.standard.string(forKey:"debugImage"),let data=FileManager.default.contents(atPath:path) {Task{await identify(data)}}
         #endif
-        Task { await load() }
+        load()
     }
     #if DEBUG
     func pickFixture() async {
@@ -230,43 +243,85 @@ func title(_ r: Identification) -> String {
         let names=item.subjects.compactMap{$0.key ?? $0.modelKey}.compactMap{catalogue.species($0)}.flatMap{[$0.zh,$0.en,$0.sci]}
         return (names+[item.placeLabel ?? "",item.day]).contains{$0.localizedStandardContains(q)}
     }
-    func load() async {
-        guard Models.present else { status="安装包损坏或缺少模型，请重新安装完整 App。"; return }
-        busy=true; status="正在检查并加载离线模型…"
-        defer{busy=false}
-        do {
-            let t0=Date()
-            let invalid=try await Task.detached {try Models.invalidRequiredAssets()}.value
-            Perf.mark("models.integrity",Date().timeIntervalSince(t0))
-            guard invalid.isEmpty else {
-                status="安装包损坏，请重新安装："+invalid.joined(separator:"、")
-                return
+    /// Background load, never blocking the UI: integrity (full hash once per build), names + detector (`engine`), then
+    /// BioCLIP → heads → place model / rarity (`modelReady`), then a low-priority warm-up prediction.
+    func load() {
+        guard engine == nil || !modelReady, !loading, !previewing else {return}
+        loading=true; modelError=nil
+        Task {
+            defer {loading=false}
+            do {
+                guard Models.present else {throw StoreError(message:String(localized:"安装包缺少模型，请重新安装完整 App。"))}
+                #if DEBUG
+                let delay=UserDefaults.standard.double(forKey:"delayModelLoad")
+                if delay>0 {try await Task.sleep(for:.seconds(delay))}
+                Self.loadAttempts+=1
+                if Self.loadAttempts<=UserDefaults.standard.integer(forKey:"failModelLoad") {throw StoreError(message:String(localized:"测试：模拟加载失败"))}
+                #endif
+                let t0=Date()
+                let check=try await Task.detached(priority:.userInitiated) {try Models.check()}.value
+                Perf.mark(check.hashed ? "models.integrity.sha256":"models.integrity.sizes",Date().timeIntervalSince(t0))
+                guard check.invalid.isEmpty else {throw StoreError(message:String(localized:"安装包损坏，请重新安装：")+check.invalid.joined(separator:"、"))}
+                let e=try await Task.detached(priority:.userInitiated) {try Engine(dir:Models.dir)}.value
+                engine=e;Perf.mark("models.detector")
+                try await Task.detached(priority:.userInitiated) {try e.prepare()}.value
+                modelReady=true;Perf.mark("models.ready")
+                // A photo already waiting is its own warm-up; a second pass would only hold it up.
+                if !busy {Task.detached(priority:.utility) {
+                    guard let s=try? e.warmUp() else {return}
+                    Perf.mark("models.warmup",s);Perf.mark("models.warm")
+                    await MainActor.run {self.warmUpSeconds=s}
+                }}
+            } catch {
+                engine=nil;modelReady=false
+                modelError=String(localized:"模型加载失败：\(error.localizedDescription)")
             }
-            engine=nil
-            engine=try await Task.detached { try Engine(dir:Models.dir) }.value
-            loadSeconds=engine!.loadSeconds
-            Perf.mark("models.load",loadSeconds);Perf.mark("models.ready")
-            status=engine?.rarity == nil ? "稀有度表未安装，当前显示数据不足" : ""
-            #if DEBUG
-            if let path=UserDefaults.standard.string(forKey:"debugImage") { busy=false; await identify(try Data(contentsOf:URL(fileURLWithPath:path))) }
-            #endif
-        } catch { self.error=String(localized:"加载模型失败：\(error.localizedDescription)"); status="安装包无法加载，请重新安装完整 App。" }
+        }
+    }
+    #if DEBUG
+    static var loadAttempts=0
+    #endif
+    /// 出错 → 重试: reload, and continue the photo that was waiting.
+    func retry() {
+        load()
+        if let q=queued {Task{await identify(q)}}
+    }
+    /// Cancel the identification or re-rank on screen; its result, if it still arrives, is dropped.
+    func cancel() {run+=1;busy=false;queued=nil;picked=nil;status=""}
+    /// The engine for a job, waiting while the models load (the job's own photo stays on screen). nil: cancelled or failed.
+    private func waitForEngine(_ job:Int) async -> Engine? {
+        while job == run {
+            if let engine {return engine}
+            if modelError != nil {return nil}
+            if !loading {load()}
+            status=Self.preparing
+            try? await Task.sleep(for:.milliseconds(100))     // ponytail: polling; a continuation list if this ever matters
+        }
+        return nil
     }
     func identify(_ data: Data) async {
-        guard !busy, let engine else { return }
-        if let source=CGImageSourceCreateWithData(data as CFData,nil),let thumbnail=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:1024] as CFDictionary) {preview=UIImage(cgImage:thumbnail)} else {preview=nil}
-        busy=true; status="找鸟 → 认种"
+        guard !busy, !(previewing && engine == nil) else { return }
+        run+=1;let job=run
+        if let source=CGImageSourceCreateWithData(data as CFData,nil),let thumbnail=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:1024] as CFDictionary) {picked=UIImage(cgImage:thumbnail)} else {picked=nil}
+        queued=data;busy=true;status=String(localized:"找鸟")
         let started=Date()
-        defer { busy=false }
+        defer { if job == run {busy=false} }
+        guard let engine=await waitForEngine(job) else {
+            if job == run {status=""}     // load failed: queued + picked stay on screen for 重试
+            return
+        }
+        queued=nil
+        if Date().timeIntervalSince(started)>0.2 {Perf.mark("identify.waitedForModels",Date().timeIntervalSince(started))}
         do {
             let shooting=Shooting(data:data)
             let place: Place?
             place=Place.resolve(photo:shooting.photoPlace,device:nil,manual:homePlace)
-            status="找鸟"
+            status=String(localized:"找鸟")
             let made = try await Task.detached { () async throws -> (Record,Photo) in
                 guard let photo=Photo(data:data) else { throw NSError(domain:"BirdCM",code:4,userInfo:[NSLocalizedDescriptionKey:"无法读取这张图。支持 JPEG、HEIC、PNG（含截图）；ProRAW/DNG 请先在照片中导出为 JPEG 或 HEIC。请换一张重试。"]) }
                 let tick=Date(), boxes=try engine.detect(photo), detection=Date().timeIntervalSince(tick)
-                await MainActor.run {self.status="认种"}
+                let stage=engine.hasSpeciesModel ? String(localized:"认种"):String(localized:"认种（认种模型还在载入）")
+                await MainActor.run {if job == self.run {self.status=stage}}
                 var result: Identification?
                 if let box=boxes.first { result=try engine.identify(photo,box:box,place:place,shooting:shooting); result?.diagnostics?.stages["检测"]=detection }
                 let rel=boxes.map { [$0[0]/Double(photo.frame.w),$0[1]/Double(photo.frame.h),$0[2]/Double(photo.frame.w),$0[3]/Double(photo.frame.h)] }
@@ -274,14 +329,23 @@ func title(_ r: Identification) -> String {
                 if let result { record.results["0"]=result }
                 return (record,photo)
             }.value
+            // Saving is an edit: it waits for a first-launch migration instead of failing.
+            while migration != nil && libraryError == nil && job == run {status=String(localized:"等待旧记录整理完成…");try? await Task.sleep(for:.milliseconds(200))}
+            guard job == run else {return}
             guard let library, migration == nil else { throw StoreError(message:String(localized:"本机记录还在整理，请稍后再试")) }
             var record=try library.save(made.0,data:data)
             if let url=library.url(record.id),let source=CropSource(url) {record.displayCrops=record.boxes.map{source.crop($0).normalized(in:source.size)};record=try library.save(record)}
             UIImpactFeedbackGenerator(style:.light).impactOccurred()
-            current=record; photo=made.1; preview=UIImage(cgImage:made.1.frame.cgImage()); showing=true; refresh()
+            current=record; photo=made.1; preview=UIImage(cgImage:made.1.frame.cgImage()); picked=nil; showing=true; refresh()
             sessionSeconds=Date().timeIntervalSince(started); status=""
             Perf.mark("identify.session",sessionSeconds)
-        } catch { self.error=String(localized:"识别失败：\(error.localizedDescription)"); status="" }
+            if let d=record.result?.diagnostics {Perf.log("PERF stages "+d.stages.sorted{$0.key<$1.key}.map{String(format:"%@=%.3f",$0.key,$0.value)}.joined(separator:" "))}
+        } catch {
+            guard job == run else {return}
+            status=""
+            if modelError != nil {queued=data;return}     // the load failed under us: keep the photo for 重试
+            picked=nil;self.error=String(localized:"识别失败：\(error.localizedDescription)")
+        }
     }
     /// Open a record, optionally at one subject (pending list), on the current tab.
     func open(_ id: UUID,subject:Int?=nil,push:Bool=true) {
@@ -307,12 +371,16 @@ func title(_ r: Identification) -> String {
             persist(r);return
         }
         #endif
-        guard !busy, let engine, let photo, var r=current else { return }
-        busy=true; status=String(localized:"识别当前主体…"); defer{busy=false;status=""}
+        guard !busy, let photo, var r=current else { return }
+        run+=1;let job=run
+        busy=true; defer{if job == run {busy=false;status=""}}
+        guard let engine=await waitForEngine(job) else {if let e=modelError,job == run {self.error=e};return}
+        status=String(localized:"识别当前主体…")
         do {
             let result=try await Task.detached {
                 try engine.identify(photo,box:[box[0]*Double(photo.frame.w),box[1]*Double(photo.frame.h),box[2]*Double(photo.frame.w),box[3]*Double(photo.frame.h)],place:place,shooting:r.shooting,manual:manual)
             }.value
+            guard job == run else {return}
             if r.place != place { r.results=[:] }
             // A hand-drawn box replaces only the selected subject (keeping its ID and edits); other birds stay.
             if newBox {
@@ -321,12 +389,18 @@ func title(_ r: Identification) -> String {
                 r.manual=true
             } else { r.selected=index }
             r.place=place; r.result=result; r.results[String(r.selected)]=result; persist(r)
-        } catch { self.error=String(localized:"识别失败：\(error.localizedDescription)") }
+        } catch { if job == run {self.error=String(localized:"识别失败：\(error.localizedDescription)")} }
     }
     func setPlace(_ p: Place) async {
         guard var r=current, !busy else { return }
         // An explicit result correction replaces even EXIF GPS; initial identification always prefers EXIF.
-        busy=true;status="按地点更新候选…";defer{busy=false;status=""}
+        run+=1;let job=run
+        busy=true;defer{if job == run {busy=false;status=""}}
+        // Never save a new place with candidates ranked for the old one: wait for the models (fixtures have none).
+        let engine=previewing ? nil:await waitForEngine(job)
+        guard job == run else {return}
+        if !previewing && engine == nil {if let e=modelError {self.error=e};return}
+        status="按地点更新候选…"
         do {
             if let engine {
                 let saved=r
@@ -336,6 +410,7 @@ func title(_ r: Identification) -> String {
                     for (key,value) in saved.results {out[key]=try engine.rerank(value,place:p,shooting:saved.shooting)}
                     return out
                 }.value
+                guard job == run else {return}
                 r.results=updated; r.result=updated[String(r.selected)]
             }
             #if DEBUG
@@ -475,7 +550,6 @@ struct IdentifyView: View {
                 }
                 if !model.items.isEmpty {Button("查看全部 \(model.items.count) 张") {model.recordsMode="photos";model.tab = .records}.accessibilityIdentifier("home.allRecords").frame(minHeight:44)}
             }
-            if !model.status.isEmpty { Text(model.status).font(.footnote).foregroundStyle(Palette.secondary) }
             if typeSize.isAccessibilitySize {Text("系统选片无需相册访问授权；仅读取你选择的照片。").font(.caption).foregroundStyle(Palette.secondary).listRowBackground(Color.clear)}
             if let cameraNote {
                 Section {
@@ -485,22 +559,20 @@ struct IdentifyView: View {
             }
         }
         .scrollContentBackground(.hidden).background(Palette.paper)
-        .onAppear{Perf.mark("home.visible",once:true)}
+        .onAppear{Perf.mark("home.visible",once:true);DispatchQueue.main.async{Perf.mark("home.interactive",once:true)}}
         .navigationTitle("观羽").navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge:.bottom) {
-            if model.ready {
-                VStack(spacing:6) {
-                    // At accessibility sizes the note moves into the list so the fixed bar stays short.
-                    if !typeSize.isAccessibilitySize {Text("系统选片无需相册访问授权；仅读取你选择的照片。").font(.caption).foregroundStyle(Palette.secondary).fixedSize(horizontal:false,vertical:true)}
-                    PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current) { Label("从相册选择",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:54) }
-                        .accessibilityIdentifier("home.photos").buttonStyle(PrimaryActionStyle()).disabled(model.busy || model.migration != nil)
-                    Button("拍照",systemImage:"camera"){takePhoto()}.accessibilityIdentifier("home.camera").frame(maxWidth:.infinity,minHeight:44).buttonStyle(.bordered).disabled(model.busy)
-                }.padding(.horizontal).padding(.vertical,8).background(Palette.paper)
-            } else {
-                Text(model.status.isEmpty ? String(localized:"正在准备离线模型；记录、统计和探索可以先用。"):model.status).font(.footnote).padding().frame(maxWidth:.infinity).background(Palette.paper).accessibilityIdentifier("home.modelStatus")
-            }
+            // Always usable: a photo picked while the models load waits on the identifying screen.
+            VStack(spacing:6) {
+                // At accessibility sizes the note moves into the list so the fixed bar stays short.
+                if !typeSize.isAccessibilitySize {Text("系统选片无需相册访问授权；仅读取你选择的照片。").font(.caption).foregroundStyle(Palette.secondary).fixedSize(horizontal:false,vertical:true)}
+                PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current) { Label("从相册选择",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:54) }
+                    .accessibilityIdentifier("home.photos").buttonStyle(PrimaryActionStyle()).disabled(model.busy)
+                Button("拍照",systemImage:"camera"){takePhoto()}.accessibilityIdentifier("home.camera").frame(maxWidth:.infinity,minHeight:44).buttonStyle(.bordered).disabled(model.busy)
+                ModelStatusLine()
+            }.padding(.horizontal).padding(.vertical,8).background(Palette.paper)
         }
-        .overlay { if model.busy { IdentifyingView() } }
+        .overlay { if model.busy || model.queued != nil { IdentifyingView() } }
         .sheet(isPresented:$place) {PlacePicker(onChoose:{p in model.chooseHome(p)}).debugAppearance()}
         .sheet(isPresented:$map) {MapPlacePicker(initial:model.homePlace){p in model.chooseHome(p)}}
         .fullScreenCover(isPresented:$camera) {CameraPicker(close:{camera=false}){data in Task{await model.receive(data)}}.ignoresSafeArea()}
@@ -549,14 +621,43 @@ struct PrimaryActionStyle: ButtonStyle {
             .overlay {if configuration.isPressed {RoundedRectangle(cornerRadius:16).fill(.black.opacity(0.18))}}
     }
 }
+/// Quiet one-line model state on home: 准备中 / 就绪 / 出错 with 重试. Never an overlay, never disables anything.
+struct ModelStatusLine: View {
+    @Environment(AppModel.self) var model
+    var body:some View {
+        HStack(spacing:6) {
+            if let e=model.modelError {
+                Image(systemName:"exclamationmark.triangle").foregroundStyle(Palette.rust)
+                Text(e).lineLimit(2).accessibilityIdentifier("home.modelStatus")
+                Button("重试"){model.retry()}.font(.caption.bold()).frame(minHeight:44).accessibilityIdentifier("home.modelRetry")
+            } else if model.modelReady || model.previewing {
+                Image(systemName:"checkmark.circle")
+                Text("离线模型就绪").accessibilityIdentifier("home.modelStatus")
+            } else {
+                ProgressView().controlSize(.mini)
+                Text("正在准备离线模型，可以先选照片").accessibilityIdentifier("home.modelStatus")
+            }
+        }.font(.caption).foregroundStyle(Palette.secondary).frame(maxWidth:.infinity)
+    }
+}
 struct IdentifyingView: View {
     @Environment(AppModel.self) var model
     var body:some View {
-        VStack(spacing:20) {
-            if let image=model.preview {Image(uiImage:image).resizable().scaledToFit().frame(maxHeight:280).background(.black)}
-            ProgressView();Text(model.status).font(.headline)
-            if model.status != "按地点更新候选…" {Text("找鸟 → 认种").font(.subheadline).foregroundStyle(Palette.secondary)}
-        }.padding(24).background(Palette.surface,in:RoundedRectangle(cornerRadius:24)).padding().accessibilityIdentifier("identifying")
+        let failed = !model.busy && model.queued != nil
+        VStack(spacing:16) {
+            if let image=model.picked ?? model.preview {Image(uiImage:image).resizable().scaledToFit().frame(maxHeight:280).background(.black)}
+            if failed {
+                Label("模型没有加载成功",systemImage:"exclamationmark.triangle").font(.headline).foregroundStyle(Palette.rust)
+                Text(model.modelError ?? "").font(.footnote).multilineTextAlignment(.center)
+                Text("照片还在这里，重试后会接着识别。").font(.footnote).foregroundStyle(Palette.secondary)
+                Button("重试"){model.retry()}.buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("identifying.retry")
+            } else {
+                ProgressView();Text(model.status).font(.headline).accessibilityIdentifier("identifying.stage")
+                if model.status == AppModel.preparing {Text("模型就绪后自动继续：找鸟 → 认种").font(.subheadline).foregroundStyle(Palette.secondary)}
+                else if model.status != "按地点更新候选…" {Text("找鸟 → 认种").font(.subheadline).foregroundStyle(Palette.secondary)}
+            }
+            Button("取消"){model.cancel()}.frame(minHeight:44).accessibilityIdentifier("identifying.cancel")
+        }.padding(24).background(Palette.surface,in:RoundedRectangle(cornerRadius:24)).padding().accessibilityElement(children:.contain).accessibilityIdentifier("identifying")
     }
 }
 struct HistoryRow: View {

@@ -31,9 +31,7 @@ struct SettingsView: View {
                 }
                 Section("关于") {
                     Button("关于与数据来源") { about = true }.accessibilityIdentifier("home.about")
-                    #if DEBUG
                     Button("诊断") { diagnostics = true }.accessibilityIdentifier("home.diagnostics")
-                    #endif
                 }
                 Section {
                     Button("清空本机记录", role: .destructive) { clear = true }.accessibilityIdentifier("history.clear").disabled(model.items.isEmpty)

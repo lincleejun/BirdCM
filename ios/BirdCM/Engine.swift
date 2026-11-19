@@ -44,31 +44,49 @@ struct Identification: Codable {
 final class Engine: @unchecked Sendable {
     static let threshold: Float = 0.25           // D-FINE bird score; T/2 when nothing reaches it (distill/detectors.py)
     static let logitScale: Float = 98.8644790649414
-    let detector: MLModel, heads: MLModel?
-    private var bioclip: MLModel?
+    let detector: MLModel
+    /// Guards the members loaded after `init` (BioCLIP, heads, geo, rarity) and the reference-test embedding.
     private let modelLock=NSLock()
+    /// One prediction at a time, so the background warm-up never runs alongside a real identification.
+    private let inference=NSLock()
     private let modelDir: URL
     private let configuration: MLModelConfiguration
+    private var bioclip: MLModel?
+    private var loadedHeads: MLModel??, loadedGeo: Geo??, loadedRarity: Rarity??    // .some(nil): file not installed
+    /// Memory warning: drop the 600 MB tower; the next identification reloads it off the main actor.
     func releaseBioCLIP() { modelLock.lock(); bioclip=nil; embedding=nil; modelLock.unlock() }
+    var hasSpeciesModel: Bool { modelLock.withLock { bioclip != nil } }
     func speciesModel() throws -> MLModel {
         modelLock.lock(); defer{modelLock.unlock()}
         if let bioclip {return bioclip}
+        let started=Date()
         let model=try MLModel(contentsOf:Self.compiled(modelDir,"BioCLIP"),configuration:configuration)
+        Perf.mark("load.bioclip",Date().timeIntervalSince(started))
         bioclip=model; return model
     }
+    /// Loads `make` once under the lock; nil when that optional file is not installed.
+    private func once<T>(_ slot: ReferenceWritableKeyPath<Engine, T??>, _ name: String, _ file: URL, _ make: () throws -> T) throws -> T? {
+        modelLock.lock(); defer{modelLock.unlock()}
+        if let loaded=self[keyPath:slot] {return loaded}
+        let started=Date()
+        let value=FileManager.default.fileExists(atPath:file.path) ? try make() : nil
+        Perf.mark("load."+name,Date().timeIntervalSince(started))
+        self[keyPath:slot] = .some(value); return value
+    }
+    func headsModel() throws -> MLModel? {
+        try once(\.loadedHeads,"heads",modelDir.appendingPathComponent("Heads.mlmodelc")) { try MLModel(contentsOf:Self.compiled(modelDir,"Heads"),configuration:configuration) }
+    }
+    func geoModel() throws -> Geo? { try once(\.loadedGeo,"geo",Models.geoURL) { try Geo(weights:Models.geoURL,scientific:rows.map{$0[0]}) } }
+    func rarityTable() throws -> Rarity? { try once(\.loadedRarity,"rarity",Models.rarityURL) { try Rarity(path:Models.rarityURL) } }
     let names: [Float]                           // 11,172 x 1024, row-major
     var rows: [[String]]                         // scientific, English, Chinese, genus, family
-    var geo: Geo?
-    var rarity: Rarity?
-    var loadSeconds: Double = 0
     var loadPeakBytes: UInt64 = 0
     let clearWeights = resource("clear", as: [String:[Double]].self)
     private var embedding: [Float]?
     var lastEmbedding: [Float]? {modelLock.lock();defer{modelLock.unlock()};return embedding}     // for pipeline reference tests
 
+    /// Names and the detector only (enough to start finding birds); `prepare()` loads the rest in the order identification needs it.
     init(dir: URL) throws {
-        let started = Date(), memory = MemorySample()
-        defer { _ = memory.stop() }
         let cfg = MLModelConfiguration()
         switch Diagnostics.compute {
         case "cpuOnly": cfg.computeUnits = .cpuOnly
@@ -82,25 +100,33 @@ final class Engine: @unchecked Sendable {
         modelDir=dir; configuration=cfg
         var tick=Date()
         func lap(_ n:String) { Perf.mark("load."+n,Date().timeIntervalSince(tick)); tick=Date() }
-        detector = try MLModel(contentsOf: try Self.compiled(dir, "Detector"), configuration: cfg); lap("detector")
-        bioclip = try MLModel(contentsOf: try Self.compiled(dir, "BioCLIP"),  configuration: cfg); lap("bioclip")
-        heads = FileManager.default.fileExists(atPath: dir.appendingPathComponent("Heads.mlmodelc").path)
-            ? try MLModel(contentsOf: try Self.compiled(dir, "Heads"), configuration: cfg) : nil
-        lap("heads")
         let raw = try Data(contentsOf: dir.appendingPathComponent("names.f16"))
         names = raw.withUnsafeBytes { $0.bindMemory(to: Float16.self).map(Float.init) }
-        lap("names.f16")
         let zh = Dictionary(uniqueKeysWithValues: resource("zh-names", as: [[String:String]].self).map{($0["scientific"]!, $0["zh"]!)})
         rows = try String(contentsOf: dir.appendingPathComponent("names.tsv"), encoding: .utf8)
             .split(separator: "\n").map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
         guard names.count == rows.count * 1024, rows.count == 11172, rows.allSatisfy({$0.count >= 5}) else { throw CocoaError(.fileReadCorruptFile) }
         rows = rows.map { r in var row = r; row[2] = zh[row[0]] ?? ""; return row }
-        lap("names.tsv")
-        if FileManager.default.fileExists(atPath:Models.geoURL.path) { geo = try Geo(weights:Models.geoURL,scientific:rows.map{$0[0]}) }
-        lap("geo")
-        if FileManager.default.fileExists(atPath:Models.rarityURL.path) { rarity = try Rarity(path:Models.rarityURL) }
-        lap("rarity")
-        loadSeconds = Date().timeIntervalSince(started); loadPeakBytes = memory.stop()
+        lap("names")
+        detector = try MLModel(contentsOf: try Self.compiled(dir, "Detector"), configuration: cfg); lap("detector")
+    }
+    /// BioCLIP, then heads, then the place model and rarity table; call off the main actor right after `init`.
+    func prepare() throws {
+        let memory = MemorySample()
+        _ = try speciesModel(); _ = try headsModel(); _ = try geoModel(); _ = try rarityTable()
+        loadPeakBytes = memory.stop()
+    }
+    /// One prediction per model on a flat grey frame, so Core ML's first-run specialisation (large on the Neural Engine)
+    /// happens before the first real photo. Returns its duration.
+    func warmUp() throws -> Double {
+        let started = Date(), grey = RGB(w: 224, h: 224, px: [UInt8](repeating: 128, count: 224 * 224 * 3))
+        let species = try speciesModel(), heads = try headsModel()
+        try inference.withLock {
+            _ = try detector.prediction(from: try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: grey.resized(640, 640, .bilinear).pixelBuffer())]))
+            let out = try species.prediction(from: try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: grey.pixelBuffer())]))
+            if let heads { _ = try heads.prediction(from: try MLDictionaryFeatureProvider(dictionary: ["tokens15": out.featureValue(for: "tokens15")!])) }
+        }
+        return Date().timeIntervalSince(started)
     }
 
     /// Build-time compiled models stay in the signed application bundle.
@@ -113,21 +139,21 @@ final class Engine: @unchecked Sendable {
         guard let visual=cached.visual else { throw NSError(domain:"BirdCM",code:8,userInfo:[NSLocalizedDescriptionKey:"旧记录还不支持更改地点，请重新选择这张照片识别一次。"] ) }
         let spread:GeoSpread?
         if let place {
-            guard let geo else {throw CocoaError(.fileReadNoSuchFile)}
+            guard let geo=try geoModel() else {throw CocoaError(.fileReadNoSuchFile)}
             spread=try geo.spread(place,date:shooting.takenAt)
         } else {spread=nil}
         var id=Confirm.decide(p:Confirm.posterior(visual,spread?.wide),rows:rows,wide:spread?.wide,typical:spread?.typical)
         id.visual=visual; id.clear=cached.clear; id.eye=cached.eye; id.beak=cached.beak
         id.flying=cached.flying; id.visibility=cached.visibility; id.diagnostics=cached.diagnostics
         if cached.clear == false { id.reason="鸟的特征不够清楚，请核对候选或手动画框。" }
-        if id.level=="species" {id.rarity=rarity?.lookup(id.top5[0].scientific,place:place,month:shooting.month)}
+        if id.level=="species" {id.rarity=try rarityTable()?.lookup(id.top5[0].scientific,place:place,month:shooting.month)}
         return id
     }
 
     func detect(_ photo: Photo) throws -> [[Double]] {
         let f = photo.frame
-        let out = try detector.prediction(from: try MLDictionaryFeatureProvider(dictionary: [
-            "image": MLFeatureValue(pixelBuffer: f.resized(640, 640, .bilinear).pixelBuffer())]))
+        let input = try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: f.resized(640, 640, .bilinear).pixelBuffer())])
+        let out = try inference.withLock { try detector.prediction(from: input) }
         let scores = floats(out.featureValue(for: "scores")!.multiArrayValue!)
         let boxes = floats(out.featureValue(for: "boxes")!.multiArrayValue!)
         for t in [Self.threshold, Self.threshold / 2] {
@@ -166,7 +192,8 @@ final class Engine: @unchecked Sendable {
         var diag = DiagnosticRun()
         var tick = Date()
         let c = crop(photo, box)
-        let out = try speciesModel().prediction(from: try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: c.image.pixelBuffer())]))
+        let species = try speciesModel(), input = try MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: c.image.pixelBuffer())])
+        let out = try inference.withLock { try species.prediction(from: input) }
         diag.stages["BioCLIP"] = Date().timeIntervalSince(tick); tick = Date()
         let e = floats(out.featureValue(for: "embedding")!.multiArrayValue!)
         modelLock.lock(); embedding = e; modelLock.unlock()
@@ -179,7 +206,7 @@ final class Engine: @unchecked Sendable {
         let visual = p.map(Double.init)
         diag.stages["名录"] = Date().timeIntervalSince(tick); tick = Date()
         let spread = try place.map { p -> GeoSpread in
-            guard let geo else { throw NSError(domain:"BirdCM",code:1,userInfo:[NSLocalizedDescriptionKey:"安装包缺少地点模型，请重新安装完整 App。"] ) }
+            guard let geo = try geoModel() else { throw NSError(domain:"BirdCM",code:1,userInfo:[NSLocalizedDescriptionKey:"安装包缺少地点模型，请重新安装完整 App。"] ) }
             return try geo.spread(p,date:shooting?.takenAt)
         }
         diag.stages["地点先验"] = Date().timeIntervalSince(tick); tick = Date()
@@ -189,9 +216,10 @@ final class Engine: @unchecked Sendable {
         id.clear = z >= h["z_min"]![0] && Double(m) >= h["cos_min"]![0]
         if !manual && id.clear == false { id.reason = "鸟的特征不够清楚，请核对候选或手动画框。" }
         id.visual=visual
-        if id.level == "species" { id.rarity = rarity?.lookup(id.top5[0].scientific,place:place,month:shooting?.month) ?? RarityValue(label:"数据不足",iucn:nil) }
-        if let heads {
-            let h = try heads.prediction(from: try MLDictionaryFeatureProvider(dictionary: ["tokens15": out.featureValue(for: "tokens15")!]))
+        if id.level == "species" { id.rarity = try rarityTable()?.lookup(id.top5[0].scientific,place:place,month:shooting?.month) ?? RarityValue(label:"数据不足",iucn:nil) }
+        if let heads = try headsModel() {
+            let input = try MLDictionaryFeatureProvider(dictionary: ["tokens15": out.featureValue(for: "tokens15")!])
+            let h = try inference.withLock { try heads.prediction(from: input) }
             let pts = Self.points(h)
             id.visibility = pts.visible
             id.flying = Double(floats(h.featureValue(for: "flying")!.multiArrayValue!)[0])

@@ -77,9 +77,26 @@ enum Models {
         return (try? JSONDecoder().decode([Asset].self,from:Data(contentsOf:url))) ?? []
     }
     static var present: Bool { !assets.isEmpty }
-    static func invalidRequiredAssets() throws -> [String] {
-        guard !assets.isEmpty else { return ["integrity.json"] }
-        return try assets.filter { try !$0.valid(at:dir.appendingPathComponent($0.path)) }.map(\.path)
+    static var build: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        return "\(info["CFBundleShortVersionString"] ?? "")(\(info["CFBundleVersion"] ?? ""))"
+    }
+    /// The bundled models live inside the code-signed, read-only app bundle: iOS checks the signature (which covers every
+    /// file here) at install, so the full SHA-256 pass (~700 MB) runs once per installed build — key: version + build number +
+    /// file sizes — and is remembered in UserDefaults. Other launches only check that each file exists with its size.
+    /// `full` forces the hash pass (诊断 → 完整校验). Returns the bad paths and whether this call hashed.
+    static func check(dir: URL = dir, assets: [Asset] = assets, full: Bool = false, defaults: UserDefaults = .standard, build: String = build) throws -> (invalid: [String], hashed: Bool) {
+        guard !assets.isEmpty else { return (["integrity.json"], false) }
+        let key = build + "|" + sha256(Data(assets.map { "\($0.path)=\($0.bytes)" }.joined(separator: "\n").utf8))
+        let sized = assets.filter { a in
+            let size = (try? FileManager.default.attributesOfItem(atPath: dir.appendingPathComponent(a.path).path)[.size] as? NSNumber)?.int64Value
+            return size != a.bytes
+        }.map(\.path)
+        guard sized.isEmpty else { defaults.removeObject(forKey: "integrityVerified"); return (sized, false) }
+        if !full && defaults.string(forKey: "integrityVerified") == key { return ([], false) }
+        let invalid = try assets.filter { try Models.digest(dir.appendingPathComponent($0.path)) != $0.sha256 }.map(\.path)
+        if invalid.isEmpty { defaults.set(key, forKey: "integrityVerified") } else { defaults.removeObject(forKey: "integrityVerified") }
+        return (invalid, true)
     }
     static func digest(_ url: URL) throws -> String {
         let h = try FileHandle(forReadingFrom:url); defer{try? h.close()}

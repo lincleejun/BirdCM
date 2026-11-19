@@ -23,14 +23,38 @@ struct ResourceText: View {
 struct DiagnosticsView: View {
     @Environment(AppModel.self) var model
     @Environment(\.dismiss) var dismiss
+    @State private var verifying = false
+    @State private var verified: String?
     var body: some View {NavigationStack{List{
+        let marks = Perf.marks
+        let seconds = { (key: String) in marks[key].map { String(format: "%.2f s", $0) } ?? "—" }
+        Section("本次启动 · 从进程启动算起") {
+            LabeledContent("首页可操作", value: seconds("home.interactive"))
+            LabeledContent("可以开始找鸟（名录 + 检测）", value: seconds("models.detector"))
+            LabeledContent("全部模型就绪", value: seconds("models.ready"))
+            LabeledContent("预热完成", value: seconds("models.warm"))
+            LabeledContent("预热用时", value: seconds("models.warmup"))
+            ForEach([("完整性 · SHA-256", "models.integrity.sha256"), ("完整性 · 只查大小", "models.integrity.sizes"), ("名录", "load.names"), ("检测模型", "load.detector"), ("BioCLIP", "load.bioclip"), ("眼嘴与飞行", "load.heads"), ("地点模型", "load.geo"), ("稀有度表", "load.rarity"), ("等待模型（选片早于就绪）", "identify.waitedForModels")], id: \.1) { title, key in
+                if marks[key] != nil { LabeledContent(title, value: seconds(key)) }
+            }
+            Text("首次安装或升级后完整计算一次 SHA-256，之后只核对文件大小（App 包有系统代码签名保护）。").font(.caption)
+            Button(verifying ? "正在完整校验…" : "完整校验") {
+                verifying = true
+                Task {
+                    let t = Date()
+                    let r = try? await Task.detached { try Models.check(full: true) }.value
+                    verified = r.map { $0.invalid.isEmpty ? String(format: "全部文件完好（%.1f s）", Date().timeIntervalSince(t)) : "损坏：" + $0.invalid.joined(separator: "、") } ?? "无法读取模型文件"
+                    verifying = false
+                }
+            }.disabled(verifying).accessibilityIdentifier("diagnostics.verify")
+            if let verified { Text(verified).font(.footnote).accessibilityIdentifier("diagnostics.verified") }
+        }
         Section("本次运行 · 性能诊断") {
             LabeledContent("允许计算单元",value:Diagnostics.compute)
             LabeledContent("地点模型实际计算",value:"CPU · Accelerate")
             Text("配置不代表实际算子使用了 ANE/GPU。模拟器数据不能推断真机性能。") .font(.caption)
             LabeledContent("加载采样峰值",value:String(format:"%.1f MB",Double(model.engine?.loadPeakBytes ?? 0)/1e6))
-            LabeledContent("模型加载",value:String(format:"%.3f s",model.loadSeconds))
-            LabeledContent("选片到结果（含定位）",value:String(format:"%.3f s",model.sessionSeconds))
+            LabeledContent("选片到结果（含定位与等待模型）",value:String(format:"%.3f s",model.sessionSeconds))
             if let d=model.current?.result?.diagnostics {
                 ForEach(d.stages.keys.sorted(),id:\.self){key in LabeledContent(key,value:String(format:"%.3f s",d.stages[key]!))}
                 LabeledContent("采样峰值内存",value:String(format:"%.1f MB",Double(d.peakBytes)/1e6))
