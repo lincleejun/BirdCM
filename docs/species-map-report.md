@@ -1,0 +1,1316 @@
+# 物种映射覆盖报告（AviList v2026）
+
+由 `engine/tools/build_species_map.py` 生成于 2026-11-19；包 `species-map.sqlite` 8.68 MB（上限 15 MB），11172 行（每个 AviList 种恰一行）。只有 `exact-reviewed` / `synonym-reviewed` 会让应用补内容或深链；其余状态保持本地页正常、不补任何在线内容。“reviewed” 指通过了下列构建规则，规则外的例外由人工列表决定（见文末）。
+
+## 每个来源的状态
+
+| 状态 | Wikidata | iNaturalist | GBIF |
+|---|---:|---:|---:|
+| exact-reviewed | 10048 | 9678 | 9741 |
+| synonym-reviewed | 359 | 0 | 695 |
+| broader | 0 | 0 | 0 |
+| narrower | 6 | 8 | 279 |
+| split-lump | 293 | 242 | 118 |
+| ambiguous | 449 | 3 | 36 |
+| unmapped | 17 | 796 | 303 |
+| retired | 0 | 445 | 0 |
+
+## 可用覆盖
+
+- Wikidata QID（可补内容）：10407 (93.2%)
+- 中文维基条目：3825 (34.2%)；英文维基条目：10256 (91.8%)；至少一种（简介可显示）：10256 (91.8%)；缺中文而回退英文：6431
+- Commons 参考图文件（P18，运行时再逐文件过许可）：9671 (86.6%)
+- iNaturalist taxon ID：9678 (86.6%)
+- GBIF key：10436 (93.4%)；GBIF 与 Wikidata P846 一致：9405，不一致：986
+- eBird 代码（来自 AviList，本身即权威）：11144 (99.7%)
+- GBIF 2026 新 ID（Wikidata P14607）：19
+- 别名：31822 条（en 16397，zh-Hant 12344，zh 2170，la 707，zh-Hans 204）；来源：Wikidata 18554，IOC 15.2 10303，Clements v2026 2965
+
+## 规则
+
+- **Wikidata**：P225 学名完全相同、P105 = 种、P31 为分类单元（含化石/灭绝）、P171 链上有鸟纲 Q5113，且只有一个这样的条目。同名多条时只在恰好一条带 AviList 的 eBird 代码时选它。没有同名条目时，只接受唯一一个在 P1420 异名里列出这个学名、或带同一 eBird 代码且种加词相同（属变更）的条目。条目的 eBird 代码与 AviList 不同记为 `split-lump`；学名条目与 eBird 代码条目不是同一个记为 `ambiguous`。同一 QID 对应两个 AviList 种时两边都记 `split-lump`。
+- **iNaturalist**：只用已接受 Wikidata 条目的 P3151，再用 iNat 自己的记录核对：活跃、种级、学名相同（或只有属不同）。属级/亚种级记 broader/narrower，停用记 retired。
+- **GBIF**：`/v2/species/match`（鸟纲提示）只接受 EXACT + SPECIES + 同名；同物异名且接受名种加词相同（属变更）记 synonym-reviewed，接受名为亚种记 narrower；FUZZY/VARIANT 只记候选、不填 ID；HIGHERRANK/NONE 记 unmapped。datasetKey = `d7dddbf4-2cf0-4f39-9b2a-bb099caae36c`（GBIF Backbone Taxonomy），taxonKey 为字符串（datasetKey 记在 manifest，一包一个）。
+
+## Wikidata 未映射（unmapped）：17
+
+- *Patagona peruviana*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Astur chilensis*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Astur atricapillus*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Tanysiptera obiensis*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Tanysiptera margarethae*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Syma ochracea*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Nannopsittacus melanogenia*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Nannopsittacus gulielmitertii*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Nannopsittacus nigrifrons*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Myzomela nigriventris*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Meliphaga imitatrix*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Vireo swainsoni*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Melanocharis piperata*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Cinnyris frenatus*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Cinnyris aurora*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Fringilla moreletti*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+- *Stilpnia whitelyi*：Wikidata 没有这个学名、这个 eBird 代码或这个异名的物种条目
+
+## Wikidata 不确定（ambiguous）：449
+
+- *Apteryx maxima*：学名条目 Q21365526 与带 eBird 代码 grskiw1 的条目 Q730091 不同
+- *Neochen jubata*：学名条目 Q905268 与带 eBird 代码 origoo1 的条目 Q56509442 不同
+- *Chloephaga melanoptera*：学名条目 Q490327 与带 eBird 代码 andgoo1 的条目 Q56509494 不同
+- *Mareca americana*：学名条目 Q28106685 与带 eBird 代码 amewig 的条目 Q703790 不同
+- *Canachites canadensis*：学名条目 Q117253054 与带 eBird 代码 sprgro 的条目 Q19056 不同
+- *Lyrurus mlokosiewiczi*：学名条目 Q845408 与带 eBird 代码 caugro1 的条目 Q25662647 不同
+- *Lyrurus tetrix*：学名条目 Q155878 与带 eBird 代码 blagro1 的条目 Q25691279 不同
+- *Campocolinus coqui*：学名条目 Q117253141 与带 eBird 代码 coqfra2 的条目 Q869040 不同
+- *Synoicus monorthonyx*：学名条目 Q117253266 与带 eBird 代码 snmqua2 的条目 Q283577 不同
+- *Tauraco violaceus*：学名条目 Q117253895 与带 eBird 代码 viotur1 的条目 Q667395 不同
+- *Heterotetrax humilis*：学名条目 Q27452913 与带 eBird 代码 libbus1 的条目 Q1275491 不同
+- *Heterotetrax rueppelii*：学名条目 Q27998431 与带 eBird 代码 ruebus1 的条目 Q27074637 不同
+- *Lophotis ruficrista*：学名条目 Q1275843 与带 eBird 代码 recbus1 的条目 Q22111304 不同
+- *Lophotis gindiana*：学名条目 Q1267582 与带 eBird 代码 bucbus1 的条目 Q22111228 不同
+- *Lophotis savilei*：学名条目 Q1275531 与带 eBird 代码 savbus1 的条目 Q22111324 不同
+- *Afrotis afra*：学名条目 Q864381 与带 eBird 代码 blabus3 的条目 Q20745698 不同
+- *Afrotis afraoides*：学名条目 Q594687 与带 eBird 代码 whqbus1 的条目 Q20902367 不同
+- *Chalcites basalis*：学名条目 Q28108874 与带 eBird 代码 hobcuc1 的条目 Q765837 不同
+- *Chalcites lucidus*：学名条目 Q28108978 与带 eBird 代码 shbcuc1 的条目 Q796741 不同
+- *Paraclaravis geoffroyi*：学名条目 Q83021166 与带 eBird 代码 pwgdov1 的条目 Q1274883 不同
+- *Paraclaravis mondetoura*：学名条目 Q83015764 与带 eBird 代码 mcgdov1 的条目 Q1264202 不同
+- *Spilopelia chinensis*：学名条目 Q116686 与带 eBird 代码 spodov 的条目 Q10821950 不同
+- *Nesoenas picturatus*：学名条目 Q1275852 与带 eBird 代码 matdov1 的条目 Q25265942 不同
+- *Aplopelia larvata*：学名条目 Q55111786 与带 eBird 代码 lemdov2 的条目 Q511845 不同
+- *Pampusana xanthonura*：学名条目 Q117253989 与带 eBird 代码 wtgdov1 的条目 Q27074706 不同
+- *Pampusana canifrons*：学名条目 Q117254072 与带 eBird 代码 pagdov1 的条目 Q27074720 不同
+- *Pampusana ferruginea*：学名条目 Q117254005 与带 eBird 代码 tangrd1 的条目 Q27074713 不同
+- *Pampusana norfolkensis*：学名条目 Q117253994 与带 eBird 代码 norgrd1 的条目 Q902995 不同
+- *Megaloprepia formosa*：学名条目 Q28123077 与带 eBird 代码 sbfdov1 的条目 Q941869 不同
+- *Megaloprepia magnifica*：学名条目 Q28123506 与带 eBird 代码 wofdov1 的条目 Q239801 不同
+- *Ramphiculus gularis*：只有 eBird 代码 macfrd1 指向 Q3410303（Ptilinopus epius），学名不同
+- *Ptilinopus holosericeus*：只有 eBird 代码 clfdov1 指向 Q1273333（Drepanoptila holosericea），学名不同
+- *Antigone canadensis*：学名条目 Q28114133 与带 eBird 代码 sancra 的条目 Q503804 不同
+- *Grus carunculata*：学名条目 Q27074661 与带 eBird 代码 watcra2 的条目 Q1141135 不同
+- *Grus virgo*：学名条目 Q23759614 与带 eBird 代码 demcra1 的条目 Q191683 不同
+- *Grus paradisea*：学名条目 Q27074659 与带 eBird 代码 blucra2 的条目 Q756674 不同
+- *Rallicula rubra*：学名条目 Q1260197 与带 eBird 代码 chfrai1 的条目 Q62098100 不同
+- *Rallicula leucospila*：学名条目 Q1259434 与带 eBird 代码 wsfrai1 的条目 Q62098114 不同
+- *Rallicula forbesi*：学名条目 Q1261278 与带 eBird 代码 forrai1 的条目 Q62098109 不同
+- *Rallicula mayri*：学名条目 Q1263712 与带 eBird 代码 mayrai1 的条目 Q25265914 不同
+- *Mustelirallus albicollis*：学名条目 Q58294652 与带 eBird 代码 astcra1 的条目 Q1267482 不同
+- *Mustelirallus erythrops*：学名条目 Q58294661 与带 eBird 代码 pabcra 的条目 Q1274289 不同
+- *Mustelirallus colombianus*：学名条目 Q58294658 与带 eBird 代码 colcra2 的条目 Q1269548 不同
+- *Aphanocrex podarces*：学名条目 Q938395 与带 eBird 代码 sthcra1 的条目 Q27982303 不同
+- *Gallirallus torquatus*：只有 eBird 代码 barrai1 指向 Q1260982（Hypotaenidia torquata），学名不同
+- *Paragallinula angulata*：学名条目 Q27074647 与带 eBird 代码 lesmoo1 的条目 Q966683 不同
+- *Laterallus flaviventer*：学名条目 Q110257426 与带 eBird 代码 yebcra1 的条目 Q929942 不同
+- *Poliolimnas cinereus*：学名条目 Q117254451 与带 eBird 代码 whbcra1 的条目 Q28122747 不同
+- *Aenigmatolimnas marginalis*：学名条目 Q1272697 与带 eBird 代码 strcra1 的条目 Q28065477 不同
+- *Hoploxypterus cayanus*：学名条目 Q1118712 与带 eBird 代码 pielap1 的条目 Q25683596 不同
+- *Calidris pygmaea*：学名条目 Q28065684 与带 eBird 代码 spbsan1 的条目 Q844897 不同
+- *Anous albivitta*：学名条目 Q62575749 与带 eBird 代码 grynod1 的条目 Q76502 不同
+- *Anous ceruleus*：学名条目 Q62575847 与带 eBird 代码 bugnod 的条目 Q76500 不同
+- *Chroicocephalus philadelphia*：学名条目 Q629525 与带 eBird 代码 bongul 的条目 Q25687379 不同
+- *Hydrobates furcatus*：学名条目 Q28114499 与带 eBird 代码 ftspet 的条目 Q1268697 不同
+- *Hydrobates jabejabe*：学名条目 Q60895939 与带 eBird 代码 cavstp1 的条目 Q1267681 不同
+- *Hydrobates matsudairae*：学名条目 Q28122588 与带 eBird 代码 maspet2 的条目 Q785281 不同
+- *Hydrobates macrodactylus*：学名条目 Q28070805 与带 eBird 代码 guspet 的条目 Q940820 不同
+- *Poikilocarbo gaimardi*：学名条目 Q82988231 与带 eBird 代码 relcor1 的条目 Q764712 不同
+- *Gulosus aristotelis*：学名条目 Q83020448 与带 eBird 代码 eursha1 的条目 Q115452 不同
+- *Nannopterum auritum*：学名条目 Q117254648 与带 eBird 代码 doccor 的条目 Q725289 不同
+- *Leucocarbo magellanicus*：学名条目 Q83003323 与带 eBird 代码 magcor1 的条目 Q202518 不同
+- *Leucocarbo bougainvilliorum*：学名条目 Q27074617 与带 eBird 代码 guacor1 的条目 Q929464 不同
+- *Leucocarbo ranfurlyi*：学名条目 Q677266 与带 eBird 代码 boisha1 的条目 Q25646127 不同
+- *Leucocarbo carunculatus*：学名条目 Q25626 与带 eBird 代码 rofsha1 的条目 Q27990249 不同
+- *Leucocarbo campbelli*：学名条目 Q27074621 与带 eBird 代码 caisha2 的条目 Q857819 不同
+- *Leucocarbo colensoi*：学名条目 Q27074623 与带 eBird 代码 auisha1 的条目 Q758664 不同
+- *Leucocarbo onslowi*：学名条目 Q27074620 与带 eBird 代码 chisha1 的条目 Q1068243 不同
+- *Leucocarbo chalconotus*：学名条目 Q27074618 与带 eBird 代码 brosha1 的条目 Q38578 不同
+- *Urile pelagicus*：学名条目 Q83022790 与带 eBird 代码 pelcor 的条目 Q541664 不同
+- *Pseudibis gigantea*：学名条目 Q27074613 与带 eBird 代码 giaibi1 的条目 Q931759 不同
+- *Ardea ibis*：学名条目 Q106447604 与带 eBird 代码 categr1 的条目 Q132669 不同
+- *Tachymarptis aequatorialis*：学名条目 Q1261658 与带 eBird 代码 motswi2 的条目 Q40651623 不同
+- *Tachymarptis melba*：学名条目 Q321267 与带 eBird 代码 alpswi1 的条目 Q40651640 不同
+- *Phaeoptila sordida*：学名条目 Q117253408 与带 eBird 代码 dushum1 的条目 Q1259066 不同
+- *Cynanthus auriceps*：学名条目 Q117253521 与带 eBird 代码 goceme1 的条目 Q860934 不同
+- *Basilinna leucotis*：学名条目 Q997393 与带 eBird 代码 whehum 的条目 Q58295050 不同
+- *Pampa rufa*：学名条目 Q117253534 与带 eBird 代码 rufsab1 的条目 Q1065055 不同
+- *Ramosomyia violiceps*：学名条目 Q117253553 与带 eBird 代码 vichum 的条目 Q533763 不同
+- *Saucerottia cyanifrons*：学名条目 Q117253614 与带 eBird 代码 inchum1 的条目 Q1265835 不同
+- *Chrysuronia brevirostris*：学名条目 Q117253772 与带 eBird 代码 whceme1 的条目 Q1273473 不同
+- *Ninox albifacies*：学名条目 Q117254704 与带 eBird 代码 lauowl1 的条目 Q844773 不同
+- *Athene blewitti*：学名条目 Q62566317 与带 eBird 代码 forowl1 的条目 Q883968 不同
+- *Otus podarginus*：学名条目 Q117254779 与带 eBird 代码 palowl2 的条目 Q1262352 不同
+- *Ketupa leucosticta*：学名条目 Q117254853 与带 eBird 代码 akeowl1 的条目 Q1273322 不同
+- *Ketupa lactea*：学名条目 Q117254854 与带 eBird 代码 veeowl1 的条目 Q675783 不同
+- *Ketupa coromanda*：学名条目 Q117254865 与带 eBird 代码 dueowl1 的条目 Q932473 不同
+- *Ketupa sumatrana*：学名条目 Q117254862 与带 eBird 代码 baeowl1 的条目 Q768129 不同
+- *Strix virgata*：学名条目 Q185279 与带 eBird 代码 motowl 的条目 Q27865519 不同
+- *Strix nigrolineata*：学名条目 Q863587 与带 eBird 代码 bawowl1 的条目 Q27865413 不同
+- *Strix huhula*：学名条目 Q169464 与带 eBird 代码 bkbowl1 的条目 Q27865555 不同
+- *Strix albitarsis*：学名条目 Q640578 与带 eBird 代码 rubowl3 的条目 Q28125241 不同
+- *Circaetus spectabilis*：学名条目 Q27074627 与带 eBird 代码 coseag1 的条目 Q1061063 不同
+- *Lophospiza trivirgata*：只有 eBird 代码 cregos1 指向 Q795570（Accipiter trivirgatus），学名不同
+- *Tachyspiza minulla*：只有 eBird 代码 litspa1 指向 Q127966（Accipiter minullus），学名不同
+- *Tachyspiza virgata*：只有 eBird 代码 besra1 指向 Q1265270（Accipiter virgatus），学名不同
+- *Tachyspiza cirrocephala*：只有 eBird 代码 colspa1 指向 Q114170（Accipiter cirrocephalus），学名不同
+- *Tachyspiza brachyura*：只有 eBird 代码 nebspa1 指向 Q114008（Accipiter brachyurus），学名不同
+- *Tachyspiza badia*：学名条目 Q137397344 与带 eBird 代码 shikra1 的条目 Q715710 不同
+- *Tachyspiza trinotata*：只有 eBird 代码 sptgos1 指向 Q127824（Accipiter trinotatus），学名不同
+- *Tachyspiza poliocephala*：只有 eBird 代码 gyhgos1 指向 Q385748（Accipiter poliocephalus），学名不同
+- *Tachyspiza henicogramma*：只有 eBird 代码 molgos1 指向 Q113980（Accipiter henicogrammus），学名不同
+- *Tachyspiza luteoschistacea*：只有 eBird 代码 slmgos1 指向 Q113989（Accipiter luteoschistaceus），学名不同
+- *Tachyspiza haplochroa*：只有 eBird 代码 necgos1 指向 Q113973（Accipiter haplochrous），学名不同
+- *Tachyspiza fasciata*：只有 eBird 代码 brogos1 指向 Q114715（Accipiter fasciatus），学名不同
+- *Astur gentilis*：学名条目 Q137474876 与带 eBird 代码 norgos1 的条目 Q25353 不同
+- *Icthyophaga ichthyaetus*：学名条目 Q1074476 与带 eBird 代码 gyhfie1 的条目 Q27074633 不同
+- *Icthyophaga humilis*：学名条目 Q386871 与带 eBird 代码 lefeag1 的条目 Q27074632 不同
+- *Geobiastes squamiger*：学名条目 Q768358 与带 eBird 代码 scagrr1 的条目 Q25662646 不同
+- *Ceyx flumenicola*：学名条目 Q21415888 与带 eBird 代码 norsik1 的条目 Q10745292 不同
+- *Psilopogon nuchalis*：学名条目 Q27074855 与带 eBird 代码 taibar2 的条目 Q13414979 不同
+- *Trachylaemus goffinii*：学名条目 Q55111956 与带 eBird 代码 yebbar1 的条目 Q978817 不同
+- *Pogoniulus uropygialis*：学名条目 Q138006477 与带 eBird 代码 reftin1 的条目 Q1273443 不同
+- *Pteroglossus beauharnaisii*：学名条目 Q55111940 与带 eBird 代码 cucara1 的条目 Q833143 不同
+- *Meiglyptes grammithorax*：学名条目 Q20908852 与带 eBird 代码 burwoo1 的条目 Q795557 不同
+- *Chrysophlegma miniaceum*：学名条目 Q81901728 与带 eBird 代码 banwoo2 的条目 Q1274668 不同
+- *Pardipicus nivosus*：学名条目 Q117254916 与带 eBird 代码 buswoo1 的条目 Q1262753 不同
+- *Campethera maculosa*：学名条目 Q1266221 与带 eBird 代码 grbwoo2 的条目 Q1264601 不同
+- *Leuconotopicus borealis*：学名条目 Q27074917 与带 eBird 代码 recwoo 的条目 Q575963 不同
+- *Leuconotopicus villosus*：学名条目 Q27074928 与带 eBird 代码 haiwoo 的条目 Q1071828 不同
+- *Leuconotopicus stricklandi*：学名条目 Q27074926 与带 eBird 代码 strwoo 的条目 Q1266919 不同
+- *Leuconotopicus arizonae*：学名条目 Q27074924 与带 eBird 代码 ariwoo 的条目 Q670950 不同
+- *Leuconotopicus albolarvatus*：学名条目 Q27074932 与带 eBird 代码 whhwoo 的条目 Q1270774 不同
+- *Leuconotopicus fumigatus*：学名条目 Q27074920 与带 eBird 代码 smbwoo1 的条目 Q1265511 不同
+- *Veniliornis maculifrons*：学名条目 Q1262194 与带 eBird 代码 yeewoo1 的条目 Q58294904 不同
+- *Veniliornis chocoensis*：学名条目 Q1271284 与带 eBird 代码 chowoo1 的条目 Q58294903 不同
+- *Veniliornis affinis*：学名条目 Q634734 与带 eBird 代码 reswoo1 的条目 Q58294898 不同
+- *Veniliornis spilogaster*：学名条目 Q582557 与带 eBird 代码 whswoo2 的条目 Q58294771 不同
+- *Veniliornis lignarius*：学名条目 Q1270753 与带 eBird 代码 strwoo6 的条目 Q58294783 不同
+- *Veniliornis mixtus*：学名条目 Q1273187 与带 eBird 代码 chewoo3 的条目 Q58294782 不同
+- *Veniliornis cassini*：学名条目 Q751415 与带 eBird 代码 gocwoo2 的条目 Q58294770 不同
+- *Veniliornis kirkii*：学名条目 Q631542 与带 eBird 代码 rerwoo1 的条目 Q58294759 不同
+- *Veniliornis nigriceps*：学名条目 Q1262798 与带 eBird 代码 babwoo2 的条目 Q58294825 不同
+- *Veniliornis callonotus*：学名条目 Q1265073 与带 eBird 代码 scbwoo3 的条目 Q58294812 不同
+- *Veniliornis dignus*：学名条目 Q1265011 与带 eBird 代码 yevwoo1 的条目 Q58294824 不同
+- *Veniliornis sanguineus*：学名条目 Q284187 与带 eBird 代码 blcwoo3 的条目 Q58294796 不同
+- *Veniliornis frontalis*：学名条目 Q613359 与带 eBird 代码 dofwoo1 的条目 Q58294813 不同
+- *Veniliornis passerinus*：学名条目 Q594083 与带 eBird 代码 litwoo2 的条目 Q58294797 不同
+- *Neohierax insignis*：学名条目 Q21558835 与带 eBird 代码 whrfal1 的条目 Q1055855 不同
+- *Strigops habroptilus*：只有 eBird 代码 kakapo2 指向 Q179959（Strigops habroptila），学名不同
+- *Zanda funerea*：学名条目 Q28107872 与带 eBird 代码 ytbcoc1 的条目 Q838932 不同
+- *Zanda baudinii*：学名条目 Q28107844 与带 eBird 代码 whtblc1 的条目 Q587489 不同
+- *Zanda latirostris*：学名条目 Q28108429 与带 eBird 代码 slbblc1 的条目 Q772700 不同
+- *Poicephalus fuscicollis*：学名条目 Q1543843 与带 eBird 代码 brnpar1 的条目 Q569157 不同
+- *Pyrrhura subandina*：学名条目 Q1683425 与带 eBird 代码 paipar1 的条目 Q1270389 不同
+- *Thectocercus acuticaudatus*：学名条目 Q27074980 与带 eBird 代码 bucpar 的条目 Q913514 不同
+- *Psittacara brevipes*：学名条目 Q27074990 与带 eBird 代码 grnpar2 的条目 Q2736310 不同
+- *Mascarinus mascarinus*：学名条目 Q27075016 与带 eBird 代码 maspar1 的条目 Q947555 不同
+- *Psittacula bensoni*：学名条目 Q1814708 与带 eBird 代码 magpar1 的条目 Q55111965 不同
+- *Psephotellus varius*：学名条目 Q27075022 与带 eBird 代码 mulpar1 的条目 Q666650 不同
+- *Psephotellus dissimilis*：学名条目 Q27075024 与带 eBird 代码 hoopar1 的条目 Q874704 不同
+- *Psephotellus pulcherrimus*：学名条目 Q27075029 与带 eBird 代码 parpar2 的条目 Q932059 不同
+- *Psephotellus chrysopterygius*：学名条目 Q27075027 与带 eBird 代码 gospar1 的条目 Q775932 不同
+- *Vini solitaria*：学名条目 Q117255367 与带 eBird 代码 collor1 的条目 Q920157 不同
+- *Psitteuteles pusillus*：只有 eBird 代码 litlor1 指向 Q244259（Glossopsitta pusilla），学名不同
+- *Psitteuteles porphyrocephalus*：只有 eBird 代码 puclor1 指向 Q785007（Glossopsitta porphyrocephala），学名不同
+- *Trichoglossus reticulatus*：只有 eBird 代码 blslor1 指向 Q683067（Eos reticulata），学名不同
+- *Trichoglossus semilarvatus*：只有 eBird 代码 blelor1 指向 Q682213（Eos semilarvata），学名不同
+- *Trichoglossus borneus*：只有 eBird 代码 redlor1 指向 Q850931（Eos bornea），学名不同
+- *Trichoglossus squamatus*：只有 eBird 代码 vinlor1 指向 Q283670（Eos squamata），学名不同
+- *Trichoglossus cyanogenius*：只有 eBird 代码 blwlor1 指向 Q863148（Eos cyanogenia），学名不同
+- *Trichoglossus concinnus*：只有 eBird 代码 muslor1 指向 Q608087（Glossopsitta concinna），学名不同
+- *Traversia lyalli*：学名条目 Q21955209 与带 eBird 代码 stiwre1 的条目 Q507428 不同
+- *Sarcophanops steerii*：学名条目 Q27075050 与带 eBird 代码 watbro1 的条目 Q780186 不同
+- *Sarcophanops samarensis*：学名条目 Q18596318 与带 eBird 代码 visbro1 的条目 Q1059563 不同
+- *Pseudopipra pipra*：学名条目 Q27075185 与带 eBird 代码 whcman2 的条目 Q28747718 不同
+- *Lipaugus ater*：学名条目 Q28921005 与带 eBird 代码 bagcot1 的条目 Q264243 不同
+- *Lipaugus conditus*：学名条目 Q28874515 与带 eBird 代码 gywcot1 的条目 Q1921551 不同
+- *Pogonotriccus difficilis*：学名条目 Q125511843 与带 eBird 代码 sdmtyr2 的条目 Q676270 不同
+- *Pogonotriccus eximius*：学名条目 Q27075169 与带 eBird 代码 sobtyr2 的条目 Q1272317 不同
+- *Pogonotriccus lanyoni*：学名条目 Q27075167 与带 eBird 代码 anbtyr1 的条目 Q842296 不同
+- *Pogonotriccus ophthalmicus*：学名条目 Q27075160 与带 eBird 代码 mfbtyr1 的条目 Q739949 不同
+- *Pogonotriccus poecilotis*：学名条目 Q27075154 与带 eBird 代码 vabtyr1 的条目 Q1263460 不同
+- *Pogonotriccus venezuelanus*：学名条目 Q27075164 与带 eBird 代码 vebtyr2 的条目 Q747968 不同
+- *Pogonotriccus orbitalis*：学名条目 Q27075162 与带 eBird 代码 spbtyr1 的条目 Q750038 不同
+- *Pogonotriccus chapmani*：学名条目 Q27075156 与带 eBird 代码 chabrt1 的条目 Q1271162 不同
+- *Ramphotrigon flammulatum*：学名条目 Q110266178 与带 eBird 代码 flafly1 的条目 Q1082110 不同
+- *Philohydor lictor*：学名条目 Q27075179 与带 eBird 代码 leskis1 的条目 Q1062555 不同
+- *Empidonomus aurantioatrocristatus*：学名条目 Q58295151 与带 eBird 代码 croslf1 的条目 Q1272199 不同
+- *Silvicultrix frontalis*：学名条目 Q27075172 与带 eBird 代码 crocht1 的条目 Q1265431 不同
+- *Silvicultrix diadema*：学名条目 Q27075176 与带 eBird 代码 yebcht1 的条目 Q1261755 不同
+- *Silvicultrix jelskii*：学名条目 Q27075177 与带 eBird 代码 jelcht1 的条目 Q1271986 不同
+- *Silvicultrix pulchella*：学名条目 Q27075175 与带 eBird 代码 gobcht1 的条目 Q1268820 不同
+- *Guyramemua affine*：学名条目 Q137351635 与带 eBird 代码 chafly3 的条目 Q27075148 不同
+- *Heteroxolmis dominicana*：学名条目 Q27075171 与带 eBird 代码 bawmon3 的条目 Q841112 不同
+- *Syrtidicola fluviatilis*：学名条目 Q117255697 与带 eBird 代码 ligtyr1 的条目 Q1264466 不同
+- *Nengetus cinereus*：学名条目 Q117255729 与带 eBird 代码 grymon1 的条目 Q258215 不同
+- *Euchrepomis sharpei*：学名条目 Q906481 与带 eBird 代码 yerant1 的条目 Q27075130 不同
+- *Formicivora acutirostris*：学名条目 Q28919214 与带 eBird 代码 parant1 的条目 Q780693 不同
+- *Cercomacroides fuscicauda*：学名条目 Q55111997 与带 eBird 代码 blaant5 的条目 Q20720985 不同
+- *Myrmoderus ruficauda*：学名条目 Q28864172 与带 eBird 代码 scaant3 的条目 Q581571 不同
+- *Myrmelastes schistaceus*：学名条目 Q28910291 与带 eBird 代码 slcant3 的条目 Q752015 不同
+- *Myrmelastes caurensis*：学名条目 Q28884441 与带 eBird 代码 cauant2 的条目 Q1269514 不同
+- *Hafferia immaculata*：学名条目 Q28863745 与带 eBird 代码 immant1 的条目 Q1038313 不同
+- *Dendroma erythroptera*：学名条目 Q117255429 与带 eBird 代码 chwfog1 的条目 Q1266398 不同
+- *Dendroma rufa*：学名条目 Q117255428 与带 eBird 代码 bffgle 的条目 Q1266551 不同
+- *Automolus subulatus*：学名条目 Q28845658 与带 eBird 代码 strwoo4 的条目 Q1038744 不同
+- *Limnoctites sulphuriferus*：学名条目 Q117255438 与带 eBird 代码 sutspi1 的条目 Q1261766 不同
+- *Mazaria propinqua*：学名条目 Q28919231 与带 eBird 代码 whbspi1 的条目 Q1263871 不同
+- *Neosericornis citreogularis*：学名条目 Q62454902 与带 eBird 代码 yetscr1 的条目 Q867679 不同
+- *Aethomyias nigrorufus*：学名条目 Q62395501 与带 eBird 代码 bimwar1 的条目 Q2225063 不同
+- *Pinarostola cinerea*：只有 eBird 代码 marhon1 指向 Q787260（Pycnopygius cinereus），学名不同
+- *Foulehaio taviunensis*：学名条目 Q27075222 与带 eBird 代码 norwah1 的条目 Q21004435 不同
+- *Garritornis isidorei*：学名条目 Q27075279 与带 eBird 代码 negbab1 的条目 Q911832 不同
+- *Ceblepyris graueri*：学名条目 Q28834716 与带 eBird 代码 gracus1 的条目 Q3231535 不同
+- *Ceblepyris caesius*：学名条目 Q28831561 与带 eBird 代码 grycus1 的条目 Q869051 不同
+- *Celebesica abbotti*：学名条目 Q28831520 与带 eBird 代码 pygcus1 的条目 Q10744716 不同
+- *Edolisoma anale*：学名条目 Q28831527 与带 eBird 代码 neccus1 的条目 Q932752 不同
+- *Edolisoma ostentum*：学名条目 Q28836570 与带 eBird 代码 whwcus1 的条目 Q2347744 不同
+- *Edolisoma coerulescens*：学名条目 Q28832183 与带 eBird 代码 blacus1 的条目 Q3040211 不同
+- *Edolisoma melas*：学名条目 Q28836447 与带 eBird 代码 negcus1 的条目 Q10757973 不同
+- *Melloria quoyi*：学名条目 Q27907725 与带 eBird 代码 blabut1 的条目 Q2669160 不同
+- *Bocagia minuta*：学名条目 Q27075300 与带 eBird 代码 martch2 的条目 Q3728494 不同
+- *Chlorophoneus bocagei*：学名条目 Q27075294 与带 eBird 代码 gygbus1 的条目 Q1312414 不同
+- *Chlorophoneus sulfureopectus*：学名条目 Q27075295 与带 eBird 代码 subbus1 的条目 Q1305124 不同
+- *Chlorophoneus olivaceus*：学名条目 Q27075293 与带 eBird 代码 olibus1 的条目 Q1315068 不同
+- *Chlorophoneus multicolor*：学名条目 Q27075291 与带 eBird 代码 macbus2 的条目 Q1314628 不同
+- *Chlorophoneus nigrifrons*：学名条目 Q27075292 与带 eBird 代码 blfbus1 的条目 Q3729712 不同
+- *Chlorophoneus kupeensis*：学名条目 Q27075290 与带 eBird 代码 mtkbus1 的条目 Q1315079 不同
+- *Oriolus consanguineus*：学名条目 Q31874644 与带 eBird 代码 bacori1 的条目 Q1585920 不同
+- *Pachycephala calliope*：学名条目 Q131154522 与带 eBird 代码 rubwhi1 的条目 Q1923214 不同
+- *Pomarea maupitiensis*：学名条目 Q117256213 与带 eBird 代码 maumon1 的条目 Q1439640 不同
+- *Lophorina superba*：学名条目 Q691336 与带 eBird 代码 vosbop1 的条目 Q55608552 不同
+- *Lophorina latipennis*：学名条目 Q129811437 与带 eBird 代码 grsbop1 的条目 Q691336 不同
+- *Megalampitta gigantea*：学名条目 Q27075333 与带 eBird 代码 gremel1 的条目 Q1852439 不同
+- *Urolestes melanoleucus*：学名条目 Q1086560 与带 eBird 代码 magshr1 的条目 Q50272172 不同
+- *Cyanocorax colliei*：学名条目 Q28823055 与带 eBird 代码 btmjay 的条目 Q1586267 不同
+- *Cyanocorax formosus*：学名条目 Q28823117 与带 eBird 代码 wtmjay1 的条目 Q958459 不同
+- *Cyanocorax morio*：学名条目 Q28872863 与带 eBird 代码 brnjay 的条目 Q2667717 不同
+- *Cyanocorax coeruleus*：学名条目 Q55119113 与带 eBird 代码 azujay1 的条目 Q794340 不同
+- *Coloeus monedula*：学名条目 Q25345384 与带 eBird 代码 eurjac 的条目 Q25394 不同
+- *Cryptomicroeca flaviventris*：学名条目 Q28840248 与带 eBird 代码 yebrob1 的条目 Q1587841 不同
+- *Leucophantes brachyurus*：只有 eBird 代码 blcrob1 指向 Q958493（Poecilodryas brachyura），学名不同
+- *Chelidorhynx hypoxanthus*：学名条目 Q117256343 与带 eBird 代码 yebfan1 的条目 Q1314703 不同
+- *Oreolais pulcher*：学名条目 Q27075508 与带 eBird 代码 blcapa2 的条目 Q2225640 不同
+- *Helopsaltes amnicola*：学名条目 Q62168610 与带 eBird 代码 sakwar1 的条目 Q12262524 不同
+- *Helopsaltes pryeri*：学名条目 Q62168661 与带 eBird 代码 margra1 的条目 Q21976264 不同
+- *Helopsaltes pleskei*：学名条目 Q62168788 与带 eBird 代码 plewar1 的条目 Q1203008 不同
+- *Helopsaltes ochotensis*：学名条目 Q62168792 与带 eBird 代码 migwar 的条目 Q1585356 不同
+- *Helopsaltes certhiola*：学名条目 Q62168711 与带 eBird 代码 pagwar1 的条目 Q1345750 不同
+- *Locustella alfredi*：学名条目 Q62168513 与带 eBird 代码 baswar1 的条目 Q768711 不同
+- *Schoenicola striatus*：学名条目 Q62132065 与带 eBird 代码 brigra2 的条目 Q1587268 不同
+- *Catriscus brevirostris*：学名条目 Q62131914 与带 eBird 代码 fatgra1 的条目 Q3726383 不同
+- *Bradypterus seebohmi*：学名条目 Q4818376 与带 eBird 代码 gryemt1 的条目 Q651774 不同
+- *Poodytes albolimbatus*：学名条目 Q28856942 与带 eBird 代码 flrgra1 的条目 Q3726346 不同
+- *Poodytes carteri*：学名条目 Q26935238 与带 eBird 代码 spibir1 的条目 Q1301366 不同
+- *Poodytes gramineus*：学名条目 Q28856991 与带 eBird 代码 litgra1 的条目 Q1591383 不同
+- *Poodytes rufescens*：学名条目 Q28819554 与带 eBird 代码 chifer1 的条目 Q913105 不同
+- *Poodytes punctatus*：学名条目 Q25245251 与带 eBird 代码 fernbi1 的条目 Q25245111 不同
+- *Cincloramphus cruralis*：学名条目 Q2225404 与带 eBird 代码 broson1 的条目 Q27075504 不同
+- *Cincloramphus llaneae*：学名条目 Q62132129 与带 eBird 代码 bouthi1 的条目 Q3316816 不同
+- *Cincloramphus bivittatus*：学名条目 Q56257530 与带 eBird 代码 bubbus1 的条目 Q1586068 不同
+- *Cincloramphus mathewsi*：学名条目 Q1591354 与带 eBird 代码 rufson1 的条目 Q27075502 不同
+- *Cincloramphus turipavae*：学名条目 Q117256899 与带 eBird 代码 guathi1 的条目 Q28370539 不同
+- *Cincloramphus mariae*：只有 eBird 代码 necgra1 指向 Q2667911（Megalurulus mariei），学名不同
+- *Cincloramphus rufus*：学名条目 Q62132462 与带 eBird 代码 lolwar1 的条目 Q21965838 不同
+- *Neophedina cincta*：学名条目 Q28881582 与带 eBird 代码 banmar1 的条目 Q1589557 不同
+- *Hirundo javanica*：学名条目 Q31874703 与带 eBird 代码 pacswa1 的条目 Q767050 不同
+- *Atronanus fuliginosus*：学名条目 Q83028819 与带 eBird 代码 forswa2 的条目 Q27075448 不同
+- *Aegithalos exilis*：学名条目 Q62266774 与带 eBird 代码 pygtit1 的条目 Q73661 不同
+- *Hemitesia neumanni*：学名条目 Q3315804 与带 eBird 代码 neuwar1 的条目 Q27075475 不同
+- *Horornis canturians*：学名条目 Q28828076 与带 eBird 代码 manbuw1 的条目 Q22109969 不同
+- *Phylloscopus nesophilus*：学名条目 Q107722605 与带 eBird 代码 sulwar1 的条目 Q3727716 不同
+- *Phylloscopus poliocephalus*：学名条目 Q3318101 与带 eBird 代码 islwar1 的条目 Q27075479 不同
+- *Microtarsus melanoleucos*：学名条目 Q28874564 与带 eBird 代码 bawbul2 的条目 Q764400 不同
+- *Microtarsus melanocephalos*：只有 eBird 代码 blhbul1 指向 Q28873180（Brachypodius atriceps），学名不同
+- *Rubigula squamata*：只有 eBird 代码 scbbul1 指向 Q1061928（Pycnonotus squamatus），学名不同
+- *Nok hualon*：学名条目 Q62267545 与带 eBird 代码 bafbul1 的条目 Q781347 不同
+- *Hypsipetes platenae*：学名条目 Q83018169 与带 eBird 代码 sangob1 的条目 Q49605145 不同
+- *Hypsipetes aureus*：学名条目 Q83011319 与带 eBird 代码 toggob1 的条目 Q49605150 不同
+- *Hypsipetes chloris*：学名条目 Q83030009 与带 eBird 代码 halgob1 的条目 Q49605154 不同
+- *Hypsipetes lucasi*：学名条目 Q83011774 与带 eBird 代码 obigob1 的条目 Q49605159 不同
+- *Hypsipetes mysticalis*：学名条目 Q82959389 与带 eBird 代码 golbul4 的条目 Q10732184 不同
+- *Curruca conspicillata*：学名条目 Q110257518 与带 eBird 代码 spewar2 的条目 Q757121 不同
+- *Paradoxornis aemodius*：只有 eBird 代码 grepar1 指向 Q278124（Conostoma aemodium），学名不同
+- *Paradoxornis unicolor*：学名条目 Q1589589 与带 eBird 代码 bropar1 的条目 Q27075556 不同
+- *Paradoxornis paradoxus*：学名条目 Q1314715 与带 eBird 代码 thtpar1 的条目 Q27075555 不同
+- *Paradoxornis ruficeps*：学名条目 Q110257526 与带 eBird 代码 ruhpar3 的条目 Q12266298 不同
+- *Paradoxornis bakeri*：学名条目 Q3315097 与带 eBird 代码 ruhpar2 的条目 Q27075568 不同
+- *Paradoxornis margaritae*：学名条目 Q4920112 与带 eBird 代码 bkhpar1 的条目 Q27075571 不同
+- *Paradoxornis gularis*：学名条目 Q3314311 与带 eBird 代码 gyhpar3 的条目 Q27075570 不同
+- *Parayuhina diademata*：学名条目 Q110257345 与带 eBird 代码 whcyuh1 的条目 Q3123938 不同
+- *Staphida castaniceps*：学名条目 Q110257343 与带 eBird 代码 stryuh1 的条目 Q1037895 不同
+- *Heleia pinaiae*：学名条目 Q28854517 与带 eBird 代码 gyhwhe1 的条目 Q3177497 不同
+- *Heleia javanica*：学名条目 Q28854396 与带 eBird 代码 jgtwhe1 的条目 Q73950 不同
+- *Heleia squamifrons*：学名条目 Q28866960 与带 eBird 代码 pyweye1 的条目 Q863095 不同
+- *Heleia goodfellowi*：学名条目 Q28848324 与带 eBird 代码 minwhe1 的条目 Q1589867 不同
+- *Heleia squamiceps*：学名条目 Q28856071 与带 eBird 代码 sthwhe1 的条目 Q3177489 不同
+- *Heleia wallacei*：学名条目 Q28919235 与带 eBird 代码 ysweye1 的条目 Q2226217 不同
+- *Heleia dohertyi*：学名条目 Q28848212 与带 eBird 代码 dacwhe1 的条目 Q1302760 不同
+- *Heleia superciliaris*：学名条目 Q28856097 与带 eBird 代码 whbwhe1 的条目 Q1302592 不同
+- *Zosterops emiliae*：学名条目 Q62075760 与带 eBird 代码 mouble1 的条目 Q863185 不同
+- *Zosterops lacertosus*：学名条目 Q28920171 与带 eBird 代码 saweye2 的条目 Q1310611 不同
+- *Zosterops superciliosus*：学名条目 Q28920162 与带 eBird 代码 beweye1 的条目 Q2226296 不同
+- *Schoeniparus variegaticeps*：学名条目 Q28807569 与带 eBird 代码 gofful2 的条目 Q1037581 不同
+- *Pellorneum cinereiceps*：学名条目 Q110257314 与带 eBird 代码 ashbab1 的条目 Q730075 不同
+- *Actinodura strigula*：学名条目 Q62127202 与带 eBird 代码 chtmin1 的条目 Q2669195 不同
+- *Leioptila annectens*：学名条目 Q28843600 与带 eBird 代码 rubsib1 的条目 Q966162 不同
+- *Argya altirostris*：学名条目 Q28921354 与带 eBird 代码 irabab1 的条目 Q1586377 不同
+- *Turdoides atripennis*：学名条目 Q62092369 与带 eBird 代码 capbab1 的条目 Q2668060 不同
+- *Turdoides gilberti*：学名条目 Q62092046 与带 eBird 代码 wtmbab1 的条目 Q3117521 不同
+- *Turdoides chapini*：学名条目 Q62092201 与带 eBird 代码 chmbab1 的条目 Q3176280 不同
+- *Ianthocincla maxima*：学名条目 Q62090139 与带 eBird 代码 gialau1 的条目 Q1590504 不同
+- *Pterorhinus gularis*：学名条目 Q62080133 与带 eBird 代码 ruvlau1 的条目 Q41001365 不同
+- *Pterorhinus galbanus*：学名条目 Q62079927 与带 eBird 代码 yetlau1 的条目 Q3315589 不同
+- *Pterorhinus mitratus*：学名条目 Q62076718 与带 eBird 代码 chclau3 的条目 Q1591310 不同
+- *Pterorhinus treacheri*：学名条目 Q62078422 与带 eBird 代码 chhlau1 的条目 Q7038481 不同
+- *Pterorhinus ruficollis*：学名条目 Q62076331 与带 eBird 代码 runlau1 的条目 Q41001384 不同
+- *Pterorhinus nuchalis*：学名条目 Q62076412 与带 eBird 代码 chblau1 的条目 Q3232985 不同
+- *Pterorhinus perspicillatus*：学名条目 Q62086222 与带 eBird 代码 maslau1 的条目 Q3098478 不同
+- *Pterorhinus sannio*：学名条目 Q62086090 与带 eBird 代码 whblau1 的条目 Q3315640 不同
+- *Pterorhinus pectoralis*：学名条目 Q62080761 与带 eBird 代码 gnlthr 的条目 Q3098479 不同
+- *Pterorhinus waddelli*：学名条目 Q62083675 与带 eBird 代码 giabab1 的条目 Q3315651 不同
+- *Pterorhinus koslowi*：学名条目 Q62083873 与带 eBird 代码 tibbab1 的条目 Q3315227 不同
+- *Pterorhinus albogularis*：学名条目 Q62080274 与带 eBird 代码 whtlau1 的条目 Q62080286 不同
+- *Pterorhinus caerulatus*：学名条目 Q62081381 与带 eBird 代码 gyslau 的条目 Q3315062 不同
+- *Corthylio calendula*：学名条目 Q117266977 与带 eBird 代码 ruckin 的条目 Q576050 不同
+- *Buphagus erythroryncha*：学名条目 Q141570630 与带 eBird 代码 reboxp1 的条目 Q1081513 不同
+- *Notopholia corusca*：学名条目 Q28846393 与带 eBird 代码 bbgsta1 的条目 Q27075600 不同
+- *Stizorhina fraseri*：学名条目 Q27075620 与带 eBird 代码 rufthr1 的条目 Q748147 不同
+- *Turdus mupinensis*：学名条目 Q80853 与带 eBird 代码 chithr2 的条目 Q28921009 不同
+- *Turdus litsitsirupa*：学名条目 Q10809432 与带 eBird 代码 grothr1 的条目 Q557656 不同
+- *Turdus turdoides*：学名条目 Q117258357 与带 eBird 代码 sulthr1 的条目 Q645591 不同
+- *Agricola pallidus*：学名条目 Q28819634 与带 eBird 代码 palfly2 的条目 Q1318056 不同
+- *Namibornis herero*：学名条目 Q1585895 与带 eBird 代码 hercha1 的条目 Q28864799 不同
+- *Empidornis semipartitus*：学名条目 Q1302067 与带 eBird 代码 silver1 的条目 Q28840042 不同
+- *Myopornis boehmi*：学名条目 Q137793994 与带 eBird 代码 boefly1 的条目 Q28859791 不同
+- *Artomyias ussheri*：学名条目 Q28861801 与带 eBird 代码 ussfly1 的条目 Q28861783 不同
+- *Artomyias fuliginosa*：学名条目 Q40981557 与带 eBird 代码 soofly1 的条目 Q28860377 不同
+- *Bradornis comitatus*：学名条目 Q28860336 与带 eBird 代码 dubfly2 的条目 Q2226068 不同
+- *Leucoptilon concretum*：学名条目 Q117258362 与带 eBird 代码 whtfly2 的条目 Q3315197 不同
+- *Sholicola major*：学名条目 Q61995431 与带 eBird 代码 whbsho1 的条目 Q3315840 不同
+- *Sholicola albiventris*：学名条目 Q61995467 与带 eBird 代码 whbsho3 的条目 Q3726933 不同
+- *Eumyias hoevelli*：学名条目 Q117258430 与带 eBird 代码 blffly1 的条目 Q1305292 不同
+- *Eumyias hyacinthinus*：学名条目 Q117258428 与带 eBird 代码 tibfly2 的条目 Q3315043 不同
+- *Cyornis whitei*：学名条目 Q40990975 与带 eBird 代码 hibfly1 的条目 Q116986 不同
+- *Dessonornis humeralis*：学名条目 Q28837085 与带 eBird 代码 wtrcha1 的条目 Q3643669 不同
+- *Dessonornis caffer*：学名条目 Q28837056 与带 eBird 代码 carcha1 的条目 Q2673576 不同
+- *Dessonornis archeri*：学名条目 Q28837044 与带 eBird 代码 arrcha1 的条目 Q3728578 不同
+- *Dessonornis anomalus*：学名条目 Q55115630 与带 eBird 代码 ofrcha1 的条目 Q3315434 不同
+- *Heteroxenicus stellatus*：学名条目 Q27075661 与带 eBird 代码 gousho1 的条目 Q2668519 不同
+- *Monticola semirufus*：学名条目 Q27075689 与带 eBird 代码 wwccha1 的条目 Q2225605 不同
+- *Emarginata schlegelii*：学名条目 Q27075692 与带 eBird 代码 karcha1 的条目 Q2225339 不同
+- *Emarginata sinuata*：学名条目 Q27075690 与带 eBird 代码 siccha1 的条目 Q1934942 不同
+- *Emarginata tractrac*：学名条目 Q27075693 与带 eBird 代码 tracha1 的条目 Q842020 不同
+- *Pinarochroa sordida*：学名条目 Q27075695 与带 eBird 代码 moocha1 的条目 Q859644 不同
+- *Myrmecocichla monticola*：学名条目 Q27075698 与带 eBird 代码 mouwhe1 的条目 Q672928 不同
+- *Oenanthe hispanica*：同名多个条目：Q385723, Q108186042
+- *Oenanthe albifrons*：学名条目 Q27075700 与带 eBird 代码 wfbcha1 的条目 Q2229962 不同
+- *Oenanthe melanura*：学名条目 Q12265004 与带 eBird 代码 blacks1 的条目 Q247159 不同
+- *Oenanthe familiaris*：学名条目 Q12265001 与带 eBird 代码 famcha1 的条目 Q842013 不同
+- *Oenanthe dubia*：学名条目 Q17131784 与带 eBird 代码 somcha1 的条目 Q2225631 不同
+- *Oenanthe scotocerca*：学名条目 Q27075701 与带 eBird 代码 brtcha1 的条目 Q2225618 不同
+- *Oenanthe fusca*：学名条目 Q12265002 与带 eBird 代码 indcha1 的条目 Q259052 不同
+- *Pachyglossa olivacea*：只有 eBird 代码 olbflo1 指向 Q1301109（Prionochilus olivaceus），学名不同
+- *Pachyglossa propria*：只有 eBird 代码 whiflo1 指向 Q1543711（Dicaeum proprium），学名不同
+- *Pachyglossa chrysorrhea*：只有 eBird 代码 yevflo1 指向 Q1092295（Dicaeum chrysorrheum），学名不同
+- *Pachyglossa melanozantha*：只有 eBird 代码 yebflo1 指向 Q3026847（Dicaeum melanoxanthum），学名不同
+- *Pachyglossa agilis*：只有 eBird 代码 thbflo1 指向 Q73848（Dicaeum agile），学名不同
+- *Kurochkinegramma hypogrammicum*：学名条目 Q28846363 与带 eBird 代码 punsun1 的条目 Q10734699 不同
+- *Leptocoma aspasia*：学名条目 Q27075709 与带 eBird 代码 blksun1 的条目 Q605580 不同
+- *Chloropsis cochinchinensis*：学名条目 Q430467 与带 eBird 代码 buwlea2 的条目 Q27632914 不同
+- *Chloropsis moluccensis*：学名条目 Q31874662 与带 eBird 代码 blwlea1 的条目 Q430467 不同
+- *Euplectes anomalus*：学名条目 Q40995020 与带 eBird 代码 botwea1 的条目 Q892160 不同
+- *Emblema modestum*：学名条目 Q138020531 与带 eBird 代码 plhfin1 的条目 Q191593 不同
+- *Emblema ruficauda*：学名条目 Q138011744 与带 eBird 代码 stafin1 的条目 Q864047 不同
+- *Spermestes griseicapilla*：学名条目 Q117258687 与带 eBird 代码 gyhsil1 的条目 Q28847814 不同
+- *Lepidopygia nana*：学名条目 Q27075728 与带 eBird 代码 madmun1 的条目 Q56937 不同
+- *Padda oryzivora*：学名条目 Q500278 与带 eBird 代码 javspa 的条目 Q25185408 不同
+- *Padda fuscata*：学名条目 Q795362 与带 eBird 代码 timspa4 的条目 Q27075730 不同
+- *Chloebia gouldiae*：学名条目 Q752146 与带 eBird 代码 goufin3 的条目 Q21973758 不同
+- *Erythrura cyaneovirens*：学名条目 Q776048 与带 eBird 代码 roypar1 的条目 Q629462 不同
+- *Brunhilda erythronotos*：学名条目 Q117258832 与带 eBird 代码 blcwax1 的条目 Q221848 不同
+- *Brunhilda charmosyna*：学名条目 Q117258830 与带 eBird 代码 rerwax1 的条目 Q56899 不同
+- *Glaucestrilda caerulescens*：学名条目 Q117258834 与带 eBird 代码 lavwax 的条目 Q385814 不同
+- *Glaucestrilda thomensis*：学名条目 Q117258897 与带 eBird 代码 cinwax1 的条目 Q256018 不同
+- *Glaucestrilda perreini*：学名条目 Q117258837 与带 eBird 代码 bltwax1 的条目 Q998505 不同
+- *Onychostruthus taczanowskii*：学名条目 Q27075719 与带 eBird 代码 whrsno1 的条目 Q1301514 不同
+- *Pyrgilauda theresae*：学名条目 Q27075723 与带 eBird 代码 afgsno1 的条目 Q1302731 不同
+- *Pyrgilauda ruficollis*：学名条目 Q27075721 与带 eBird 代码 runsno1 的条目 Q1303311 不同
+- *Pyrgilauda davidiana*：学名条目 Q27075720 与带 eBird 代码 pedsno1 的条目 Q1301609 不同
+- *Pyrgilauda blanfordi*：学名条目 Q27075722 与带 eBird 代码 blasno1 的条目 Q1303695 不同
+- *Gymnoris xanthocollis*：学名条目 Q25586001 与带 eBird 代码 chspet1 的条目 Q1317318 不同
+- *Gymnoris dentata*：学名条目 Q27075715 与带 eBird 代码 buspet1 的条目 Q1305703 不同
+- *Gymnoris pyrgita*：学名条目 Q27075716 与带 eBird 代码 yespet1 的条目 Q1316545 不同
+- *Gymnoris superciliaris*：学名条目 Q27075714 与带 eBird 代码 yetpet1 的条目 Q760283 不同
+- *Motacilla bocagii*：学名条目 Q61968138 与带 eBird 代码 boclon2 的条目 Q1591490 不同
+- *Macronyx sharpei*：学名条目 Q21964223 与带 eBird 代码 shalon1 的条目 Q390081 不同
+- *Hesperiphona vespertina*：学名条目 Q25167830 与带 eBird 代码 evegro 的条目 Q318913 不同
+- *Hesperiphona abeillei*：学名条目 Q118917 与带 eBird 代码 hoogro1 的条目 Q20783006 不同
+- *Loxops mana*：学名条目 Q27075772 与带 eBird 代码 hawcre 的条目 Q1923434 不同
+- *Schoeniclus rutilus*：只有 eBird 代码 chebun1 指向 Q427182（Emberiza rutila），学名不同
+- *Schoeniclus aureolus*：只有 eBird 代码 yebbun 指向 Q335535（Emberiza aureola），学名不同
+- *Schoeniclus pusillus*：只有 eBird 代码 litbun 指向 Q216855（Emberiza pusilla），学名不同
+- *Schoeniclus rusticus*：只有 eBird 代码 rusbun 指向 Q286809（Emberiza rustica），学名不同
+- *Schoeniclus sulphuratus*：只有 eBird 代码 yelbun1 指向 Q1588177（Emberiza sulphurata），学名不同
+- *Schoeniclus personatus*：只有 eBird 代码 bkfbun2 指向 Q55130401（Emberiza personata），学名不同
+- *Schoeniclus spodocephalus*：只有 eBird 代码 bkfbun1 指向 Q1190674（Emberiza spodocephala），学名不同
+- *Melophus melanocephalus*：只有 eBird 代码 blhbun1 指向 Q334183（Emberiza melanocephala），学名不同
+- *Ammospiza maritima*：学名条目 Q28812582 与带 eBird 代码 seaspa 的条目 Q1588145 不同
+- *Ammospiza nelsoni*：学名条目 Q28812662 与带 eBird 代码 nstspa 的条目 Q2668559 不同
+- *Leistes bellicosus*：学名条目 Q28917181 与带 eBird 代码 permea1 的条目 Q2668277 不同
+- *Leistes defilippii*：学名条目 Q28874524 与带 eBird 代码 pammea1 的条目 Q3181354 不同
+- *Leistes loyca*：学名条目 Q28917268 与带 eBird 代码 lotmea1 的条目 Q2668377 不同
+- *Icterus bullockiorum*：学名条目 Q81902153 与带 eBird 代码 bulori 的条目 Q851912 不同
+- *Leiothlypis peregrina*：学名条目 Q126925 与带 eBird 代码 tenwar 的条目 Q23727086 不同
+- *Leiothlypis ruficapilla*：学名条目 Q27075894 与带 eBird 代码 naswar 的条目 Q58294956 不同
+- *Leiothlypis crissalis*：学名条目 Q27075890 与带 eBird 代码 colwar 的条目 Q58295172 不同
+- *Leiothlypis virginiae*：学名条目 Q25114987 与带 eBird 代码 virwar 的条目 Q25114989 不同
+- *Leiothlypis luciae*：学名条目 Q27075892 与带 eBird 代码 lucwar 的条目 Q58294954 不同
+- *Euthlypis lachrymosa*：学名条目 Q657033 与带 eBird 代码 fatwar 的条目 Q27075999 不同
+- *Driophlox fuscicauda*：学名条目 Q136556239 与带 eBird 代码 rtatan1 的条目 Q1588596 不同
+- *Conirostrum binghami*：学名条目 Q28867113 与带 eBird 代码 giacon1 的条目 Q1065486 不同
+- *Sicalis uropygialis*：只有 eBird 代码 bryfin1 指向 Q3117605（Sicalis uropigyalis），学名不同
+- *Idiopsar erythronotus*：学名条目 Q28869927 与带 eBird 代码 wtsfin1 的条目 Q1304707 不同
+- *Idiopsar speculifer*：学名条目 Q117259795 与带 eBird 代码 wwdfin1 的条目 Q763302 不同
+- *Geospizopsis plebejus*：学名条目 Q28870002 与带 eBird 代码 absfin1 的条目 Q1316810 不同
+- *Haplospiza rustica*：学名条目 Q1586058 与带 eBird 代码 slafin1 的条目 Q28842329 不同
+- *Saltatricula atricollis*：学名条目 Q58295209 与带 eBird 代码 bltsal1 的条目 Q2226436 不同
+- *Rhopospina fruticeti*：学名条目 Q28869989 与带 eBird 代码 mosfin1 的条目 Q1304677 不同
+- *Rhopospina carbonaria*：学名条目 Q28869863 与带 eBird 代码 casfin1 的条目 Q1304884 不同
+- *Rhopospina alaudina*：学名条目 Q28869843 与带 eBird 代码 btsfin1 的条目 Q1305129 不同
+- *Poospiza baeri*：学名条目 Q28830042 与带 eBird 代码 tumfin1 的条目 Q959937 不同
+- *Poospizopsis caesar*：学名条目 Q28871828 与带 eBird 代码 cbmfin1 的条目 Q2226550 不同
+- *Poospizopsis hypocondria*：学名条目 Q28871837 与带 eBird 代码 rswfin1 的条目 Q27076045 不同
+- *Microspingus lateralis*：学名条目 Q28871876 与带 eBird 代码 rrwfin1 的条目 Q600992 不同
+- *Microspingus cabanisi*：学名条目 Q28871820 与带 eBird 代码 gytwaf1 的条目 Q1923788 不同
+- *Microspingus alticola*：学名条目 Q28871817 与带 eBird 代码 ptwfin1 的条目 Q2226369 不同
+- *Microspingus trifasciatus*：学名条目 Q28843296 与带 eBird 代码 thshem1 的条目 Q286173 不同
+- *Microspingus melanoleucus*：学名条目 Q28871883 与带 eBird 代码 bcwfin2 的条目 Q2963859 不同
+- *Microspingus cinereus*：学名条目 Q28871834 与带 eBird 代码 ciwfin1 的条目 Q2668311 不同
+- *Kleinothraupis reyi*：学名条目 Q28843242 与带 eBird 代码 gychem1 的条目 Q3182680 不同
+- *Kleinothraupis atropileus*：学名条目 Q28842913 与带 eBird 代码 blchem1 的条目 Q2628952 不同
+- *Kleinothraupis calophrys*：学名条目 Q28842930 与带 eBird 代码 orbhem1 的条目 Q1589981 不同
+- *Kleinothraupis parodii*：学名条目 Q28843238 与带 eBird 代码 parhem1 的条目 Q3182659 不同
+- *Sphenopsis frontalis*：学名条目 Q28843119 与带 eBird 代码 olehem1 的条目 Q1035250 不同
+- *Thlypopsis pyrrhocoma*：学名条目 Q28878297 与带 eBird 代码 chhtan1 的条目 Q1042599 不同
+- *Phonipara canora*：学名条目 Q28920968 与带 eBird 代码 cubgra 的条目 Q1586876 不同
+- *Melanospiza bicolor*：学名条目 Q28920954 与带 eBird 代码 bkfgra 的条目 Q941987 不同
+- *Asemospiza fuliginosa*：学名条目 Q28920981 与带 eBird 代码 soogra2 的条目 Q3114747 不同
+- *Asemospiza obscura*：学名条目 Q28920993 与带 eBird 代码 ducgra2 的条目 Q1589815 不同
+- *Sporathraupis cyanocephala*：学名条目 Q28920859 与带 eBird 代码 blctan2 的条目 Q1588090 不同
+- *Tephrophilus wetmorei*：学名条目 Q28822735 与带 eBird 代码 mamtan1 的条目 Q2668302 不同
+- *Cnemathraupis eximia*：学名条目 Q28822679 与带 eBird 代码 bcmtan1 的条目 Q1480653 不同
+- *Ixothraupis varia*：学名条目 Q58294969 与带 eBird 代码 dottan1 的条目 Q2879302 不同
+- *Ixothraupis rufigula*：学名条目 Q58294991 与带 eBird 代码 ruttan1 的条目 Q2934254 不同
+- *Ixothraupis punctata*：学名条目 Q58295189 与带 eBird 代码 spotan1 的条目 Q918311 不同
+- *Ixothraupis xanthogastra*：学名条目 Q58295007 与带 eBird 代码 yebtan2 的条目 Q384361 不同
+- *Ixothraupis guttata*：学名条目 Q58295004 与带 eBird 代码 spetan1 的条目 Q2637638 不同
+
+## Wikidata 概念不同（split-lump / narrower / broader）：299
+
+- *Melanitta fusca*：eBird 代码不同：AviList whwsco3，Wikidata whwsco（分类概念可能有拆分/合并）
+- *Melanitta deglandi*：eBird 代码不同：AviList whwsco2，Wikidata whwsco4（分类概念可能有拆分/合并）
+- *Sarkidiornis melanotos*：eBird 代码不同：AviList comduc2，Wikidata comduc1（分类概念可能有拆分/合并）
+- *Megapodius freycinet*：eBird 代码不同：AviList dusscr1，Wikidata dusscr2（分类概念可能有拆分/合并）
+- *Guttera pucherani*：eBird 代码不同：AviList cregui3，Wikidata cregui1（分类概念可能有拆分/合并）
+- *Rhizothera longirostris*：eBird 代码不同：AviList lobpar3，Wikidata lobpar1（分类概念可能有拆分/合并）
+- *Phasianus colchicus*：eBird 代码不同：AviList rinphe1，Wikidata rinphe（分类概念可能有拆分/合并）
+- *Crossoptilon crossoptilon*：eBird 代码不同：AviList whieap1，Wikidata whephe1（分类概念可能有拆分/合并）
+- *Lophura erythrophthalma*：eBird 代码不同：AviList crefir5，Wikidata crefir2（分类概念可能有拆分/合并）
+- *Lophura ignita*：eBird 代码不同：AviList crefir4，Wikidata crefir1（分类概念可能有拆分/合并）
+- *Scleroptila shelleyi*：eBird 代码不同：AviList shefra1，Wikidata shefra2（分类概念可能有拆分/合并）
+- *Coua ruficeps*：eBird 代码不同：AviList reccou2，Wikidata reccou1（分类概念可能有拆分/合并）
+- *Centropus superciliosus*：eBird 代码不同：AviList whbcou2，Wikidata whbcou1（分类概念可能有拆分/合并）
+- *Cacomantis variolosus*：eBird 代码不同：AviList brucuc3，Wikidata brucuc1（分类概念可能有拆分/合并）
+- *Macropygia doreya*：eBird 代码不同：AviList sulcud4，Wikidata sulcud1（分类概念可能有拆分/合并）
+- *Treron australis*：eBird 代码不同：AviList madgrp1，Wikidata magpig1（分类概念可能有拆分/合并）
+- *Goura scheepmakeri*：eBird 代码不同：AviList soucrp2，Wikidata socpig1（分类概念可能有拆分/合并）
+- *Ducula spilorrhoa*：eBird 代码不同：AviList torimp1，Wikidata toipig1（分类概念可能有拆分/合并）
+- *Ptilinopus solomonensis*：eBird 代码不同：AviList yebfrd2，Wikidata ybfdov1（分类概念可能有拆分/合并）
+- *Gallinula nesiotis*：eBird 代码不同：AviList trimoo2，Wikidata trimoo1（分类概念可能有拆分/合并）
+- *Porphyrio porphyrio*：人工复核：AviList Purple Swamphen lumps porphyrio + poliocephalus + others; sources keep Western Swamphen
+- *Numenius phaeopus*：eBird 代码不同：AviList whimbr5，Wikidata whimbr（分类概念可能有拆分/合并）
+- *Gallinago paraguaiae*：eBird 代码不同：AviList soasni2，Wikidata soasni1（分类概念可能有拆分/合并）
+- *Tringa semipalmata*：eBird 代码不同：AviList willet2，Wikidata willet1（分类概念可能有拆分/合并）
+- *Ortyxelos meiffrenii*：eBird 代码不同：AviList quailp1，Wikidata quail-1（分类概念可能有拆分/合并）
+- *Turnix hottentottus*：eBird 代码不同：AviList hotbut1，Wikidata hotbut2（分类概念可能有拆分/合并）
+- *Gygis alba*：eBird 代码不同：AviList whiter3，Wikidata whiter（分类概念可能有拆分/合并）
+- *Gelochelidon nilotica*：eBird 代码不同：AviList gubter2，Wikidata gubter1（分类概念可能有拆分/合并）
+- *Chroicocephalus novaehollandiae*：eBird 代码不同：AviList silgul2，Wikidata silgul1（分类概念可能有拆分/合并）
+- *Larus argentatus*：eBird 代码不同：AviList euhgul1，Wikidata hergul（分类概念可能有拆分/合并）
+- *Eudyptes chrysocome*：eBird 代码不同：AviList rocpen2，Wikidata rocpen1（分类概念可能有拆分/合并）
+- *Diomedea epomophora*：eBird 代码不同：AviList royalb2，Wikidata royalb1（分类概念可能有拆分/合并）
+- *Diomedea antipodensis*：eBird 代码不同：AviList antalb1，Wikidata wanalb2（分类概念可能有拆分/合并）
+- *Diomedea exulans*：eBird 代码不同：AviList wanalb1，Wikidata wanalb（分类概念可能有拆分/合并）
+- *Thalassarche chlororhynchos*：eBird 代码不同：AviList yenalb2，Wikidata yenalb（分类概念可能有拆分/合并）
+- *Puffinus assimilis*：eBird 代码不同：AviList litshe8，Wikidata litshe（分类概念可能有拆分/合并）
+- *Puffinus bailloni*：eBird 代码不同：AviList troshe5，Wikidata troshe1（分类概念可能有拆分/合并）
+- *Pachyptila salvini*：eBird 代码不同：AviList salpri2，Wikidata salpri1（分类概念可能有拆分/合并）
+- *Pterodroma feae*：eBird 代码不同：AviList feapet3，Wikidata feapet1（分类概念可能有拆分/合并）
+- *Theristicus melanopis*：eBird 代码不同：AviList bkfibi1，Wikidata blfibi1（分类概念可能有拆分/合并）
+- *Threskiornis aethiopicus*：eBird 代码不同：AviList sacibi2，Wikidata sacibi1（分类概念可能有拆分/合并）
+- *Butorides striata*：eBird 代码不同：AviList strher2，Wikidata strher（分类概念可能有拆分/合并）
+- *Antrostomus vociferus*：eBird 代码不同：AviList easwpw1，Wikidata whip-p1（分类概念可能有拆分/合并）
+- *Antrostomus cubanensis*：eBird 代码不同：AviList granig2，Wikidata granig1（分类概念可能有拆分/合并）
+- *Caprimulgus poliocephalus*：eBird 代码不同：AviList monnig1，Wikidata abynig1（分类概念可能有拆分/合并）
+- *Batrachostomus poliolophus*：eBird 代码不同：AviList shtfro3，Wikidata shtfro1（分类概念可能有拆分/合并）
+- *Chaetura chapmani*：eBird 代码不同：AviList chaswi2，Wikidata chaswi1（分类概念可能有拆分/合并）
+- *Apus affinis*：eBird 代码不同：AviList y00960，Wikidata litswi1（分类概念可能有拆分/合并）
+- *Aerodramus infuscatus*：eBird 代码不同：AviList molswi5，Wikidata molswi3（分类概念可能有拆分/合并）
+- *Aerodramus leucophaeus*：eBird 代码不同：AviList polswi2，Wikidata polswi1（分类概念可能有拆分/合并）
+- *Aerodramus fuciphagus*：eBird 代码不同：AviList y00731，Wikidata ednswi1（分类概念可能有拆分/合并）
+- *Schistes geoffroyi*：eBird 代码不同：AviList webhum1，Wikidata webhum2（分类概念可能有拆分/合并）
+- *Anthracothorax dominicus*：eBird 代码不同：AviList antman2，Wikidata antman1（分类概念可能有拆分/合并）
+- *Urochroa bougueri*：eBird 代码不同：AviList whthil2，Wikidata whthil1（分类概念可能有拆分/合并）
+- *Lophornis chalybeus*：eBird 代码不同：AviList fescoq3，Wikidata fescoq1（分类概念可能有拆分/合并）
+- *Heliangelus amethysticollis*：eBird 代码不同：AviList amtsun3，Wikidata amtsun1（分类概念可能有拆分/合并）
+- *Oreotrochilus estella*：eBird 代码不同：AviList andhil3，Wikidata andhil1（分类概念可能有拆分/合并）
+- *Patagona gigas*：eBird 代码不同：AviList giahum3，Wikidata giahum1（分类概念可能有拆分/合并）
+- *Trochilus polytmus*：eBird 代码不同：AviList stream2，Wikidata stream1（分类概念可能有拆分/合并）
+- *Tyto novaehollandiae*：eBird 代码不同：AviList ausmao7，Wikidata aumowl1（分类概念可能有拆分/合并）
+- *Ninox novaeseelandiae*：eBird 代码不同：AviList morepo2，Wikidata souboo2（分类概念可能有拆分/合并）
+- *Ninox squamipila*：eBird 代码不同：AviList hanboo2，Wikidata molhao4（分类概念可能有拆分/合并）
+- *Glaucidium gnoma*：人工复核：AviList Northern Pygmy Owl lumps californicum
+- *Otus rutilus*：eBird 代码不同：AviList madsco1，Wikidata masowl1（分类概念可能有拆分/合并）
+- *Ketupa blakistoni*：eBird 代码不同：AviList blafio4，Wikidata blfowl1（分类概念可能有拆分/合并）
+- *Pernis celebensis*：eBird 代码不同：AviList barhob1，Wikidata bahbuz1（分类概念可能有拆分/合并）
+- *Nisaetus cirrhatus*：eBird 代码不同：AviList y00839，Wikidata crehae1（分类概念可能有拆分/合并）
+- *Circus maillardi*：eBird 代码不同：AviList reuhar2，Wikidata reuhar1（分类概念可能有拆分/合并）
+- *Circus spilonotus*：eBird 代码不同：AviList easmah1，Wikidata eamhar1（分类概念可能有拆分/合并）
+- *Buteo augur*：eBird 代码不同：AviList augbuz2，Wikidata augbuz1（分类概念可能有拆分/合并）
+- *Trogon rufus*：eBird 代码不同：AviList bkttro6，Wikidata blttro2（分类概念可能有拆分/合并）
+- *Trogon elegans*：eBird 代码不同：AviList eletro2，Wikidata eletro（分类概念可能有拆分/合并）
+- *Lophoceros fasciatus*：eBird 代码不同：AviList afphor3，Wikidata afphor1（分类概念可能有拆分/合并）
+- *Horizocerus hartlaubi*：eBird 代码不同：AviList bkdhor1，Wikidata bldhor1（分类概念可能有拆分/合并）
+- *Horizocerus albocristatus*：eBird 代码不同：AviList whchor1，Wikidata whchor3（分类概念可能有拆分/合并）
+- *Coracias benghalensis*：eBird 代码不同：AviList indrol2，Wikidata indrol1（分类概念可能有拆分/合并）
+- *Merops orientalis*：eBird 代码不同：AviList grnbee3，Wikidata grbeat1（分类概念可能有拆分/合并）
+- *Alcedo euryzona*：eBird 代码不同：AviList bubkin2，Wikidata blbkin2（分类概念可能有拆分/合并）
+- *Ceyx lepidus*：eBird 代码不同：AviList varkin1，Wikidata vardwk4（分类概念可能有拆分/合并）
+- *Ceyx nigromaxilla*：eBird 代码不同：AviList guadwk1，Wikidata vardwk14（分类概念可能有拆分/合并）
+- *Ceyx meeki*：eBird 代码不同：AviList nosdwk1，Wikidata vardwk12（分类概念可能有拆分/合并）
+- *Cittura cyanotis*：eBird 代码不同：AviList lickin2，Wikidata lilkin1（分类概念可能有拆分/合并）
+- *Tanysiptera sylvia*：eBird 代码不同：AviList bubpak1，Wikidata bbpkin1（分类概念可能有拆分/合并）
+- *Tanysiptera galatea*：eBird 代码不同：AviList compak16，Wikidata copkin1（分类概念可能有拆分/合并）
+- *Todiramphus gambieri*：eBird 代码不同：AviList tuakin2，Wikidata mankin3（分类概念可能有拆分/合并）
+- *Psilopogon duvaucelii*：eBird 代码不同：AviList buebar2，Wikidata blebar1（分类概念可能有拆分/合并）
+- *Psilopogon chrysopogon*：eBird 代码不同：AviList gowbar2，Wikidata gowbar1（分类概念可能有拆分/合并）
+- *Pogoniulus pusillus*：eBird 代码不同：AviList reftin4，Wikidata reftin1（分类概念可能有拆分/合并）
+- *Pteroglossus torquatus*：eBird 代码不同：AviList colara2，Wikidata colara1（分类概念可能有拆分/合并）
+- *Indicator minor*：eBird 代码不同：AviList y00400，Wikidata leshon1（分类概念可能有拆分/合并）
+- *Meiglyptes tristis*：eBird 代码不同：AviList burwoo3，Wikidata burwoo1（分类概念可能有拆分/合并）
+- *Dinopium benghalense*：eBird 代码不同：AviList bkrfla1，Wikidata blrfla1（分类概念可能有拆分/合并）
+- *Campethera tullbergi*：eBird 代码不同：AviList tulwoo2，Wikidata tulwoo1（分类概念可能有拆分/合并）
+- *Celeus flavescens*：eBird 代码不同：AviList blcwoo4，Wikidata blcwoo2（分类概念可能有拆分/合并）
+- *Celeus undatus*：eBird 代码不同：AviList wavwoo5，Wikidata wavwoo1（分类概念可能有拆分/合并）
+- *Dryobates cathpharius*：eBird 代码不同：AviList crbwoo6，Wikidata crbwoo3（分类概念可能有拆分/合并）
+- *Poicephalus robustus*：eBird 代码不同：AviList bnnpar2，Wikidata brnpar1（分类概念可能有拆分/合并）
+- *Forpus xanthopterygius*：eBird 代码不同：AviList buwpar3，Wikidata blwpar4（分类概念可能有拆分/合并）
+- *Amazona autumnalis*：eBird 代码不同：AviList relpar10，Wikidata relpar（分类概念可能有拆分/合并）
+- *Pyrrhura picta*：eBird 代码不同：AviList paipar2，Wikidata paipar1（分类概念可能有拆分/合并）
+- *Psittacara wagleri*：eBird 代码不同：AviList scfpar2，Wikidata scfpar1（分类概念可能有拆分/合并）
+- *Eclectus roratus*：eBird 代码不同：AviList eclpar1，Wikidata eclpar（分类概念可能有拆分/合并）
+- *Tanygnathus sumatranus*：eBird 代码不同：AviList azrpar9，Wikidata azrpar1（分类概念可能有拆分/合并）
+- *Trichoglossus flavoviridis*：eBird 代码不同：AviList yaglor3，Wikidata yaglor1（分类概念可能有拆分/合并）
+- *Trichoglossus haematodus*：eBird 代码不同：AviList railor4，Wikidata railor1（分类概念可能有拆分/合并）
+- *Cymbirhynchus macrorhynchos*：eBird 代码不同：AviList barbro3，Wikidata barbro1（分类概念可能有拆分/合并）
+- *Serilophus lunatus*：eBird 代码不同：AviList sibbro3，Wikidata sibbro1（分类概念可能有拆分/合并）
+- *Erythropitta celebensis*：eBird 代码不同：AviList sulpit4，Wikidata sulpit3（分类概念可能有拆分/合并）
+- *Erythropitta novaehibernicae*：eBird 代码不同：AviList bispit1，Wikidata neipit1（分类概念可能有拆分/合并）
+- *Pitta sordida*：eBird 代码不同：AviList wehpit1，Wikidata hoopit2（分类概念可能有拆分/合并）
+- *Pitta elegans*：eBird 代码不同：AviList elepit7，Wikidata elepit1（分类概念可能有拆分/合并）
+- *Machaeropterus regulus*：eBird 代码不同：AviList strman2，Wikidata strman1（分类概念可能有拆分/合并）
+- *Laniisoma elegans*：eBird 代码不同：AviList shlcot3，Wikidata shlcot1（分类概念可能有拆分/合并）
+- *Rhynchocyclus olivaceus*：eBird 代码不同：AviList olifla3，Wikidata olifla1（分类概念可能有拆分/合并）
+- *Tolmomyias flaviventris*：eBird 代码不同：AviList yebfly3，Wikidata yebfly1（分类概念可能有拆分/合并）
+- *Euscarthmus meloryphus*：eBird 代码不同：AviList tacpyt1，Wikidata tcptyr1（分类概念可能有拆分/合并）
+- *Elaenia obscura*：eBird 代码不同：AviList higela2，Wikidata higela1（分类概念可能有拆分/合并）
+- *Elaenia fallax*：eBird 代码不同：AviList graela3，Wikidata graela1（分类概念可能有拆分/合并）
+- *Myiarchus nuttingi*：eBird 代码不同：AviList nutfly1，Wikidata nutfly（分类概念可能有拆分/合并）
+- *Ochthoeca cinnamomeiventris*：eBird 代码不同：AviList slbcht2，Wikidata sbctyr1（分类概念可能有拆分/合并）
+- *Empidonax difficilis*：eBird 代码不同：AviList wesfly，Wikidata pasfly（分类概念可能有拆分/合并）
+- *Mitrephanes phaeocercus*：eBird 代码不同：AviList tuffly1，Wikidata tuffly（分类概念可能有拆分/合并）
+- *Contopus cinereus*：eBird 代码不同：AviList tropew3，Wikidata tropew1（分类概念可能有拆分/合并）
+- *Epinecrophylla haematonota*：eBird 代码不同：AviList rubsti1，Wikidata sttant5（分类概念可能有拆分/合并）
+- *Formicivora grisea*：eBird 代码不同：AviList whfant3，Wikidata whfant1（分类概念可能有拆分/合并）
+- *Thamnophilus bernardi*：eBird 代码不同：AviList colant2，Wikidata colant1（分类概念可能有拆分/合并）
+- *Pyriglena leuconota*：eBird 代码不同：AviList eaafie1，Wikidata wbfeye1（分类概念可能有拆分/合并）
+- *Myrmothera campanisona*：eBird 代码不同：AviList thlant2，Wikidata thlant1（分类概念可能有拆分/合并）
+- *Grallaria rufula*：eBird 代码不同：AviList rufant7，Wikidata rufant1（分类概念可能有拆分/合并）
+- *Grallaria quitensis*：eBird 代码不同：AviList tawant3，Wikidata tawant1（分类概念可能有拆分/合并）
+- *Deconychura longicauda*：eBird 代码不同：AviList lotwoo4，Wikidata lotwoo1（分类概念可能有拆分/合并）
+- *Xiphorhynchus fuscus*：eBird 代码不同：AviList leswoo2，Wikidata leswoo3（分类概念可能有拆分/合并）
+- *Xiphorhynchus guttatus*：eBird 代码不同：AviList butwoo1，Wikidata butwoo2（分类概念可能有拆分/合并）
+- *Lepidocolaptes fuscicapillus*：eBird 代码不同：AviList ducwoo1，Wikidata linwoo5（分类概念可能有拆分/合并）
+- *Xenops minutus*：eBird 代码不同：AviList plaxen4，Wikidata plaxen1（分类概念可能有拆分/合并）
+- *Furnarius leucopus*：eBird 代码不同：AviList palhor3，Wikidata palhor2（分类概念可能有拆分/合并）
+- *Asthenes huancavelicae*：eBird 代码不同：AviList patcan1，Wikidata crbcan3（分类概念可能有拆分/合并）
+- *Asthenes dorbignyi*：eBird 代码不同：AviList crbcan2，Wikidata crbcan1（分类概念可能有拆分/合并）
+- *Asthenes wyatti*：eBird 代码不同：AviList stbcan9，Wikidata stbcan1（分类概念可能有拆分/合并）
+- *Cranioleuca marcapatae*：eBird 代码不同：AviList marspi4，Wikidata marspi2（分类概念可能有拆分/合并）
+- *Cranioleuca antisiensis*：eBird 代码不同：AviList licspi5，Wikidata licspi2（分类概念可能有拆分/合并）
+- *Sericulus aureus*：eBird 代码不同：AviList flabow3，Wikidata flabow1（分类概念可能有拆分/合并）
+- *Ailuroedus melanotis*：eBird 代码不同：AviList bkecat4，Wikidata spocat1（分类概念可能有拆分/合并）
+- *Calamanthus campestris*：eBird 代码不同：AviList ruffie2，Wikidata ruffie1（分类概念可能有拆分/合并）
+- *Myzomela obscura*：eBird 代码不同：AviList dusmyz5，Wikidata dusmyz1（分类概念可能有拆分/合并）
+- *Myzomela cruentata*：eBird 代码不同：AviList redmyz2，Wikidata redmyz1（分类概念可能有拆分/合并）
+- *Myzomela boiei*：eBird 代码不同：AviList banmyz2，Wikidata banmyz1（分类概念可能有拆分/合并）
+- *Philemon moluccensis*：eBird 代码不同：AviList bkffri1，Wikidata blffri1（分类概念可能有拆分/合并）
+- *Ptilorrhoa caerulescens*：eBird 代码不同：AviList blujeb1，Wikidata bljbab1（分类概念可能有拆分/合并）
+- *Pericrocotus erythropygius*：eBird 代码不同：AviList whbmin3，Wikidata whbmin1（分类概念可能有拆分/合并）
+- *Pericrocotus flammeus*：人工复核：AviList Scarlet Minivet includes speciosus
+- *Coracina macei*：eBird 代码不同：AviList larcuc1，Wikidata larcus1（分类概念可能有拆分/合并）
+- *Coracina javensis*：eBird 代码不同：AviList larcuc11，Wikidata javcus1（分类概念可能有拆分/合并）
+- *Batis capensis*：eBird 代码不同：AviList capbat10，Wikidata capbat1（分类概念可能有拆分/合并）
+- *Batis minor*：eBird 代码不同：AviList bkhbat2，Wikidata blhbat1（分类概念可能有拆分/合并）
+- *Cyanolanius madagascarinus*：eBird 代码不同：AviList bluvan3，Wikidata bluvan1（分类概念可能有拆分/合并）
+- *Falcunculus frontatus*：eBird 代码不同：AviList cresht1，Wikidata crstit1（分类概念可能有拆分/合并）
+- *Paramythia montium*：eBird 代码不同：AviList creber2，Wikidata creber1（分类概念可能有拆分/合并）
+- *Vireo gilvus*：eBird 代码不同：AviList eawvir1，Wikidata warvir（分类概念可能有拆分/合并）
+- *Vireo olivaceus*：eBird 代码不同：AviList reevir1，Wikidata reevir（分类概念可能有拆分/合并）
+- *Pitohui kirhocephalus*：eBird 代码不同：AviList varpit2，Wikidata varpit1（分类概念可能有拆分/合并）
+- *Oriolus cruentus*：eBird 代码不同：AviList bacori3，Wikidata bacori1（分类概念可能有拆分/合并）
+- *Colluricincla megarhyncha*：eBird 代码不同：AviList litshr31，Wikidata rufsht1（分类概念可能有拆分/合并）
+- *Pachycephala pectoralis*：eBird 代码不同：AviList y01193，Wikidata golwhi1（分类概念可能有拆分/合并）
+- *Pachycephala vanikorensis*：eBird 代码不同：AviList temwhi4，Wikidata temwhi1（分类概念可能有拆分/合并）
+- *Pachycephala vitiensis*：eBird 代码不同：AviList whtwhi1，Wikidata fijwhi2（分类概念可能有拆分/合并）
+- *Rhipidura teysmanni*：eBird 代码不同：AviList rubfan2，Wikidata ruffan2（分类概念可能有拆分/合并）
+- *Rhipidura rufifrons*：eBird 代码不同：AviList ruffan13，Wikidata ruffan1（分类概念可能有拆分/合并）
+- *Dicrurus ludwigii*：eBird 代码不同：AviList cstdro1，Wikidata sqtdro1（分类概念可能有拆分/合并）
+- *Dicrurus sharpei*：eBird 代码不同：AviList shadro2，Wikidata shadro1（分类概念可能有拆分/合并）
+- *Dicrurus adsimilis*：eBird 代码不同：AviList fotdro5，Wikidata fotdro1（分类概念可能有拆分/合并）
+- *Dicrurus modestus*：eBird 代码不同：AviList vemdro6，Wikidata vemdro1（分类概念可能有拆分/合并）
+- *Myiagra hebetior*：eBird 代码不同：AviList dulfly2，Wikidata dulfly1（分类概念可能有拆分/合并）
+- *Symposiachrus barbatus*：eBird 代码不同：AviList bawmon2，Wikidata bawmon1（分类概念可能有拆分/合并）
+- *Symposiachrus browni*：eBird 代码不同：AviList kolmon5，Wikidata kulmon1（分类概念可能有拆分/合并）
+- *Clytorhynchus nigrogularis*：eBird 代码不同：AviList bktshr1，Wikidata bltshr1（分类概念可能有拆分/合并）
+- *Lycocorax pyrrhopterus*：eBird 代码不同：AviList paradi2，Wikidata parcro1（分类概念可能有拆分/合并）
+- *Parotia lawesii*：eBird 代码不同：AviList lawpar3，Wikidata lawpar1（分类概念可能有拆分/合并）
+- *Lanius sphenocercus*：eBird 代码不同：AviList chgshr1，Wikidata chgshr2（分类概念可能有拆分/合并）
+- *Platysmurus leucopterus*：eBird 代码不同：AviList blkmag1，Wikidata blamag1（分类概念可能有拆分/合并）
+- *Nucifraga caryocatactes*：eBird 代码不同：AviList eurnut3，Wikidata eurnut1（分类概念可能有拆分/合并）
+- *Corvus palmarum*：eBird 代码不同：AviList palcro1，Wikidata palcro2（分类概念可能有拆分/合并）
+- *Corvus enca*：eBird 代码不同：AviList slbcro2，Wikidata slbcro1（分类概念可能有拆分/合并）
+- *Petroica australis*：eBird 代码不同：AviList nezrob3，Wikidata nezrob1（分类概念可能有拆分/合并）
+- *Petroica multicolor*：eBird 代码不同：AviList pacrob2，Wikidata scarob1（分类概念可能有拆分/合并）
+- *Parus cinereus*：eBird 代码不同：AviList cintit13，Wikidata gretit2（分类概念可能有拆分/合并）
+- *Chersomanes albofasciata*：eBird 代码不同：AviList sphlar12，Wikidata sphlar1（分类概念可能有拆分/合并）
+- *Certhilauda subcoronata*：eBird 代码不同：AviList klblar6，Wikidata klblar1（分类概念可能有拆分/合并）
+- *Certhilauda curvirostris*：eBird 代码不同：AviList y00415，Wikidata caplar1（分类概念可能有拆分/合并）
+- *Calendulauda africanoides*：eBird 代码不同：AviList faclar8，Wikidata faclar2（分类概念可能有拆分/合并）
+- *Calendulauda erythrochlamys*：eBird 代码不同：AviList dunlar5，Wikidata dunlar3（分类概念可能有拆分/合并）
+- *Mirafra javanica*：eBird 代码不同：AviList sinbus6，Wikidata ausbus2（分类概念可能有拆分/合并）
+- *Galerida cristata*：eBird 代码不同：AviList crelar1，Wikidata crelar2（分类概念可能有拆分/合并）
+- *Alaudala rufescens*：eBird 代码不同：AviList mstlar1，Wikidata lstlar3（分类概念可能有拆分/合并）
+- *Calamonastes undosus*：eBird 代码不同：AviList miowrw2，Wikidata miowrw1（分类概念可能有拆分/合并）
+- *Apalis thoracica*：eBird 代码不同：AviList batapa2，Wikidata batapa1（分类概念可能有拆分/合并）
+- *Apalis porphyrolaema*：eBird 代码不同：AviList chtapa3，Wikidata chtapa1（分类概念可能有拆分/合并）
+- *Apalis karamojae*：eBird 代码不同：AviList karapa2，Wikidata karapa1（分类概念可能有拆分/合并）
+- *Cisticola galactotes*：eBird 代码不同：AviList wincis2，Wikidata wincis1（分类概念可能有拆分/合并）
+- *Nesillas typica*：eBird 代码不同：AviList malbrw1，Wikidata madbrw1（分类概念可能有拆分/合并）
+- *Pnoepyga albiventer*：eBird 代码不同：AviList scbcup3，Wikidata sbwbab1（分类概念可能有拆分/合并）
+- *Psalidoprocne nitens*：eBird 代码不同：AviList sqtsaw2，Wikidata sqtsaw1（分类概念可能有拆分/合并）
+- *Ptyonoprogne fuligula*：eBird 代码不同：AviList rocmar5，Wikidata rocmar2（分类概念可能有拆分/合并）
+- *Hirundo tahitica*：eBird 代码不同：AviList pacswa5，Wikidata pacswa1（分类概念可能有拆分/合并）
+- *Delichon urbicum*：eBird 代码不同：AviList comhom1，Wikidata cohmar1（分类概念可能有拆分/合并）
+- *Aegithalos iouschistos*：人工复核：AviList Black-browed Bushtit lumps bonvaloti
+- *Phylloscopus sarasinorum*：eBird 代码不同：AviList sulwar3，Wikidata sulwar1（分类概念可能有拆分/合并）
+- *Phylloscopus maforensis*：eBird 代码不同：AviList isllew9，Wikidata islwar1（分类概念可能有拆分/合并）
+- *Bleda notatus*：eBird 代码不同：AviList lesbri1，Wikidata lesbri2（分类概念可能有拆分/合并）
+- *Arizelocichla nigriceps*：eBird 代码不同：AviList easmog2，Wikidata easmog1（分类概念可能有拆分/合并）
+- *Atimastillas flavicollis*：eBird 代码不同：AviList yetgre2，Wikidata yetgre1（分类概念可能有拆分/合并）
+- *Phyllastrephus albigularis*：eBird 代码不同：AviList whtgre1，Wikidata whtgre2（分类概念可能有拆分/合并）
+- *Phyllastrephus scandens*：eBird 代码不同：AviList leaflo1，Wikidata leaf-l1（分类概念可能有拆分/合并）
+- *Pycnonotus plumosus*：eBird 代码不同：AviList olwbul9，Wikidata olwbul1（分类概念可能有拆分/合并）
+- *Pycnonotus finlaysoni*：eBird 代码不同：AviList sttbul3，Wikidata sttbul1（分类概念可能有拆分/合并）
+- *Pycnonotus bimaculatus*：eBird 代码不同：AviList orsbul3，Wikidata orsbul1（分类概念可能有拆分/合并）
+- *Alophoixus bres*：eBird 代码不同：AviList gycbul3，Wikidata gycbul1（分类概念可能有拆分/合并）
+- *Alophoixus ochraceus*：eBird 代码不同：AviList ochbul2，Wikidata ochbul1（分类概念可能有拆分/合并）
+- *Ixos virescens*：eBird 代码不同：AviList sunbul3，Wikidata sunbul2（分类概念可能有拆分/合并）
+- *Hypsipetes affinis*：eBird 代码不同：AviList sergob1，Wikidata golbul3（分类概念可能有拆分/合并）
+- *Sterrhoptilus nigrocapitatus*：eBird 代码不同：AviList bkcbab10，Wikidata blcbab3（分类概念可能有拆分/合并）
+- *Zosterops palpebrosus*：eBird 代码不同：AviList indwhe1，Wikidata orweye1（分类概念可能有拆分/合并）
+- *Zosterops senegalensis*：eBird 代码不同：AviList afywhe2，Wikidata ayweye1（分类概念可能有拆分/合并）
+- *Zosterops poliogastrus*：eBird 代码不同：AviList heuwhe2，Wikidata brrwhe1（分类概念可能有拆分/合并）
+- *Zosterops kulambangrae*：eBird 代码不同：AviList soiwhe2，Wikidata soiwhe1（分类概念可能有拆分/合并）
+- *Cyanoderma rufifrons*：eBird 代码不同：AviList rufbab10，Wikidata rufbab2（分类概念可能有拆分/合并）
+- *Polioptila albiloris*：eBird 代码不同：AviList whlgna2，Wikidata whlgna1（分类概念可能有拆分/合并）
+- *Campylorhynchus rufinucha*：eBird 代码不同：AviList runwre2，Wikidata runwre1（分类概念可能有拆分/合并）
+- *Cyphorhinus thoracicus*：eBird 代码不同：AviList chbwre3，Wikidata chbwre1（分类概念可能有拆分/合并）
+- *Ramphocinclus brachyurus*：eBird 代码不同：AviList whbthr3，Wikidata whbthr1（分类概念可能有拆分/合并）
+- *Chlamydochaera jefferyi*：eBird 代码不同：AviList fruith1，Wikidata fruit-2（分类概念可能有拆分/合并）
+- *Turdus nigriceps*：eBird 代码不同：AviList slathr2，Wikidata slathr1（分类概念可能有拆分/合并）
+- *Turdus albicollis*：eBird 代码不同：AviList whnthr2，Wikidata whnrob1（分类概念可能有拆分/合并）
+- *Alethe diademata*：eBird 代码不同：AviList ficale3，Wikidata ficale1（分类概念可能有拆分/合并）
+- *Cercotrichas galactotes*：eBird 代码不同：AviList rutscr1，Wikidata rtsrob1（分类概念可能有拆分/合并）
+- *Muscicapa striata*：eBird 代码不同：AviList spofly2，Wikidata spofly1（分类概念可能有拆分/合并）
+- *Niltava vivida*：eBird 代码不同：AviList vivnil3，Wikidata vivnil1（分类概念可能有拆分/合并）
+- *Cyornis herioti*：eBird 代码不同：AviList bubfly1，Wikidata blbfly3（分类概念可能有拆分/合并）
+- *Cyornis ruficauda*：eBird 代码不同：AviList chtjuf2，Wikidata chtjuf1（分类概念可能有拆分/合并）
+- *Cyornis tickelliae*：eBird 代码不同：AviList tibfly3，Wikidata tibfly1（分类概念可能有拆分/合并）
+- *Cyornis banyumas*：eBird 代码不同：AviList hibfly3，Wikidata hibfly1（分类概念可能有拆分/合并）
+- *Cyornis colonus*：eBird 代码不同：AviList suljuf1，Wikidata htjfly1（分类概念可能有拆分/合并）
+- *Stiphrornis erythrothorax*：eBird 代码不同：AviList obfrob1，Wikidata forrob1（分类概念可能有拆分/合并）
+- *Sheppardia bocagei*：eBird 代码不同：AviList bocaka11，Wikidata bocaka1（分类概念可能有拆分/合并）
+- *Myiomela diana*：eBird 代码不同：AviList sunrob3，Wikidata sunrob1（分类概念可能有拆分/合并）
+- *Enicurus leschenaulti*：eBird 代码不同：AviList whcfor5，Wikidata whcfor1（分类概念可能有拆分/合并）
+- *Myophonus caeruleus*：eBird 代码不同：AviList bluwht1，Wikidata blwthr1（分类概念可能有拆分/合并）
+- *Larvivora akahige*：eBird 代码不同：AviList japrob2，Wikidata japrob1（分类概念可能有拆分/合并）
+- *Larvivora komadori*：eBird 代码不同：AviList ryurob2，Wikidata ryurob1（分类概念可能有拆分/合并）
+- *Brachypteryx montana*：eBird 代码不同：AviList whbsho10，Wikidata whbsho2（分类概念可能有拆分/合并）
+- *Ficedula narcissina*：eBird 代码不同：AviList narfly2，Wikidata narfly（分类概念可能有拆分/合并）
+- *Tarsiger cyanurus*：eBird 代码不同：AviList refblu1，Wikidata refblu（分类概念可能有拆分/合并）
+- *Oenanthe bottae*：eBird 代码不同：AviList rebwhe2，Wikidata rebwhe1（分类概念可能有拆分/合并）
+- *Oenanthe xanthoprymna*：eBird 代码不同：AviList retwhe3，Wikidata retwhe1（分类概念可能有拆分/合并）
+- *Oenanthe lugens*：eBird 代码不同：AviList mouwhe14，Wikidata mouwhe2（分类概念可能有拆分/合并）
+- *Dicaeum anthonyi*：eBird 代码不同：AviList flcflo2，Wikidata flcflo1（分类概念可能有拆分/合并）
+- *Dicaeum sanguinolentum*：eBird 代码不同：AviList blbflo5，Wikidata blbflo1（分类概念可能有拆分/合并）
+- *Dicaeum ignipectus*：eBird 代码不同：AviList fibflo1，Wikidata fibflo2（分类概念可能有拆分/合并）
+- *Anthreptes malacensis*：eBird 代码不同：AviList pltsun2，Wikidata pltsun1（分类概念可能有拆分/合并）
+- *Anthreptes rectirostris*：eBird 代码不同：AviList grnsun1，Wikidata gresun1（分类概念可能有拆分/合并）
+- *Aethopyga pulcherrima*：eBird 代码不同：AviList mewsun3，Wikidata mewsun2（分类概念可能有拆分/合并）
+- *Cinnyris manoensis*：eBird 代码不同：AviList miosun3，Wikidata miosun1（分类概念可能有拆分/合并）
+- *Cinnyris mediocris*：eBird 代码不同：AviList edcsun3，Wikidata edcsun2（分类概念可能有拆分/合并）
+- *Ploceus nigerrimus*：eBird 代码不同：AviList viewea3，Wikidata viewea1（分类概念可能有拆分/合并）
+- *Ploceus nigricollis*：eBird 代码不同：AviList bknwea2，Wikidata blnwea1（分类概念可能有拆分/合并）
+- *Euplectes ardens*：eBird 代码不同：AviList recwid3，Wikidata recwid1（分类概念可能有拆分/合并）
+- *Taeniopygia guttata*：人工复核：AviList Zebra Finch lumps guttata + castanotis; sources keep them apart
+- *Coccopygia melanotis*：eBird 代码不同：AviList swewax3，Wikidata swewax2（分类概念可能有拆分/合并）
+- *Ortygospiza atricollis*：eBird 代码不同：AviList quailf1，Wikidata bkfqua1（分类概念可能有拆分/合并）
+- *Prunella ocularis*：eBird 代码不同：AviList radacc2，Wikidata radacc1（分类概念可能有拆分/合并）
+- *Passer simplex*：eBird 代码不同：AviList desspa3，Wikidata desspa2（分类概念可能有拆分/合并）
+- *Anthus novaeseelandiae*：eBird 代码不同：AviList auspip3，Wikidata auspip1（分类概念可能有拆分/合并）
+- *Fringilla teydea*：eBird 代码不同：AviList blucha2，Wikidata blucha1（分类概念可能有拆分/合并）
+- *Rhynchostruthus socotranus*：eBird 代码不同：AviList gowgro3，Wikidata gowgro1（分类概念可能有拆分/合并）
+- *Crithagra gularis*：eBird 代码不同：AviList sthsee2，Wikidata sthsee1（分类概念可能有拆分/合并）
+- *Crithagra reichardi*：eBird 代码不同：AviList reisee4，Wikidata reisee1（分类概念可能有拆分/合并）
+- *Chrysocorythus estherae*：eBird 代码不同：AviList mouser2，Wikidata mouser1（分类概念可能有拆分/合并）
+- *Serinus alario*：eBird 代码不同：AviList bkhcan2，Wikidata bkhcan1（分类概念可能有拆分/合并）
+- *Rhynchospiza strigiceps*：eBird 代码不同：AviList stcspa3，Wikidata stcspa1（分类概念可能有拆分/合并）
+- *Arremon abeillei*：eBird 代码不同：AviList bkcspa1，Wikidata blcspa2（分类概念可能有拆分/合并）
+- *Arremon taciturnus*：eBird 代码不同：AviList pecspa3，Wikidata pecspa1（分类概念可能有拆分/合并）
+- *Melozone leucotis*：eBird 代码不同：AviList whegrs2，Wikidata wegspa1（分类概念可能有拆分/合并）
+- *Atlapetes tricolor*：eBird 代码不同：AviList tribrf2，Wikidata trbfin1（分类概念可能有拆分/合并）
+- *Atlapetes schistaceus*：eBird 代码不同：AviList slabru1，Wikidata slbfin2（分类概念可能有拆分/合并）
+- *Atlapetes latinuchus*：eBird 代码不同：AviList yebbru2，Wikidata yebbrf1（分类概念可能有拆分/合并）
+- *Geothlypis aequinoctialis*：eBird 代码不同：AviList masyel2，Wikidata masyel1（分类概念可能有拆分/合并）
+- *Setophaga petechia*：eBird 代码不同：AviList manwar1，Wikidata yelwar（分类概念可能有拆分/合并）
+- *Myiothlypis chrysogaster*：eBird 代码不同：AviList gobwar3，Wikidata gobwar2（分类概念可能有拆分/合并）
+- *Granatellus pelzelni*：eBird 代码不同：AviList robcha2，Wikidata robcha1（分类概念可能有拆分/合并）
+- *Cyanoloxia cyanoides*：eBird 代码不同：AviList bubgro1，Wikidata blbgro1（分类概念可能有拆分/合并）
+- *Piranga flava*：人工复核：AviList Hepatic Tanager lumps hepatica
+- *Dacnis lineata*：eBird 代码不同：AviList bkfdac2，Wikidata blfdac1（分类概念可能有拆分/合并）
+- *Nesospiza wilkinsi*：eBird 代码不同：AviList wilfin3，Wikidata wilfin1（分类概念可能有拆分/合并）
+- *Diglossa cyanea*：eBird 代码不同：AviList masflo7，Wikidata masflo1（分类概念可能有拆分/合并）
+- *Sporophila torqueola*：eBird 代码不同：AviList whcsee2，Wikidata whcsee（分类概念可能有拆分/合并）
+- *Poospiza nigrorufa*：eBird 代码不同：AviList barwaf1，Wikidata barfin1（分类概念可能有拆分/合并）
+- *Cnemoscopus rubrirostris*：eBird 代码不同：AviList gyhbut2，Wikidata gyhbut1（分类概念可能有拆分/合并）
+- *Melopyrrha nigra*：eBird 代码不同：AviList cubbul2，Wikidata cubbul1（分类概念可能有拆分/合并）
+- *Dubusia taeniata*：eBird 代码不同：AviList bubmot3，Wikidata bbmtan1（分类概念可能有拆分/合并）
+
+## GBIF 不确定（ambiguous）：36
+
+- *Lagopus scotica*：GBIF 只给出 VARIANT 候选 Lagopus scoticus（8189518）
+- *Centropus burchellii*：GBIF 只给出 VARIANT 候选 Centropus burchelli（5231964）
+- *Eudynamys melanorhynchus*：GBIF 只给出 VARIANT 候选 Eudynamys melanorhyncha（2496360）
+- *Grus carunculata*：GBIF 只给出 VARIANT 候选 Grus carunculatus（2474926）
+- *Aramides cajaneus*：GBIF 只给出 VARIANT 候选 Aramides cajanea（2474659）
+- *Laterallus spilonota*：GBIF 只给出 VARIANT 候选 Laterallus spilonotus（2474597）
+- *Amaurornis moluccana*：GBIF 只给出 VARIANT 候选 Amaurornis moluccanus（7340225）
+- *Gyps rueppelli*：GBIF 只给出 VARIANT 候选 Gyps rueppellii（2480384）
+- *Ictinaetus malaiensis*：GBIF 只给出 VARIANT 候选 Ictinaetus malayensis（5229198）
+- *Strigops habroptilus*：GBIF 只给出 VARIANT 候选 Strigops habroptila（2479236）
+- *Amazona mercenarius*：GBIF 只给出 VARIANT 候选 Amazona mercenaria（2479636）
+- *Orthopsittaca manilatus*：GBIF 只给出 VARIANT 候选 Orthopsittaca manilata（2479446）
+- *Conopias parvus*：GBIF 只给出 VARIANT 候选 Conopias parva（5789101）
+- *Hylacola pyrrhopygia*：GBIF 只给出 VARIANT 候选 Hylacola pyrrhopygius（2486548）
+- *Hylacola cauta*：GBIF 只给出 VARIANT 候选 Hylacola cautus（2486547）
+- *Coracina mindorensis*：GBIF 只给出 VARIANT 候选 Coracina mindanensis（2486774）
+- *Artamus leucorynchus*：GBIF 只给出 VARIANT 候选 Artamus leucorhynchos（11164150）
+- *Vireo swainsoni*：GBIF 只给出 VARIANT 候选 Vireo swainsonii（2487419）
+- *Rhipidura rufofronta*：GBIF 只给出 VARIANT 候选 Rhipidura rufifrons（5231742）
+- *Corcorax melanorhamphos*：GBIF 只给出 VARIANT 候选 Corcorax melanoramphos（5845081）
+- *Pica nuttallii*：GBIF 只给出 VARIANT 候选 Pica nuttalli（5229489）
+- *Chelidorhynx hypoxanthus*：GBIF 只给出 VARIANT 候选 Chelidorhynx hypoxantha（5844978）
+- *Phyllergates cucullatus*：GBIF 只给出 VARIANT 候选 Phyllergates cuculatus（6100901）
+- *Phylloscopus sibilatrix*：GBIF 只给出 VARIANT 候选 Phylloscopus sibillatrix（8128385）
+- *Rubigula squamata*：GBIF 只给出 VARIANT 候选 Rubigula squamatus（10787662）
+- *Sylvia nigricapillus*：GBIF 只给出 VARIANT 候选 Sylvia nigricapilla（7612180）
+- *Turdoides rufocinctus*：GBIF 只给出 VARIANT 候选 Turdoides rufocincta（7738108）
+- *Salpornis spilonota*：GBIF 只给出 VARIANT 候选 Salpornis spilonotus（2487575）
+- *Buphagus erythroryncha*：GBIF 只给出 VARIANT 候选 Buphagus erythrorhynchus（2489052）
+- *Notopholia corusca*：GBIF 只给出 VARIANT 候选 Notopholia corrusca（6100936）
+- *Saroglossa spilopterus*：GBIF 只给出 VARIANT 候选 Saroglossa spiloptera（2489063）
+- *Turdus nigrorum*：GBIF 只给出 VARIANT 候选 Turdus niger（10149129）
+- *Monticola cinclorhyncha*：GBIF 只给出 VARIANT 候选 Monticola cinclorhynchus（5231007）
+- *Oenanthe heuglinii*：GBIF 只给出 VARIANT 候选 Oenanthe heuglini（5231252）
+- *Schoeniclus spodocephalus*：GBIF 只给出 VARIANT 候选 Schoeniclus spodocephala（9359648）
+- *Sicalis uropygialis*：GBIF 只给出 VARIANT 候选 Sicalis uropigyalis（8387708）
+
+## iNaturalist 不确定或停用：448
+
+- *Rhizothera longirostris*：iNaturalist ID 已停用或不存在：1273, 500513
+- *Phasianus versicolor*：iNaturalist ID 已停用或不存在：356069
+- *Crossoptilon harmani*：iNaturalist ID 已停用或不存在：558802
+- *Lophura erythrophthalma*：iNaturalist ID 已停用或不存在：1115
+- *Campocolinus schlegelii*：iNaturalist ID 已停用或不存在：550889
+- *Campocolinus albogularis*：iNaturalist ID 已停用或不存在：550882
+- *Scleroptila psilolaema*：iNaturalist ID 已停用或不存在：624
+- *Ortygornis sephaena*：iNaturalist ID 已停用或不存在：154493, 154494, 154495, 154496, 154497
+- *Ortygornis gularis*：iNaturalist ID 已停用或不存在：715
+- *Pternistis castaneicollis*：iNaturalist ID 已停用或不存在：495934
+- *Crinifer personatus*：iNaturalist ID 已停用或不存在：7234
+- *Crinifer concolor*：iNaturalist ID 已停用或不存在：7238
+- *Crinifer leucogaster*：iNaturalist ID 已停用或不存在：7237
+- *Chalcites megarhynchus*：iNaturalist ID 已停用或不存在：1740, 513580
+- *Chalcites osculans*：iNaturalist ID 已停用或不存在：1729
+- *Chalcites ruficollis*：iNaturalist ID 已停用或不存在：1734
+- *Chalcites meyerii*：iNaturalist ID 已停用或不存在：367494
+- *Chalcites minutillus*：iNaturalist ID 已停用或不存在：1709
+- *Hierococcyx sparverioides*：iNaturalist ID 已停用或不存在：144574
+- *Pampusana hoedtii*：iNaturalist ID 已停用或不存在：558451
+- *Pampusana rubescens*：iNaturalist ID 已停用或不存在：558459
+- *Pampusana kubaryi*：iNaturalist ID 已停用或不存在：558460
+- *Pampusana erythroptera*：iNaturalist ID 已停用或不存在：558461
+- *Pampusana beccarii*：iNaturalist ID 已停用或不存在：558456
+- *Pampusana stairi*：iNaturalist ID 已停用或不存在：558452
+- *Pampusana salamonis*：iNaturalist ID 已停用或不存在：558454
+- *Pampusana sanctaecrucis*：iNaturalist ID 已停用或不存在：558453
+- *Ramphiculus occipitalis*：iNaturalist ID 已停用或不存在：2717
+- *Ramphiculus fischeri*：iNaturalist ID 已停用或不存在：2837
+- *Ramphiculus leclancheri*：iNaturalist ID 已停用或不存在：2759
+- *Mentocrex kioloides*：iNaturalist ID 已停用或不存在：465, 980124
+- *Mustelirallus cerverai*：iNaturalist ID 已停用或不存在：559
+- *Crecopsis egregia*：iNaturalist ID 已停用或不存在：72771, 792886
+- *Gallirallus wallacii*：iNaturalist ID 已停用或不存在：462
+- *Gallirallus castaneoventris*：iNaturalist ID 已停用或不存在：524
+- *Gallirallus poecilopterus*：iNaturalist ID 已停用或不存在：537
+- *Gallirallus woodfordi*：iNaturalist ID 已停用或不存在：73092
+- *Rufirallus leucopyrrhus*：iNaturalist ID 已停用或不存在：332
+- *Rufirallus xenopterus*：iNaturalist ID 已停用或不存在：328
+- *Rufirallus fasciatus*：iNaturalist ID 已停用或不存在：257
+- *Rufirallus viridis*：iNaturalist ID 已停用或不存在：258
+- *Rufirallus schomburgkii*：iNaturalist ID 已停用或不存在：469
+- *Laterallus notatus*：iNaturalist ID 已停用或不存在：545
+- *Laterallus spiloptera*：iNaturalist ID 已停用或不存在：179
+- *Hesperoburhinus superciliaris*：iNaturalist ID 已停用或不存在：4927
+- *Hesperoburhinus bistriatus*：iNaturalist ID 已停用或不存在：4924
+- *Zonibyx modestus*：iNaturalist ID 已停用或不存在：4809
+- *Eudromias morinellus*：iNaturalist ID 已停用或不存在：144486
+- *Thinornis forbesi*：iNaturalist ID 已停用或不存在：4824
+- *Thinornis tricollaris*：iNaturalist ID 已停用或不存在：4805
+- *Thinornis placidus*：iNaturalist ID 已停用或不存在：4825
+- *Thinornis dubius*：iNaturalist ID 已停用或不存在：4811
+- *Anarhynchus asiaticus*：iNaturalist ID 已停用或不存在：4821
+- *Anarhynchus veredus*：iNaturalist ID 已停用或不存在：4810
+- *Anarhynchus leschenaultii*：iNaturalist ID 已停用或不存在：4812
+- *Anarhynchus wilsonia*：iNaturalist ID 已停用或不存在：4795
+- *Anarhynchus collaris*：iNaturalist ID 已停用或不存在：4807
+- *Anarhynchus falklandicus*：iNaturalist ID 已停用或不存在：4816
+- *Anarhynchus alticola*：iNaturalist ID 已停用或不存在：4822
+- *Anarhynchus thoracicus*：iNaturalist ID 已停用或不存在：4823
+- *Anarhynchus pecuarius*：iNaturalist ID 已停用或不存在：4828
+- *Anarhynchus ruficapillus*：iNaturalist ID 已停用或不存在：4803
+- *Anarhynchus pallidus*：iNaturalist ID 已停用或不存在：4819
+- *Anarhynchus peronii*：iNaturalist ID 已停用或不存在：4818
+- *Anarhynchus marginatus*：iNaturalist ID 已停用或不存在：4806
+- *Anarhynchus javanicus*：iNaturalist ID 已停用或不存在：4827
+- *Anarhynchus alexandrinus*：iNaturalist ID 已停用或不存在：4789
+- *Glareola isabella*：iNaturalist ID 已停用或不存在：4618
+- *Diomedea sanfordi*：iNaturalist ID 已停用或不存在：99307
+- *Thalassarche chlororhynchos*：iNaturalist ID 已停用或不存在：4091
+- *Hydrobates melania*：iNaturalist ID 已停用或不存在：4066
+- *Hydrobates microsoma*：iNaturalist ID 已停用或不存在：144446
+- *Hydrobates tethys*：iNaturalist ID 已停用或不存在：4064
+- *Hydrobates tristrami*：iNaturalist ID 已停用或不存在：4070
+- *Hydrobates leucorhous*：iNaturalist ID 已停用或不存在：4080
+- *Puffinus assimilis*：iNaturalist ID 已停用或不存在：4096
+- *Puffinus bailloni*：iNaturalist ID 已停用或不存在：144443
+- *Urile perspicillatus*：iNaturalist ID 已停用或不存在：4278
+- *Urile urile*：iNaturalist ID 已停用或不存在：4305
+- *Botaurus involucris*：iNaturalist ID 已停用或不存在：5013
+- *Botaurus exilis*：iNaturalist ID 已停用或不存在：5009
+- *Botaurus cinnamomeus*：iNaturalist ID 已停用或不存在：5007
+- *Botaurus eurhythmus*：iNaturalist ID 已停用或不存在：5012
+- *Botaurus sturmii*：iNaturalist ID 已停用或不存在：5004
+- *Botaurus sinensis*：iNaturalist ID 已停用或不存在：5008
+- *Botaurus novaezelandiae*：iNaturalist ID 已停用或不存在：5006
+- *Botaurus dubius*：iNaturalist ID 已停用或不存在：144454
+- *Tepuiornis whitelyi*：iNaturalist ID 已停用或不存在：339626
+- *Quechuavis decussata*：iNaturalist ID 已停用或不存在：558469
+- *Antiurus maculicaudus*：iNaturalist ID 已停用或不存在：337419
+- *Hydropsalis forcipata*：iNaturalist ID 已停用或不存在：19617
+- *Antrostomus ekmani*：iNaturalist ID 已停用或不存在：558998
+- *Phyllaemulor bracteatus*：iNaturalist ID 已停用或不存在：19666
+- *Aerodramus infuscatus*：iNaturalist ID 已停用或不存在：577944
+- *Heliodoxa rubricauda*：iNaturalist ID 已停用或不存在：6525
+- *Nesophlox evelynae*：iNaturalist ID 已停用或不存在：578131, 6327
+- *Selasphorus heloisa*：iNaturalist ID 已停用或不存在：5894
+- *Riccordia maugaeus*：iNaturalist ID 已停用或不存在：6115
+- *Riccordia swainsonii*：iNaturalist ID 已停用或不存在：6109
+- *Riccordia bicolor*：iNaturalist ID 已停用或不存在：6403
+- *Riccordia ricordii*：iNaturalist ID 已停用或不存在：6113
+- *Cynanthus forficatus*：iNaturalist ID 已停用或不存在：6116
+- *Cynanthus canivetii*：iNaturalist ID 已停用或不存在：6104
+- *Basilinna xantusii*：iNaturalist ID 已停用或不存在：72932
+- *Pampa curvipennis*：iNaturalist ID 已停用或不存在：5991
+- *Goldmania bella*：iNaturalist ID 已停用或不存在：6357
+- *Eupherusa ridgwayi*：iNaturalist ID 已停用或不存在：5972
+- *Thaumasius taczanowskii*：iNaturalist ID 已停用或不存在：6155
+- *Thaumasius baeri*：iNaturalist ID 已停用或不存在：6157
+- *Trochilus scitulus*：iNaturalist ID 已停用或不存在：114504
+- *Ramosomyia viridifrons*：iNaturalist ID 已停用或不存在：5722
+- *Chrysuronia boucardi*：iNaturalist ID 已停用或不存在：5766
+- *Chrysuronia lilliae*：iNaturalist ID 已停用或不存在：5939
+- *Chrysuronia coeruleogularis*：iNaturalist ID 已停用或不存在：5935
+- *Chrysuronia grayi*：iNaturalist ID 已停用或不存在：5975
+- *Chrysuronia humboldtii*：iNaturalist ID 已停用或不存在：5980
+- *Chrysuronia leucogaster*：iNaturalist ID 已停用或不存在：5701
+- *Elliotomyia viridicauda*：iNaturalist ID 已停用或不存在：5763
+- *Elliotomyia chionogaster*：iNaturalist ID 已停用或不存在：5778
+- *Polyerata rosenbergi*：iNaturalist ID 已停用或不存在：5765
+- *Polyerata decora*：iNaturalist ID 已停用或不存在：72492
+- *Chlorestes candida*：iNaturalist ID 已停用或不存在：5750
+- *Chlorestes eliciae*：iNaturalist ID 已停用或不存在：5976
+- *Chlorestes cyanus*：iNaturalist ID 已停用或不存在：5981
+- *Chlorestes julie*：iNaturalist ID 已停用或不存在：558480
+- *Tyto prigoginei*：iNaturalist ID 已停用或不存在：20486
+- *Ninox novaeseelandiae*：iNaturalist ID 已停用或不存在：20116
+- *Taenioptynx brodiei*：iNaturalist ID 已停用或不存在：19860
+- *Otus manadensis*：iNaturalist ID 已停用或不存在：20251
+- *Otus rutilus*：iNaturalist ID 已停用或不存在：204560
+- *Asio solomonensis*：iNaturalist ID 已停用或不存在：20412
+- *Asio grammicus*：iNaturalist ID 已停用或不存在：20385
+- *Ketupa nipalensis*：iNaturalist ID 已停用或不存在：20037
+- *Ketupa philippensis*：iNaturalist ID 已停用或不存在：20082
+- *Gymnasio nudipes*：iNaturalist ID 已停用或不存在：19754
+- *Megascops ingens*：iNaturalist ID 已停用或不存在：19785
+- *Lophospiza griseiceps*：iNaturalist ID 已停用或不存在：5130
+- *Aerospiza castanilius*：iNaturalist ID 已停用或不存在：5128
+- *Aerospiza tachiro*：iNaturalist ID 已停用或不存在：204453
+- *Tachyspiza erythropus*：iNaturalist ID 已停用或不存在：5095
+- *Tachyspiza nanus*：iNaturalist ID 已停用或不存在：5121
+- *Tachyspiza erythrauchen*：iNaturalist ID 已停用或不存在：5134
+- *Tachyspiza rhodogaster*：iNaturalist ID 已停用或不存在：5131
+- *Tachyspiza gularis*：iNaturalist ID 已停用或不存在：5127
+- *Tachyspiza butleri*：iNaturalist ID 已停用或不存在：5122
+- *Tachyspiza brevipes*：iNaturalist ID 已停用或不存在：5126
+- *Tachyspiza soloensis*：iNaturalist ID 已停用或不存在：5091
+- *Tachyspiza imitator*：iNaturalist ID 已停用或不存在：5135
+- *Tachyspiza francesiae*：iNaturalist ID 已停用或不存在：5102
+- *Tachyspiza princeps*：iNaturalist ID 已停用或不存在：5139
+- *Tachyspiza novaehollandiae*：iNaturalist ID 已停用或不存在：204452
+- *Tachyspiza hiogaster*：iNaturalist ID 已停用或不存在：144463
+- *Tachyspiza melanochlamys*：iNaturalist ID 已停用或不存在：5118
+- *Tachyspiza albogularis*：iNaturalist ID 已停用或不存在：5087
+- *Tachyspiza rufitorques*：iNaturalist ID 已停用或不存在：5093
+- *Astur cooperii*：iNaturalist ID 已停用或不存在：5112
+- *Astur gundlachi*：iNaturalist ID 已停用或不存在：5125
+- *Astur bicolor*：iNaturalist ID 已停用或不存在：5137
+- *Astur meyerianus*：iNaturalist ID 已停用或不存在：5124
+- *Astur henstii*：iNaturalist ID 已停用或不存在：5132
+- *Astur melanoleucus*：iNaturalist ID 已停用或不存在：5140
+- *Microspizias collaris*：iNaturalist ID 已停用或不存在：5117
+- *Microspizias superciliosus*：iNaturalist ID 已停用或不存在：5113
+- *Icthyophaga vocifer*：iNaturalist ID 已停用或不存在：5308
+- *Icthyophaga vociferoides*：iNaturalist ID 已停用或不存在：5313
+- *Icthyophaga leucogaster*：iNaturalist ID 已停用或不存在：5315
+- *Icthyophaga sanfordi*：iNaturalist ID 已停用或不存在：5314
+- *Pharomachrus pavoninus*：iNaturalist ID 已停用或不存在：20859
+- *Rhinopomastus castaneiceps*：iNaturalist ID 已停用或不存在：20952
+- *Ceyx erithaca*：iNaturalist ID 已停用或不存在：2623
+- *Tanysiptera sylvia*：iNaturalist ID 已停用或不存在：2399
+- *Dacelo rex*：iNaturalist ID 已停用或不存在：2705
+- *Cryptolybia olivacea*：iNaturalist ID 已停用或不存在：117116
+- *Pogonornis melanopterus*：iNaturalist ID 已停用或不存在：116947
+- *Pogonornis bidentatus*：iNaturalist ID 已停用或不存在：116943
+- *Pogonornis dubius*：iNaturalist ID 已停用或不存在：116944
+- *Pogonornis rolleti*：iNaturalist ID 已停用或不存在：116949
+- *Gecinulus rafflesii*：iNaturalist ID 已停用或不存在：18386
+- *Pardipicus caroli*：iNaturalist ID 已停用或不存在：17606
+- *Chrysocolaptes validus*：iNaturalist ID 已停用或不存在：18438
+- *Dendropicos stierlingi*：iNaturalist ID 已停用或不存在：18139, 792916
+- *Dendropicos goertae*：iNaturalist ID 已停用或不存在：144681, 792900
+- *Dendropicos spodocephalus*：iNaturalist ID 已停用或不存在：144682, 792910
+- *Dendropicos griseocephalus*：iNaturalist ID 已停用或不存在：144683, 792923
+- *Dendropicos abyssinicus*：iNaturalist ID 已停用或不存在：18140, 792908
+- *Dendropicos lugubris*：iNaturalist ID 已停用或不存在：144676, 792912
+- *Dendropicos gabonensis*：iNaturalist ID 已停用或不存在：204499, 792898
+- *Dendropicos elliotii*：iNaturalist ID 已停用或不存在：144680
+- *Dendropicos elachus*：iNaturalist ID 已停用或不存在：18142, 792897
+- *Dendropicos poecilolaemus*：iNaturalist ID 已停用或不存在：18143, 792915
+- *Dendropicos fuscescens*：iNaturalist ID 已停用或不存在：18144, 792918
+- *Daptrius chimango*：iNaturalist ID 已停用或不存在：4727
+- *Daptrius australis*：iNaturalist ID 已停用或不存在：4705
+- *Daptrius carunculatus*：iNaturalist ID 已停用或不存在：4703
+- *Daptrius megalopterus*：iNaturalist ID 已停用或不存在：4704
+- *Daptrius albogularis*：iNaturalist ID 已停用或不存在：4702
+- *Myiopsitta luchsi*：iNaturalist ID 已停用或不存在：520333
+- *Psittacara holochlorus*：iNaturalist ID 已停用或不存在：367566
+- *Coracopsis nigra*：iNaturalist ID 已停用或不存在：725838
+- *Necropsittacus rodricanus*：iNaturalist ID 已停用或不存在：106640
+- *Neopsephotus bourkii*：iNaturalist ID 已停用或不存在：144564
+- *Cyclopsitta desmarestii*：iNaturalist ID 已停用或不存在：19258
+- *Cyclopsitta salvadorii*：iNaturalist ID 已停用或不存在：19257
+- *Cyclopsitta edwardsii*：iNaturalist ID 已停用或不存在：19259
+- *Hypocharmosyna rubronotata*：iNaturalist ID 已停用或不存在：18888
+- *Hypocharmosyna placentis*：iNaturalist ID 已停用或不存在：18896
+- *Charmosynopsis pulchella*：iNaturalist ID 已停用或不存在：18887
+- *Vini margarethae*：iNaturalist ID 已停用或不存在：18885
+- *Vini rubrigularis*：iNaturalist ID 已停用或不存在：18889
+- *Vini diadema*：iNaturalist ID 已停用或不存在：18893
+- *Vini meeki*：iNaturalist ID 已停用或不存在：18890
+- *Vini palmarum*：iNaturalist ID 已停用或不存在：18897
+- *Vini amabilis*：iNaturalist ID 已停用或不存在：18894
+- *Chalcopsitta fuscata*：iNaturalist ID 已停用或不存在：19300
+- *Glossoptilus goldiei*：iNaturalist ID 已停用或不存在：19303
+- *Trichoglossus iris*：iNaturalist ID 已停用或不存在：19304
+- *Trichoglossus meyeri*：iNaturalist ID 已停用或不存在：1289205
+- *Trichoglossus histrio*：iNaturalist ID 已停用或不存在：19040
+- *Trichoglossus haematodus*：iNaturalist ID 已停用或不存在：19121
+- *Protopelma chrysolophum*：iNaturalist ID 已停用或不存在：14367
+- *Chiroxiphia galeata*：iNaturalist ID 已停用或不存在：14357
+- *Machaeropterus regulus*：iNaturalist ID 已停用或不存在：14348
+- *Pogonotriccus paulista*：iNaturalist ID 已停用或不存在：16923
+- *Zimmerius improbus*：iNaturalist ID 已停用或不存在：115266
+- *Tyranniscus cinereiceps*：iNaturalist ID 已停用或不存在：16470
+- *Tyranniscus uropygialis*：iNaturalist ID 已停用或不存在：16489
+- *Tyranniscus nigrocapillus*：iNaturalist ID 已停用或不存在：16471
+- *Elaenia obscura*：iNaturalist ID 已停用或不存在：16683
+- *Elaenia pallatangae*：iNaturalist ID 已停用或不存在：16695
+- *Cnemarchus rufipennis*：iNaturalist ID 已停用或不存在：17305
+- *Neoxolmis coronatus*：iNaturalist ID 已停用或不存在：16130
+- *Neoxolmis rubetra*：iNaturalist ID 已停用或不存在：16123
+- *Neoxolmis salinarum*：iNaturalist ID 已停用或不存在：73564
+- *Sakesphoroides cristatus*：iNaturalist ID 已停用或不存在：15813
+- *Radinopsyche sellowi*：iNaturalist ID 已停用或不存在：72919
+- *Cryptopezus nattereri*：iNaturalist ID 已停用或不存在：116933
+- *Myrmothera fulviventris*：iNaturalist ID 已停用或不存在：116931
+- *Myrmothera berlepschi*：iNaturalist ID 已停用或不存在：116929
+- *Myrmothera dives*：iNaturalist ID 已停用或不存在：116930
+- *Hylexetastes uniformis*：iNaturalist ID 已停用或不存在：103069
+- *Neophilydor fuscipenne*：iNaturalist ID 已停用或不存在：11157
+- *Neophilydor erythrocercum*：iNaturalist ID 已停用或不存在：11162
+- *Automolus virgatus*：iNaturalist ID 已停用或不存在：719896
+- *Pseudocolaptes johnsoni*：iNaturalist ID 已停用或不存在：628713
+- *Furnarius longirostris*：iNaturalist ID 已停用或不存在：723865
+- *Sylviorthorhynchus desmurii*：iNaturalist 候选：11772 Sylviorthorhynchus desmursii (species)
+- *Sylviorthorhynchus yanacensis*：iNaturalist ID 已停用或不存在：11689
+- *Thripophaga gutturata*：iNaturalist ID 已停用或不存在：11228
+- *Cranioleuca berlepschi*：iNaturalist ID 已停用或不存在：11803
+- *Cranioleuca antisiensis*：iNaturalist ID 已停用或不存在：11235
+- *Sericulus aureus*：iNaturalist ID 已停用或不存在：14543
+- *Calamanthus campestris*：iNaturalist ID 已停用或不存在：13526
+- *Origma robusta*：iNaturalist ID 已停用或不存在：13537
+- *Origma murina*：iNaturalist ID 已停用或不存在：13538
+- *Aethomyias spilodera*：iNaturalist ID 已停用或不存在：13508
+- *Aethomyias rufescens*：iNaturalist ID 已停用或不存在：13513
+- *Aethomyias perspicillatus*：iNaturalist ID 已停用或不存在：13511
+- *Aethomyias arfakianus*：iNaturalist ID 已停用或不存在：13512
+- *Aethomyias papuensis*：iNaturalist ID 已停用或不存在：13514
+- *Melionyx fuscus*：iNaturalist ID 已停用或不存在：12479
+- *Melionyx nouhuysi*：iNaturalist ID 已停用或不存在：12483
+- *Pinarostola ixoides*：iNaturalist ID 已停用或不存在：12593
+- *Philemon moluccensis*：iNaturalist ID 已停用或不存在：12325
+- *Meliphaga albilineata*：iNaturalist ID 已停用或不存在：204540
+- *Meliphaga chrysogenys*：iNaturalist ID 已停用或不存在：12244
+- *Ptilorrhoa caerulescens*：iNaturalist ID 已停用或不存在：8568
+- *Ceblepyris pectoralis*：iNaturalist ID 已停用或不存在：7962
+- *Laniarius poensis*：iNaturalist ID 已停用或不存在：8212
+- *Dyaphorophyia castanea*：iNaturalist ID 已停用或不存在：8461
+- *Dyaphorophyia tonsa*：iNaturalist ID 已停用或不存在：8457
+- *Batis minor*：iNaturalist ID 已停用或不存在：8401
+- *Daphoenositta chrysoptera*：iNaturalist ID 已停用或不存在：8577
+- *Falcunculus frontatus*：iNaturalist ID 已停用或不存在：8585
+- *Tunchiornis ochraceiceps*：iNaturalist ID 已停用或不存在：17426
+- *Vireo olivaceus*：iNaturalist ID 已停用或不存在：17366
+- *Vireo crassirostris*：iNaturalist ID 已停用或不存在：17369
+- *Pitohui kirhocephalus*：iNaturalist ID 已停用或不存在：7947
+- *Pitohui cerviniventris*：iNaturalist ID 已停用或不存在：728706
+- *Pseudorectes ferrugineus*：iNaturalist ID 已停用或不存在：201136
+- *Pachycephala graeffii*：iNaturalist ID 已停用或不存在：201141
+- *Dicrurus annectens*：iNaturalist ID 已停用或不存在：8272
+- *Dicrurus ludwigii*：iNaturalist ID 已停用或不存在：8280
+- *Dicrurus modestus*：iNaturalist ID 已停用或不存在：144734
+- *Clytorhynchus nigrogularis*：iNaturalist ID 已停用或不存在：8302
+- *Parotia helenae*：iNaturalist ID 已停用或不存在：108806
+- *Diphyllodes magnificus*：iNaturalist ID 已停用或不存在：8367
+- *Lanius excubitor*：iNaturalist ID 已停用或不存在：204532
+- *Lanius meridionalis*：iNaturalist ID 已停用或不存在：144727
+- *Pica nuttallii*：iNaturalist 候选：8319 Pica nuttalli (species)
+- *Coloeus dauuricus*：iNaturalist ID 已停用或不存在：8009
+- *Corvus minutus*：iNaturalist ID 已停用或不存在：578338
+- *Corvus enca*：iNaturalist ID 已停用或不存在：8016
+- *Petroica multicolor*：iNaturalist ID 已停用或不存在：438021
+- *Devioeca papuana*：iNaturalist ID 已停用或不存在：14164
+- *Kempiella flavovirescens*：iNaturalist ID 已停用或不存在：14160
+- *Kempiella griseoceps*：iNaturalist ID 已停用或不存在：14163
+- *Plesiodryas albonotata*：iNaturalist ID 已停用或不存在：14181
+- *Eopsaltria placens*：iNaturalist ID 已停用或不存在：14180
+- *Eopsaltria leucops*：iNaturalist ID 已停用或不存在：14185
+- *Melanodryas bimaculata*：iNaturalist ID 已停用或不存在：73159
+- *Melanodryas sigillata*：iNaturalist ID 已停用或不存在：144760
+- *Melanodryas cyanus*：iNaturalist ID 已停用或不存在：14199
+- *Melanodryas cryptoleuca*：iNaturalist ID 已停用或不存在：73160
+- *Calendulauda rufa*：iNaturalist ID 已停用或不存在：7332
+- *Calendulauda gilletti*：iNaturalist ID 已停用或不存在：7324
+- *Plocealauda microptera*：iNaturalist ID 已停用或不存在：73057
+- *Plocealauda erythrocephala*：iNaturalist ID 已停用或不存在：73055
+- *Plocealauda affinis*：iNaturalist ID 已停用或不存在：73054
+- *Plocealauda assamica*：iNaturalist ID 已停用或不存在：7331
+- *Plocealauda erythroptera*：iNaturalist ID 已停用或不存在：7319
+- *Amirafra collaris*：iNaturalist ID 已停用或不存在：7344
+- *Amirafra angolensis*：iNaturalist ID 已停用或不存在：7329
+- *Amirafra rufocinnamomea*：iNaturalist ID 已停用或不存在：7342
+- *Corypha apiata*：iNaturalist ID 已停用或不存在：204543
+- *Corypha fasciolata*：iNaturalist ID 已停用或不存在：144762
+- *Corypha africana*：iNaturalist ID 已停用或不存在：7338
+- *Corypha somalica*：iNaturalist ID 已停用或不存在：7325
+- *Corypha hypermetra*：iNaturalist ID 已停用或不存在：7326
+- *Calandrella blanfordi*：iNaturalist ID 已停用或不存在：144776
+- *Phragmacia substriata*：iNaturalist ID 已停用或不存在：144955
+- *Calamonastes undosus*：iNaturalist ID 已停用或不存在：144945
+- *Camaroptera brachyura*：iNaturalist ID 已停用或不存在：7736
+- *Apalis thoracica*：iNaturalist ID 已停用或不存在：339934
+- *Apalis porphyrolaema*：iNaturalist ID 已停用或不存在：7759
+- *Cisticola galactotes*：iNaturalist ID 已停用或不存在：7699
+- *Crossleyia tenebrosa*：iNaturalist ID 已停用或不存在：144939
+- *Locustella montis*：iNaturalist ID 已停用或不存在：339737
+- *Bradypterus bangwaensis*：iNaturalist ID 已停用或不存在：117147
+- *Cincloramphus rubiginosus*：iNaturalist ID 已停用或不存在：116976
+- *Cincloramphus grosvenori*：iNaturalist ID 已停用或不存在：117207
+- *Phedinopsis brazzae*：iNaturalist ID 已停用或不存在：11984
+- *Hirundo tahitica*：iNaturalist ID 已停用或不存在：11921
+- *Hemitesia pallidipes*：iNaturalist ID 已停用或不存在：339699
+- *Horornis diphone*：iNaturalist ID 已停用或不存在：339703
+- *Phylloscopus presbytes*：iNaturalist ID 已停用或不存在：117040
+- *Arizelocichla nigriceps*：iNaturalist ID 已停用或不存在：144888
+- *Microtarsus eutilotus*：iNaturalist ID 已停用或不存在：14612
+- *Microtarsus urostictus*：iNaturalist ID 已停用或不存在：14614
+- *Microtarsus nieuwenhuisii*：iNaturalist ID 已停用或不存在：14609
+- *Rubigula erythropthalmos*：iNaturalist ID 已停用或不存在：14604
+- *Rubigula cyaniventris*：iNaturalist ID 已停用或不存在：14601
+- *Pycnonotus simplex*：iNaturalist ID 已停用或不存在：14589
+- *Pycnonotus bimaculatus*：iNaturalist ID 已停用或不存在：14602
+- *Alcurus striatus*：iNaturalist ID 已停用或不存在：14627
+- *Hemixos flavala*：iNaturalist ID 已停用或不存在：14683
+- *Ixos leucogrammicus*：iNaturalist ID 已停用或不存在：14599
+- *Hypsipetes longirostris*：iNaturalist ID 已停用或不存在：322543150
+- *Yuhina flavicollis*：iNaturalist ID 已停用或不存在：15317
+- *Zosterops palpebrosus*：iNaturalist ID 已停用或不存在：17510
+- *Zosterops poliogastrus*：iNaturalist ID 已停用或不存在：73577
+- *Zosterops everetti*：iNaturalist ID 已停用或不存在：17508
+- *Zosterops japonicus*：iNaturalist ID 已停用或不存在：17506
+- *Zosterops abyssinicus*：iNaturalist ID 已停用或不存在：17452
+- *Laniellus langbianis*：iNaturalist ID 已停用或不存在：15582
+- *Regulus madeirensis*：iNaturalist ID 已停用或不存在：117098
+- *Sitta arctica*：iNaturalist ID 已停用或不存在：552478
+- *Salpornis spilonota*：iNaturalist ID 已停用或不存在：7620
+- *Ramphocaenus melanurus*：iNaturalist ID 已停用或不存在：7618
+- *Polioptila albiloris*：iNaturalist ID 已停用或不存在：7505
+- *Nannus hiemalis*：iNaturalist ID 已停用或不存在：144883
+- *Nannus pacificus*：iNaturalist ID 已停用或不存在：144882
+- *Nannus troglodytes*：iNaturalist ID 已停用或不存在：145363
+- *Cistothorus stellaris*：iNaturalist ID 已停用或不存在：361879
+- *Troglodytes browni*：iNaturalist ID 已停用或不存在：7634
+- *Saroglossa spilopterus*：iNaturalist ID 已停用或不存在：15004
+- *Arizelopsar femoralis*：iNaturalist ID 已停用或不存在：547205
+- *Stizorhina finschi*：iNaturalist ID 已停用或不存在：145079
+- *Turdus poliocephalus*：iNaturalist ID 已停用或不存在：12742
+- *Turdus nigriceps*：iNaturalist ID 已停用或不存在：12759
+- *Turdus ignobilis*：iNaturalist ID 已停用或不存在：12722
+- *Alethe diademata*：iNaturalist ID 已停用或不存在：12812
+- *Tychaedon signata*：iNaturalist ID 已停用或不存在：145023
+- *Tychaedon barbata*：iNaturalist ID 已停用或不存在：145025
+- *Copsychus stricklandii*：iNaturalist ID 已停用或不存在：343985
+- *Muscicapa flavirostris*：iNaturalist ID 已停用或不存在：13266
+- *Cyornis tickelliae*：iNaturalist ID 已停用或不存在：12845, 138481918
+- *Cossyphicula isabellae*：iNaturalist ID 已停用或不存在：12787
+- *Myiomela sumatrana*：iNaturalist ID 已停用或不存在：718611
+- *Brachypteryx montana*：iNaturalist ID 已停用或不存在：12930
+- *Monticola erythronotus*：iNaturalist ID 已停用或不存在：106063
+- *Oenanthe xanthoprymna*：iNaturalist ID 已停用或不存在：12826
+- *Oenanthe halophila*：iNaturalist ID 已停用或不存在：362733
+- *Pachyglossa vincens*：iNaturalist ID 已停用或不存在：13398
+- *Pachyglossa everetti*：iNaturalist ID 已停用或不存在：13387
+- *Anthreptes malacensis*：iNaturalist ID 已停用或不存在：13371
+- *Cinnyris mediocris*：iNaturalist ID 已停用或不存在：145166
+- *Foudia eminentissima*：iNaturalist ID 已停用或不存在：13875
+- *Stizoptera bichenovii*：iNaturalist ID 已停用或不存在：14109
+- *Lonchura malacca*：iNaturalist ID 已停用或不存在：13888
+- *Coccopygia melanotis*：iNaturalist ID 已停用或不存在：145334
+- *Delacourella capistrata*：iNaturalist ID 已停用或不存在：14040
+- *Passer simplex*：iNaturalist ID 已停用或不存在：13850
+- *Anthus ruficollis*：iNaturalist ID 已停用或不存在：17549
+- *Fringilla teydea*：iNaturalist ID 已停用或不存在：10071
+- *Fringilla spodiogenys*：iNaturalist ID 已停用或不存在：553980
+- *Chlorophonia elegantissima*：iNaturalist ID 已停用或不存在：9284
+- *Chlorophonia cyanocephala*：iNaturalist ID 已停用或不存在：9309
+- *Fringillaria cabanisi*：iNaturalist ID 已停用或不存在：9214
+- *Fringillaria flaviventris*：iNaturalist ID 已停用或不存在：9202
+- *Fringillaria poliopleura*：iNaturalist ID 已停用或不存在：9209
+- *Fringillaria affinis*：iNaturalist ID 已停用或不存在：9220
+- *Fringillaria capensis*：iNaturalist ID 已停用或不存在：204506
+- *Fringillaria impetuani*：iNaturalist ID 已停用或不存在：9221
+- *Fringillaria socotrana*：iNaturalist ID 已停用或不存在：9208
+- *Fringillaria sahari*：iNaturalist ID 已停用或不存在：201231
+- *Fringillaria striolata*：iNaturalist ID 已停用或不存在：204505
+- *Fringillaria goslingi*：iNaturalist ID 已停用或不存在：367690
+- *Fringillaria tahapisi*：iNaturalist ID 已停用或不存在：367712
+- *Schoeniclus siemsseni*：iNaturalist ID 已停用或不存在：793306
+- *Schoeniclus elegans*：iNaturalist ID 已停用或不存在：9207
+- *Schoeniclus yessoensis*：iNaturalist ID 已停用或不存在：9218
+- *Schoeniclus pallasi*：iNaturalist ID 已停用或不存在：9191
+- *Schoeniclus schoeniclus*：iNaturalist ID 已停用或不存在：9201
+- *Schoeniclus chrysophrys*：iNaturalist ID 已停用或不存在：9187
+- *Schoeniclus tristrami*：iNaturalist ID 已停用或不存在：9225
+- *Schoeniclus variabilis*：iNaturalist ID 已停用或不存在：9199
+- *Melophus bruniceps*：iNaturalist ID 已停用或不存在：9215
+- *Amphispizopsis quinquestriata*：iNaturalist ID 已停用或不存在：9950
+- *Ammospiza leconteii*：iNaturalist ID 已停用或不存在：10133
+- *Atlapetes tibialis*：iNaturalist ID 已停用或不存在：10564
+- *Sturnella lilianae*：iNaturalist ID 已停用或不存在：349723
+- *Leistes superciliaris*：iNaturalist ID 已停用或不存在：71993584
+- *Myiothlypis griseiceps*：iNaturalist ID 已停用或不存在：10037
+- *Periporphyrus celaeno*：iNaturalist ID 已停用或不存在：10021
+- *Driophlox gutturalis*：iNaturalist ID 已停用或不存在：9932
+- *Driophlox cristata*：iNaturalist ID 已停用或不存在：9931
+- *Driophlox atrimaxillaris*：iNaturalist ID 已停用或不存在：9934
+- *Dacnis egregia*：iNaturalist ID 已停用或不存在：424333
+- *Loriotus rufiventer*：iNaturalist ID 已停用或不存在：10078
+- *Loriotus luctuosus*：iNaturalist ID 已停用或不存在：10077
+- *Ramphocelus passerinii*：iNaturalist ID 已停用或不存在：10053
+- *Ramphocelus bresilia*：iNaturalist 候选：10055 Ramphocelus bresilius (species)
+- *Idiopsar dorsalis*：iNaturalist ID 已停用或不存在：10088
+- *Poospiza nigrorufa*：iNaturalist ID 已停用或不存在：9796
+- *Tangara schrankii*：iNaturalist ID 已停用或不存在：9590
+- *Chalcothraupis ruficervix*：iNaturalist ID 已停用或不存在：9575
+- *Poecilostreptus cabanisi*：iNaturalist ID 已停用或不存在：9582
+- *Poecilostreptus palmeri*：iNaturalist ID 已停用或不存在：9574
+- *Stilpnia larvata*：iNaturalist ID 已停用或不存在：9566
+- *Stilpnia nigrocincta*：iNaturalist ID 已停用或不存在：9552
+- *Stilpnia cyanicollis*：iNaturalist ID 已停用或不存在：9588
+- *Stilpnia viridicollis*：iNaturalist ID 已停用或不存在：9584
+- *Stilpnia phillipsi*：iNaturalist ID 已停用或不存在：9585
+- *Stilpnia heinei*：iNaturalist ID 已停用或不存在：9567
+- *Stilpnia argyrofenges*：iNaturalist ID 已停用或不存在：9579
+- *Stilpnia meyerdeschauenseei*：iNaturalist ID 已停用或不存在：9583
+- *Stilpnia vitriolina*：iNaturalist ID 已停用或不存在：9571
+- *Stilpnia cucullata*：iNaturalist ID 已停用或不存在：9586
+
+## 人工复核清单
+
+- *Porphyrio porphyrio*：AviList Purple Swamphen lumps porphyrio + poliocephalus + others; sources keep Western Swamphen → Wikidata `narrower` Q187902，iNat `narrower`，GBIF `narrower`
+- *Taeniopygia guttata*：AviList Zebra Finch lumps guttata + castanotis; sources keep them apart → Wikidata `narrower` Q331065，iNat `narrower`，GBIF `narrower`
+- *Pericrocotus flammeus*：AviList Scarlet Minivet includes speciosus → Wikidata `narrower` Q605732，iNat `narrower`，GBIF `narrower`
+- *Aegithalos iouschistos*：AviList Black-browed Bushtit lumps bonvaloti → Wikidata `narrower` Q1590485，iNat `narrower`，GBIF `narrower`
+- *Glaucidium gnoma*：AviList Northern Pygmy Owl lumps californicum → Wikidata `narrower` Q1034956，iNat `narrower`，GBIF `narrower`
+- *Piranga flava*：AviList Hepatic Tanager lumps hepatica → Wikidata `narrower` Q1587905，iNat `narrower`，GBIF `narrower`
+- *Butorides striata*：IOC Chinese names of striata / virescens look swapped (zh-names.csv); check the sitelinks → Wikidata `split-lump` Q270722，iNat `split-lump`，GBIF `exact-reviewed`
+- *Butorides virescens*：IOC Chinese names of striata / virescens look swapped (zh-names.csv); check the sitelinks → Wikidata `exact-reviewed` Q498228，iNat `exact-reviewed`，GBIF `exact-reviewed`
+
+## 来源与许可
+
+- Wikidata（https://query.wikidata.org/）：CC0 1.0，取于 2026-11-19
+- GBIF species match v2（https://api.gbif.org/v2/species/match）：GBIF Backbone Taxonomy, CC BY 4.0 (ids and names only)，取于 2026-11-19
+- iNaturalist API v1 taxa（https://api.inaturalist.org/v1/taxa）：ids, names and ranks only (facts); terms https://www.inaturalist.org/pages/terms，取于 2026-11-19
+- AviList v2026（https://doi.org/10.2173/avilist.v2026）：CC BY 4.0
+- IOC World Bird List 15.2 (Chinese)（https://www.worldbirdnames.org/）：CC BY 3.0

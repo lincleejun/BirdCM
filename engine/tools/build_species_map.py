@@ -290,6 +290,14 @@ def decide_wd(sp: dict, named: list[dict], by_code: list[dict], by_syn: list[dic
     if len(named) == 1:
         it = named[0]
         other = [c for c in by_code if c["qid"] != it["qid"]]
+        if len(other) == 1 and not it["ebird"] and not (it["zh"] or it["en"]) \
+                and any(epithet(n) == epithet(sci) for n in other[0]["names"]):
+            # Wikidata keeps one item per combination: a bare item for the new name (no code, no article) and the
+            # established one under the old genus with the AviList eBird code and the articles. Same epithet: a genus
+            # transfer of the same species.
+            o = {**other[0], "inat": other[0]["inat"] | it["inat"]}    # iNat moves the id to the new name: check both
+            return "synonym-reviewed", o, (f"属变更：Wikidata 的新组合条目 {it['qid']} 没有 eBird 代码和维基条目；"
+                                           f"采用带 eBird 代码 {code} 的条目 {o['qid']}（{sorted(o['names'])[0]}）")
         if other:
             return "ambiguous", None, f"学名条目 {it['qid']} 与带 eBird 代码 {code} 的条目 {other[0]['qid']} 不同"
         if code and it["ebird"] and code not in it["ebird"]:
@@ -401,6 +409,8 @@ def build(work: Path, out: Path, report: Path) -> None:
                                     items(wd_syn.get(sci, [])))
         i_state, i_id, i_name, i_rank, i_note = decide_inat(sci, state, it, inat)
         g_state, g_key, g_name, g_rank, g_note = decide_gbif(sci, gbif[sci])
+        if sci in NARROWER and g_state in ACCEPT:
+            g_state, g_note = "narrower", "人工复核：" + NARROWER[sci]
         if g_key and it and it["gbif"]:
             if g_key not in it["gbif"]:
                 g_note = (g_note + "；" if g_note else "") + f"Wikidata P846 为 {'/'.join(sorted(it['gbif']))}"
@@ -513,7 +523,7 @@ def write_report(rows, arts, aliases, manifest, out: Path, report: Path) -> None
           f"- eBird 代码（来自 AviList，本身即权威）：{pct(sum(1 for r in rows if r['ebird_code']))}",
           f"- GBIF 2026 新 ID（Wikidata P14607）：{sum(1 for r in rows if r['gbif_2026_id'])}",
           f"- 别名：{len(aliases)} 条（" + "，".join(f"{k} {v}" for k, v in Counter(a[3] for a in aliases).most_common()) + "）；来源："
-          + "，".join(f"{k} {v}" for k, v in Counter(a[5].split(" Q")[0] if a[5].startswith("Wikidata Q") else a[5] for a in aliases).most_common()), "",
+          + "，".join(f"{k} {v}" for k, v in Counter(a[5].split(" (")[0].split(" Q")[0] for a in aliases).most_common()), "",
           "## 规则", "",
           "- **Wikidata**：P225 学名完全相同、P105 = 种、P31 为分类单元（含化石/灭绝）、P171 链上有鸟纲 Q5113，且只有一个这样的条目。"
           "同名多条时只在恰好一条带 AviList 的 eBird 代码时选它。没有同名条目时，只接受唯一一个在 P1420 异名里列出这个学名、"
