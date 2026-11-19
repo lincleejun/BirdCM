@@ -111,18 +111,28 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
         ) : (
           // a public clone has no sample photo (it is the author's own): an original mark instead of a broken image
           <div className="hero-mark">
-            <svg viewBox="0 0 200 200" aria-hidden="true">
-              <circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" strokeOpacity=".35" />
-              <circle cx="100" cy="100" r="58" fill="none" stroke="currentColor" strokeOpacity=".55" />
-              <path d="M40 112 C70 70 105 64 128 80 C140 66 158 62 172 66 C160 72 152 80 148 92 C136 120 96 132 40 112 Z" fill="currentColor" fillOpacity=".85" />
-              <circle cx="141" cy="76" r="2.6" fill="var(--mat)" />
-            </svg>
+            <BrandMark size={160} />
             <p className="hero-name">观羽</p>
             <p className="hero-tag">找鸟 · 认种 · 挑出值得细看的那一张</p>
           </div>
         )}
       </aside>
     </div>
+  );
+}
+
+/** The app icon's kingfisher (ios/design/icon/K1.svg) in its own deep-teal tile: the brand, not a UI colour. */
+function BrandMark({ size = 30 }: { size?: number }) {
+  return (
+    <svg className="mark" width={size} height={size} viewBox="0 0 1024 1024" aria-hidden="true">
+      <rect width="1024" height="1024" rx="224" fill="#123D46" />
+      <path d="M 231 788 L 319 626 Q 290 521 350 407 L 335 326 Q 423 250 535 280 Q 618 297 648 371 L 872 422 L 648 452 Q 647 618 479 770 L 412 709 Z" fill="#3BA5AC" />
+      <path d="M 357 479 Q 483 531 624 468 Q 625 630 479 770 L 412 709 Q 368 624 357 479 Z" fill="#DE8547" />
+      <path d="M 374 423 Q 483 380 637 414 L 625 458 Q 489 492 374 458 Z" fill="#F4F1E8" />
+      <path d="M 350 586 Q 340 501 432 477 Q 501 521 459 647 L 412 709 Z" fill="#102E2B" />
+      <path d="M 650 388 L 872 422 L 650 428 Z" fill="#F4F1E8" />
+      <circle cx="556" cy="366" r="47" fill="#102E2B" /><circle cx="542" cy="350" r="15" fill="#F4F1E8" />
+    </svg>
   );
 }
 
@@ -184,7 +194,7 @@ function App() {
       {!results && (
         <header className="masthead">
           <div className="masthead-inner">
-            <div className="brand"><span className="emblem" aria-hidden="true"></span><h1>观羽</h1><small>桌面审片</small></div>
+            <div className="brand"><BrandMark /><h1>观羽</h1><small>桌面审片</small></div>
             {nav}
           </div>
         </header>
@@ -193,7 +203,7 @@ function App() {
         : view === "library" ? <Records catalogue={catalogue} sci={sci} onSpecies={species} />
         : view === "stats" ? <Stats catalogue={catalogue} onSpecies={species} />
         : scanId ? <Results key={scanId} scanId={scanId} onBack={() => open(null)} onOpen={open} catalogue={catalogue} nav={nav}
-          brand={<div className="brand"><span className="emblem" aria-hidden="true"></span><h1>观羽</h1></div>} /> : <Setup onOpen={open} catalogue={catalogue} />}</main>
+          brand={<div className="brand"><BrandMark /><h1>观羽</h1></div>} /> : <Setup onOpen={open} catalogue={catalogue} />}</main>
     </>
   );
 }
