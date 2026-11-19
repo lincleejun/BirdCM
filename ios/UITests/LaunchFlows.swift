@@ -41,14 +41,24 @@ final class LaunchFlows: XCTestCase {
         element("home.map").tap();XCTAssertTrue(app.navigationBars.firstMatch.appears(timeout:5))
     }
     /// A photo taken before the models are ready is shown at once with the honest stage, then finishes with no second tap.
+    /// The photo opens its result page at once (owner 2026-11-18: no half-height card), which fills in progressively.
     func testPickBeforeReadyContinuesAutomatically() throws {
+        for dark in [false,true] {
+            let mode=dark ? "-dark":""
+            launch(["-delayModelLoad","15","-cameraFixture","YES"]+(dark ? ["-darkMode","YES"]:[]));wait("home.camera",10)
+            element("home.camera").tap();wait("place.skip",5);element("place.skip").tap()
+            wait("identifying",5);XCTAssertEqual(element("identifying.stage").label,"正在准备模型…")
+            XCTAssertTrue(element("identifying.cancel").exists);shot("waiting-for-models"+mode)
+            // Progressive: the found boxes and count appear before the names.
+            wait("identifying.found",60);XCTAssertEqual(element("identifying.found").label,"找到 1 只鸟");shot("found-boxes"+mode)
+            wait("result.name",90);XCTAssertEqual(element("result.name").label,"白头海雕");shot("result-after-progress"+mode)
+        }
+        // Back while it waits stops the identification and saves nothing.
         launch(["-delayModelLoad","15","-cameraFixture","YES"]);wait("home.camera",10)
-        element("home.camera").tap();wait("place.skip",5);element("place.skip").tap()
-        wait("identifying",5);XCTAssertEqual(element("identifying.stage").label,"正在准备模型…")
-        XCTAssertTrue(element("identifying.cancel").exists);shot("waiting-for-models")
-        // Progressive: the found boxes and count appear before the names.
-        wait("identifying.found",60);XCTAssertEqual(element("identifying.found").label,"找到 1 只鸟");shot("found-boxes")
-        wait("result.name",90);XCTAssertEqual(element("result.name").label,"白头海雕")
+        element("home.camera").tap();wait("place.skip",5);element("place.skip").tap();wait("identifying",5)
+        back();wait("home.photos",5);sleep(20)
+        XCTAssertFalse(element("result.name").exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'history.item.'")).count,0,"nothing saved")
     }
     func shot(_ name:String) {
         let s=XCUIScreen.main.screenshot(),a=XCTAttachment(screenshot:s);a.name=name;a.lifetime = .keepAlways;add(a)
