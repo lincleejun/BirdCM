@@ -27,6 +27,8 @@ env:
   # caches (uv wheels + python-build-standalone, npm, exiftool): only runs on main may save them, so a rehearsal on main
   # warms them; a tag run can read main's caches but not another tag's (GitHub docs: "Restrictions for accessing a cache")
   SAVE_CACHE: ${{ github.ref == 'refs/heads/main' }}
+  # the runner's newest Homebrew Python can be ahead of the wheels (onnxruntime has none for 3.15): use the app's 3.12
+  UV_PYTHON: '3.12'
 
 jobs:
   gate:
