@@ -54,7 +54,7 @@ struct ResultView: View {
                             if let p=r.place {
                                 // A region choice is an area, never a pin (its lat/lon is only a representative point).
                                 if p.source=="region" {Text(p.label);Text("按地区统计，不是具体坐标。").font(.caption).foregroundStyle(Palette.secondary)}
-                                else {PlaceSnapshot(points:[CLLocationCoordinate2D(latitude:p.lat,longitude:p.lon)],label:p.name).id("\(p.lat),\(p.lon)")}
+                                else {PlaceSnapshot(points:[CLLocationCoordinate2D(latitude:p.lat,longitude:p.lon)],label:model.placeName(p) ?? p.name).id("\(p.lat),\(p.lon)")}
                                 Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)
                             } else {Text("没有地点，当前仅按图像识别；统计时同日地点未知的记录合并。") .foregroundStyle(Palette.secondary)}
                             if let gps=r.shooting.photoPlace,r.place != gps {Button("改回照片自带的位置",systemImage:"location"){Task{await model.setPlace(gps)}}.accessibilityIdentifier("result.photoPlace").frame(minHeight:44)}
@@ -166,7 +166,7 @@ struct ResultView: View {
             }.buttonStyle(.bordered).controlSize(.large)
             ViewThatFits(in:.horizontal) {HStack{actions};VStack(alignment:.leading){actions}}.font(.subheadline).disabled(e.subject == nil || model.busy)
             VStack(alignment:.leading,spacing:8) {
-                Text("\(r.place?.name ?? "没有地点") ·\(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline)
+                Text("\(model.placeName(r.place) ?? String(localized:"没有地点")) ·\(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline)
                 if let p=r.place {Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)}
             }
             if let result=e.model {
@@ -252,7 +252,7 @@ struct PlacePickerActions:View {
     @State private var denied=false
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
-            Text("定位用于判断附近当季的鸟；大致位置就够了，照片不会上传。地图搜索和浏览由 Apple 提供。").font(.footnote).foregroundStyle(Palette.secondary).accessibilityIdentifier("place.explanation")
+            Text("定位用于判断附近当季的鸟；大致位置就够了，照片不会上传。地图搜索、浏览和地名由 Apple 提供（只发送坐标）。").font(.footnote).foregroundStyle(Palette.secondary).accessibilityIdentifier("place.explanation")
             Button(locating ? "正在定位…":"用我现在的位置",systemImage:"location.fill") {Task {
                 locating=true
                 if let p=await model.location.request() {onChoose(p)} else {denied=true;map=true}

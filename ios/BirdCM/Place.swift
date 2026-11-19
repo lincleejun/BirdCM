@@ -1,6 +1,7 @@
 import CoreLocation
 import Foundation
 import ImageIO
+import Observation
 
 /// Even/odd ray test shared with the global table region resolver.
 enum Boundaries {
@@ -28,9 +29,23 @@ struct Place: Codable, Equatable {
     /// The label without a trailing "lat, lon" (photo GPS and device labels are only coordinates; map picks append them).
     /// Coordinates are shown on a map snapshot and as a caption instead.
     var name:String {
-        let s=label.replacingOccurrences(of:#"(^| · )-?\d+(\.\d+)?, -?\d+(\.\d+)?$"#,with:"",options:.regularExpression)
+        let s=Self.withoutCoordinates(label)
         return s.isEmpty ? ["photo":String(localized:"照片拍摄位置"),"device":String(localized:"当前位置")][source] ?? String(localized:"地图选点"):s
     }
+    /// The label without a trailing "lat, lon"; empty when the label was only coordinates.
+    static func withoutCoordinates(_ label:String) -> String {
+        label.replacingOccurrences(of:#"(^| · )-?\d+(\.\d+)?, -?\d+(\.\d+)?$"#,with:"",options:.regularExpression)
+    }
+    /// Offline English names by ISO code: "United States" for a country, "United States · California" for a division.
+    static let englishNames:[String:String] = {
+        var out=[String:String]()
+        for c in countries {if let code=c["code"],let en=c["en"] {out[code]=en}}
+        for p in globalRegions {
+            guard let code=p.regionCode,let en=p.regionEnglish else {continue}
+            out[code]=(out[String(code.prefix(2))].map{$0+" · "} ?? "")+en
+        }
+        return out
+    }()
     var stableCode:String {regionCode ?? String(format:"%.4f,%.4f",lat,lon)}
     var valid: Bool { lat.isFinite && lon.isFinite && (-90...90).contains(lat) && (-180...180).contains(lon) }
     static func resolve(photo: Place?, device: Place?, manual: Place?) -> Place? {
@@ -110,6 +125,56 @@ struct Shooting: Codable {
             let place = Place(lat:la,lon:lo,label:String(format:"%.4f, %.4f",la,lo),source:"photo")
             if place.valid { photoPlace = place }
         }
+    }
+}
+
+/// Readable names for points (owner 2026-11-18: "文字位置，好理解", in English): the offline country · division at once,
+/// then Apple's reverse geocoding (en_US) once per ~1 km cell, cached in the library. Only coordinates go to Apple, one
+/// request at a time, ~1 s apart, a minute's pause after an error; never a street address.
+@MainActor @Observable final class PlaceNames {
+    private(set) var online=[String:String]()
+    @ObservationIgnored private var offline=[String:String]()
+    @ObservationIgnored private var queue=[(key:String,lat:Double,lon:Double)]()
+    @ObservationIgnored private var queued=Set<String>()
+    @ObservationIgnored private var running=false
+    @ObservationIgnored private var pausedUntil=Date.distantPast
+    /// Persist a fetched name (the library's cell cache) and the offline region lookup (codes for a point).
+    @ObservationIgnored var store:((String,String)->Void)?
+    @ObservationIgnored var regionAt:((Double,Double)->(division:String?,country:String?))?
+    /// 设置 → 用网络显示地名 (default on; UI tests register off unless they opt in).
+    static var networkEnabled:Bool {UserDefaults.standard.object(forKey:"placeNamesOnline") as? Bool ?? true}
+    func load(_ names:[String:String]) {online=names}
+    func name(lat:Double,lon:Double) -> String? {
+        let key="p:\(Int(floor(lat*100))):\(Int(floor(lon*100)))"
+        if Self.networkEnabled {
+            if let n=online[key] {return n}
+            if !queued.contains(key) && Date()>pausedUntil {queued.insert(key);queue.append((key,lat,lon));Task{await drain()}}
+        }
+        if let n=offline[key] {return n}
+        let codes=regionAt?(lat,lon), n=(codes?.division ?? codes?.country).flatMap{Place.englishNames[$0]} ?? codes?.country.flatMap{Place.englishNames[$0]}
+        if let n {offline[key]=n}
+        return n
+    }
+    private func drain() async {
+        guard !running else {return}
+        running=true;defer{running=false}
+        while !queue.isEmpty,Self.networkEnabled {
+            let job=queue.removeFirst()
+            do {
+                let marks=try await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude:job.lat,longitude:job.lon),preferredLocale:Locale(identifier:"en_US"))
+                if let p=marks.first,let n=Self.compose(locality:p.locality,county:p.subAdministrativeArea,state:p.administrativeArea,area:p.areasOfInterest?.first,district:p.subLocality,water:p.inlandWater ?? p.ocean,country:p.country) {online[job.key]=n;store?(job.key,n)}
+                try? await Task.sleep(for:.milliseconds(1200))
+            } catch {
+                // Offline or throttled: forget the queue (names are asked again when rows show) and pause a minute.
+                pausedUntil=Date().addingTimeInterval(60);queue.removeAll();queued.removeAll();return
+            }
+        }
+    }
+    /// "Town · park or district": the most local named area, never a street or house number; falls back to the country.
+    nonisolated static func compose(locality:String?,county:String?,state:String?,area:String?,district:String?,water:String?,country:String?) -> String? {
+        let parts=[locality ?? county ?? state,area ?? district ?? water].compactMap{$0}.filter{!$0.isEmpty}
+        let unique=parts.reduce(into:[String]()){if !$0.contains($1) {$0.append($1)}}
+        return unique.isEmpty ? country:unique.joined(separator:" · ")
     }
 }
 

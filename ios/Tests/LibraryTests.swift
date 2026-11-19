@@ -48,6 +48,18 @@ final class LibraryTests: XCTestCase {
         XCTAssertTrue(try SQL(archive.path, readOnly: true).rows("SELECT 1 FROM sqlite_master WHERE name='ll_view'").isEmpty, "not exported")
         XCTAssertEqual(try Library(dir: dir).items().first { $0.id == mid }?.viewed, "2026-04-02T00:00:00.000Z", "survives reopening")
     }
+    /// Readable place names: town · park/district from Apple's answer, never a street; cached per cell, never exported.
+    func testPlaceNameComposeAndCache() throws {
+        XCTAssertEqual(PlaceNames.compose(locality: "Cupertino", county: "Santa Clara County", state: "CA", area: "Stevens Creek County Park", district: "Monta Vista", water: nil, country: "United States"), "Cupertino · Stevens Creek County Park")
+        XCTAssertEqual(PlaceNames.compose(locality: nil, county: "Santa Clara County", state: "CA", area: nil, district: "Cupertino", water: nil, country: "United States"), "Santa Clara County · Cupertino")
+        XCTAssertEqual(PlaceNames.compose(locality: "Huntington Beach", county: nil, state: nil, area: nil, district: "Huntington Beach", water: nil, country: nil), "Huntington Beach")
+        XCTAssertEqual(PlaceNames.compose(locality: nil, county: nil, state: nil, area: nil, district: nil, water: nil, country: "United States"), "United States")
+        let dir = tmp(), lib = try Library(dir: dir)
+        try lib.setPlaceName("p:3732:-12203", "Cupertino · Stevens Creek County Park")
+        XCTAssertEqual(try Library(dir: dir).placeNames(), ["p:3732:-12203": "Cupertino · Stevens Creek County Park"])
+        let archive = dir.appendingPathComponent("x.birdcm"); try lib.export(to: archive)
+        XCTAssertTrue(try SQL(archive.path, readOnly: true).rows("SELECT 1 FROM sqlite_master WHERE name='ll_place_name'").isEmpty, "not exported")
+    }
     func testDeterministicFixture() throws {
         let lib = try Library(dir: tmp()), A = "Sterna hirundo", B = "Ardea alba"
         var n = 0

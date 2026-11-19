@@ -2,6 +2,21 @@ import XCTest
 
 /// Home place: map search and pin, offline regions and recents, device location (fixture and system prompt), photo GPS.
 final class PlaceFlows: FlowCase {
+    /// Points read as English place names (owner 2026-11-18), coordinates only as a caption: home place control, result
+    /// place block, 记录 → 照片 rows; light and dark, with Apple's names (network) — offline region names otherwise.
+    func testPlaceNamesInsteadOfCoordinates() throws {
+        for extra in [[String](),["-darkMode","YES"]] {
+            let mode=extra.isEmpty ? "-light":"-dark"
+            launch("photo-gps",extra:extra+["-placeNamesOnline","YES","-historyFixtureCount","3"])
+            element("home.map").tap();outcome("place.mapCanvas");element("place.usePin").tap()
+            until("home place named",15) {let l=self.element("home.place").label;return !l.isEmpty && !l.contains("地图选点") && l.range(of:#"\d+\.\d+, -?\d+\.\d+"#,options:.regularExpression) == nil}
+            sleep(2);try shot("place-name-home"+mode)
+            pick();_=reveal("place.coordinates");sleep(3)
+            XCTAssertNil(element("place.snapshot").label.range(of:#"\d+\.\d+, -?\d+\.\d+"#,options:.regularExpression),"map label is a name");try shot("place-name-result"+mode)
+            back();tab("tab.records","记录");segment("照片");outcome("history.sort");sleep(3);try shot("place-name-photos"+mode)
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(format:"label MATCHES %@",#"-?\d+\.\d+, -?\d+\.\d+"#)).firstMatch.exists,"no bare coordinates in the rows")
+        }
+    }
     func testPlaceMapSearchPinAndRecents() throws {
         launch();try shot("home-empty")
         element("home.map").tap();outcome("place.mapCanvas")

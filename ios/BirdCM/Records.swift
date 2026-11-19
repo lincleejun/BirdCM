@@ -108,7 +108,7 @@ struct RecordsView: View {
                             CropThumbnail(url: model.url(p.item.id), id: p.item.id, boxes: p.item.boxes, crops: p.item.crops, index: p.subject.ordinal).frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("鸟 \(p.subject.ordinal + 1) · \(p.reason)").font(.subheadline)
-                                Text("\(p.item.day) · \(p.item.placeLabel ?? String(localized: "没有地点"))").font(.caption).foregroundStyle(Palette.secondary)
+                                Text("\(p.item.day) · \(model.placeName(p.item) ?? String(localized: "没有地点"))").font(.caption).foregroundStyle(Palette.secondary)
                             }
                             Spacer(); Image(systemName: "chevron.right").font(.caption)
                         }.frame(minHeight: 56).contentShape(Rectangle())
@@ -221,7 +221,7 @@ struct SpeciesPage: View {
     @ViewBuilder func places(_ sightings: [Sighting]) -> some View {
         let groups = Dictionary(grouping: sightings, by: \.place)
         let rows = groups.map { place, list -> (String, Int) in
-            let label = place == "none" ? String(localized: "地点未知（同日合并）") : model.items.first { $0.placeKey == place }?.placeLabel ?? place
+            let label = place == "none" ? String(localized: "地点未知（同日合并）") : model.items.first { $0.placeKey == place }.flatMap(model.placeName) ?? place
             return (label, list.count)
         }.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0 < $1.0 }
         // Photo points on one static map (region-only and unknown places stay in the list only).

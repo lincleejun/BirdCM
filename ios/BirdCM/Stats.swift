@@ -258,7 +258,7 @@ struct SightingList: View {
     let day: String?
     @State private var editing: Sighting?
     func place(_ o: Sighting) -> String {
-        o.place == "none" ? String(localized: "地点未知（同日合并）") : model.ledger.evidence(o).first?.placeLabel ?? o.place
+        o.place == "none" ? String(localized: "地点未知（同日合并）") : model.ledger.evidence(o).first.flatMap(model.placeName) ?? o.place
     }
     var body: some View {
         let list = model.ledger.observations.filter { Ledger.inRange($0.day, range) }

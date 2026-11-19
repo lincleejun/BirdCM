@@ -42,6 +42,21 @@ final class LaunchTests: XCTestCase {
         XCTAssertEqual(resultPage, table); XCTAssertEqual(speciesPage, table); XCTAssertNotEqual(resultPage, "CR")
         XCTAssertEqual(model.catalogue.rarity?.iucn(codes: [table])[key], table, "探索 badges read the same column")
     }
+    /// A point reads as an English place name (offline region, or the cached Apple name), never as coordinates; a typed
+    /// or searched name stays; a region choice keeps its region name.
+    @MainActor func testPlaceNamesReadableNotCoordinates() throws {
+        let d = UserDefaults.standard; d.set(false, forKey: "placeNamesOnline"); defer { d.removeObject(forKey: "placeNamesOnline") }
+        let name = "PlaceNames-\(UUID().uuidString)", model = AppModel(history: name)
+        defer { try? FileManager.default.removeItem(at: Models.support.appendingPathComponent(name)) }
+        XCTAssertEqual(model.placeName("37.3220, -122.0230", lat: 37.322, lon: -122.023, source: "photo"), "United States · California")
+        XCTAssertEqual(model.placeName("地图选点 · 37.32, -122.02", lat: 37.322, lon: -122.023, source: "map"), "United States · California")
+        XCTAssertEqual(model.placeName("Bolsa Chica · 33.70, -118.06", lat: 33.7, lon: -118.06, source: "map"), "Bolsa Chica")
+        XCTAssertEqual(model.placeName("美国 · 加利福尼亚州", lat: 36.6, lon: -121.9, source: "region"), "美国 · 加利福尼亚州")
+        model.placeNames.load(["p:3732:-12203": "Cupertino · Stevens Creek County Park"])
+        XCTAssertEqual(model.placeName("37.3220, -122.0230", lat: 37.322, lon: -122.023, source: "photo"), "United States · California", "setting off: offline name")
+        d.set(true, forKey: "placeNamesOnline")
+        XCTAssertEqual(model.placeName("37.3220, -122.0230", lat: 37.322, lon: -122.023, source: "photo"), "Cupertino · Stevens Creek County Park")
+    }
     /// Old downloaded models (Application Support/Models) go; History and everything else stay.
     func testLegacyDownloadedModelsRemoved() throws {
         let support=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

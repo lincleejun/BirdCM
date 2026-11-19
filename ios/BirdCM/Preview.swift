@@ -32,7 +32,7 @@ extension AppModel {
         if state=="gbif-rare" {result.top5[0]=Candidate(scientific:"Aegolius acadicus",english:"Northern Saw-whet Owl",chinese:"棕榈鬼鸮",p:0.97);result.name="Aegolius acadicus";result.rare=false}
         if state=="uncertain-geo" {result.level="uncertain";result.name=nil;result.top5[0].p=0.6;result.reason="图像最像 白头海雕，但此地此季几乎没有它。"}
         if state=="unknown-prior" {result.priorUnknown=true}
-        if state=="photo-gps" {shooting.photoPlace=Place(lat:33.7,lon:-118.06,label:"Bolsa Chica",source:"photo")}
+        if state=="photo-gps" {shooting.photoPlace=Place(lat:33.7,lon:-118.06,label:"33.7000, -118.0600",source:"photo")}   // as Shooting labels real photo GPS
         if state=="location-rerank" {result=Confirm.decide(p:[0.49,0.48,0.03],rows:Self.blackbirdRows,wide:nil,typical:nil);result.visual=[0.49,0.48,0.03]}
         var r=Record(boxes:state=="no-bird" ? []:[[0.34,0.09,0.72,0.73]],selected:0,result:state=="no-bird" ? nil:result,shooting:shooting,place:shooting.photoPlace ?? ((state=="no-location" || state=="home-place") ? homePlace:state=="location-rerank" ? nil:place))
         if state=="multiple" {

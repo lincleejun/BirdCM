@@ -201,6 +201,8 @@ final class Library {
         guard try db.rows("SELECT value FROM ll_meta WHERE key='format'").first?.s(0) == "birdcm-local-ios" else { throw StoreError(message: "记录库格式无法识别，未做任何改动。") }
         // Device-local UI state (最近查看): outside the archive schema, never exported, no revision or statistics change.
         try db.exec("CREATE TABLE IF NOT EXISTS ll_view(record_id TEXT PRIMARY KEY, viewed_utc TEXT NOT NULL)")
+        // Reverse-geocoded names per ~1 km cell: a device-local cache, never exported.
+        try db.exec("CREATE TABLE IF NOT EXISTS ll_place_name(cell TEXT PRIMARY KEY, name TEXT NOT NULL)")
         if version == 0 {
             needsMigration = legacyNames().contains { $0.hasSuffix(".json") }
             if !needsMigration { try db.exec("PRAGMA user_version=1") }
@@ -478,6 +480,12 @@ final class Library {
             let x = a.viewed ?? a.identified, y = b.viewed ?? b.identified
             return x != y ? x > y : a.wall > b.wall
         }
+    }
+    func placeNames() -> [String: String] {
+        (try? locked { Dictionary(try db.rows("SELECT cell,name FROM ll_place_name").map { ($0.s(0)!, $0.s(1)!) }, uniquingKeysWith: { a, _ in a }) }) ?? [:]
+    }
+    func setPlaceName(_ cell: String, _ name: String) throws {
+        _ = try locked { try db.run("INSERT OR REPLACE INTO ll_place_name VALUES(?,?)", [cell, name]) }
     }
     /// Opening or identifying a photo counts as viewing it. Returns the stored instant.
     @discardableResult func markViewed(_ id: UUID, now: Date = Date()) throws -> String {

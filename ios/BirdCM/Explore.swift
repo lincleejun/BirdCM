@@ -73,7 +73,7 @@ struct ExploreView: View {
             Section {
                 Picker("范围", selection: $mode) { Text("这里这个月").tag("local"); Text("全部物种").tag("all") }.pickerStyle(.segmented).accessibilityIdentifier("explore.mode")
                 if mode == "local" {
-                    Button { choosePlace = true } label: { LabeledContent("地点", value: model.homePlace?.label ?? String(localized: "选择地点")) }.accessibilityIdentifier("explore.place")
+                    Button { choosePlace = true } label: { LabeledContent("地点", value: model.placeName(model.homePlace) ?? String(localized: "选择地点")) }.accessibilityIdentifier("explore.place")
                     Picker("月份", selection: $month) { ForEach(1...12, id: \.self) { Text("\($0) 月").tag($0) } }.accessibilityIdentifier("explore.month")
                 }
                 Picker("已见", selection: $seen) { Text("全部").tag("all"); Text("已见").tag("seen"); Text("未见").tag("unseen") }.pickerStyle(.segmented).accessibilityIdentifier("explore.filter")

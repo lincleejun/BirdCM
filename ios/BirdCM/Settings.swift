@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var place = false
     @State private var clear = false
     @State private var cleanup = false
+    @AppStorage("placeNamesOnline") private var placeNamesOnline = true
     /// Directory size and the legacy-copy scan read every file: computed off the main actor, not in `body`.
     @State private var disk: (storage: Int, redundant: [URL], redundantBytes: Int)?
     func scanDisk() async {
@@ -30,8 +31,11 @@ struct SettingsView: View {
                     Button("清理旧版本副本（\(disk.redundant.count) 个，\(ByteCountFormatter.string(fromByteCount: Int64(disk.redundantBytes), countStyle: .file))）") { cleanup = true }.accessibilityIdentifier("settings.cleanup")
                 }
             }
-            Section("地点") {
-                Button { place = true } label: { LabeledContent("默认地点", value: model.homePlace?.label ?? String(localized: "未设置")) }.accessibilityIdentifier("settings.place")
+            Section {
+                Button { place = true } label: { LabeledContent("默认地点", value: model.placeName(model.homePlace) ?? String(localized: "未设置")) }.accessibilityIdentifier("settings.place")
+                Toggle("用网络显示地名", isOn: $placeNamesOnline).accessibilityIdentifier("settings.placeNames")
+            } header: { Text("地点") } footer: {
+                Text("开启时只把坐标发给 Apple 换取英文地名（约 1 公里精度，存在本机）；关闭后显示离线的国家 · 州/省。")
             }
             Section {
                 Button("关于与数据来源") { about = true }.accessibilityIdentifier("home.about")

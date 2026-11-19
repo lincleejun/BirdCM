@@ -123,6 +123,17 @@ func title(_ r: Identification) -> String {
         await identify(data)
     }
     let location=DeviceLocation()
+    let placeNames=PlaceNames()
+    /// What a person reads for a place: a region by its name; a searched or typed name as given; a bare point (photo GPS,
+    /// 当前位置, 地图选点) by its English place name — never raw coordinates (those stay in a caption or the map).
+    func placeName(_ label:String?,lat:Double?,lon:Double?,source:String) -> String? {
+        guard source != "region",let lat,let lon else {return label}
+        let own=label.map(Place.withoutCoordinates) ?? ""
+        if !own.isEmpty && !["地图选点","照片拍摄位置","当前位置"].contains(own) {return own}
+        return placeNames.name(lat:lat,lon:lon) ?? label.map{Place(lat:lat,lon:lon,label:$0,source:source).name}
+    }
+    func placeName(_ p:Place?) -> String? {p.flatMap{placeName($0.label,lat:$0.lat,lon:$0.lon,source:$0.source)}}
+    func placeName(_ i:PhotoItem) -> String? {placeName(i.placeLabel,lat:i.lat,lon:i.lon,source:i.placeSource)}
     var library: Library?
     var sessionSeconds: Double=0
     var error: String?
@@ -188,8 +199,14 @@ func title(_ r: Identification) -> String {
     }
     #endif
     func openLibrary(_ dir:URL) {
+        #if DEBUG
+        // UI tests read offline names unless they pass -placeNamesOnline YES (registered, never persisted).
+        if UserDefaults.standard.bool(forKey:"uiTesting") {UserDefaults.standard.register(defaults:["placeNamesOnline":false])}
+        #endif
         do {
             let library=try Library(dir:dir);self.library=library
+            placeNames.load(library.placeNames());placeNames.store={k,n in try? library.setPlaceName(k,n)}
+            placeNames.regionAt={lat,lon in Catalogue.shared.rarity?.regionAt(lat:lat,lon:lon) ?? (nil,nil)}
             #if DEBUG
             let seed=UserDefaults.standard.integer(forKey:"seedSynthetic")
             if seed>0,!library.needsMigration,(try? library.query("SELECT count(*) FROM ll_record").first?.n(0)) == 0 {try library.seedSynthetic(seed,species:Array(catalogue.all.prefix(800).map(\.sci)),photo:UserDefaults.standard.string(forKey:"syntheticPhoto").map{URL(fileURLWithPath:$0)})}
@@ -584,7 +601,7 @@ struct IdentifyView: View {
                 VStack(alignment:.leading,spacing:12) {
                     Button {place=true} label: {
                         if let p=model.homePlace {
-                            HStack {Image(systemName:"mappin.and.ellipse");Text(p.label).font(.headline);Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary);Spacer();Text("更改").font(.subheadline)}
+                            HStack {Image(systemName:"mappin.and.ellipse");Text(model.placeName(p) ?? p.label).font(.headline);Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary);Spacer();Text("更改").font(.subheadline)}
                         } else {
                             Label("还没有地点 · 只凭图像识别容易认错",systemImage:"mappin.and.ellipse").foregroundStyle(Palette.ink)
                         }
@@ -759,7 +776,7 @@ struct HistoryRow: View {
             VStack(alignment:.leading,spacing:6) {
                 Text(model.label(item)).font(.headline)
                 Text(item.dateSource=="photo" || item.dateSource=="user" ? item.wall.replacingOccurrences(of:"T",with:" "):item.day+" · 按识别日期").font(.caption).monospacedDigit()
-                Text(item.placeLabel ?? String(localized:"没有地点")).font(.caption).foregroundStyle(Palette.secondary)
+                Text(model.placeName(item) ?? String(localized:"没有地点")).font(.caption).foregroundStyle(Palette.secondary)
                 if item.missing {Text("原图不可用").font(.caption).foregroundStyle(Palette.rust)}
                 if item.subjects.contains(where:{$0.state != "none"}) {Text("已人工更正").font(.caption).foregroundStyle(Palette.green)}
             }
