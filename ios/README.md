@@ -40,7 +40,7 @@ xcodebuild -project ios/BirdCM.xcodeproj -scheme BirdCM -configuration Release \
 
 ### 测试：只测增量（`changed`），`quick` 与 `full`
 
-日常只跑改动涉及的测试，不要每次全量：
+日常只跑改动涉及的测试，不要每次全量。能在 Mac 上验证的（引擎、网页、纯逻辑的单元测试）就不要走模拟器；UI 流程只在它是验证这次改动的唯一办法时才跑，看几张相关截图即可，不做整套 UI 流程回归（所有者，2026-11-19：模拟器测试 ROI 低）：
 
 ```sh
 ios/tools/test.sh           # = changed：只跑覆盖改动文件的测试类，一台模拟器（默认 'BirdCM 18 Pro'）
