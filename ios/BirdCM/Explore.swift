@@ -1,36 +1,53 @@
 import SwiftUI
 
-/// §6.2 “这里这个月”: geo prior (median = score, max = inclusion support) + GBIF record share for a place and month.
-/// Read-only and offline; independent of the identification Engine. Kept as plain values so a future online source
-/// (pictures / text) can sit beside it without changing this layer.
+/// §6.2 “这里这个月”: the geo model's value this month at the place (the point itself; a region by the median over its
+/// grid) + GBIF record share for the place and month. Read-only and offline; independent of the identification Engine.
 struct Likely: Identifiable {
     let sci: String
-    let median: Double?, max: Double?     // nil = unknown prior, never 0
+    let median: Double?                   // this month's model value; nil = unknown prior, never 0
     let share: Double?, tier: Int?        // GBIF record share / tier in the source region-month
+    let months: [Double]?                 // 12 monthly model values at the place
+    /// Only sparse GBIF records or a low model value: the collapsed 罕见 / 偶见 section, not the main list.
+    let rare: Bool
     var id: String { sci }
+    /// The row's local word: the GBIF tier when the table covers the month, else the model's word (Geo.modelTier).
+    var label: String? { tier.map { Likelihood.tierNames[max(0, min(4, $0))] } ?? median.map(Geo.modelTier) }
 }
-struct LikelyResult { var rows: [Likely]; var geo: Bool; var gbif: Bool; var coverage: String? }
+/// `months`: every catalogue species (by catalogue index) at the place, nil where the model has no such species.
+struct LikelyResult { var rows: [Likely]; var geo: Bool; var gbif: Bool; var coverage: String?; var months: [[Double]?] = [] }
 
 enum Likelihood {
-    private static var geo: Geo?
+    static let tierNames = ["无记录", "罕见", "少见", "不常见", "常见"]
+    /// Main list: this month's model value at the place at least this (the result page's 此地此季少见 line, Confirm.tau)…
+    static let typicalFloor = Confirm.tau
+    /// …or a GBIF tier above the rarest (少见 and up). Below that, a model value ≥ rareFloor or any GBIF record (罕见,
+    /// single vagrants included) goes to the collapsed 罕见 / 偶见 section; nothing else is listed.
+    static let rareFloor = 0.01
+    enum Inclusion: Equatable { case main, rare }
+    static func inclusion(typical: Double?, tier: Int?) -> Inclusion? {
+        if (typical ?? 0) >= typicalFloor || (tier ?? 0) >= 2 { return .main }
+        if (typical ?? 0) >= rareFloor || (tier ?? 0) >= 1 { return .rare }
+        return nil
+    }
     private static var cache = [(String, LikelyResult)]()       // session LRU, at most four place/month results
     private static let lock = NSLock()
     static func compute(place: Place, month: Int, catalogue: Catalogue) -> LikelyResult {
         let key = "\(place.stableCode)|\(place.source)|\(month)|\(Catalogue.resourceVersions)"
         lock.lock(); defer { lock.unlock() }
         if let hit = cache.first(where: { $0.0 == key }) { return hit.1 }
-        if geo == nil, FileManager.default.fileExists(atPath: Models.geoURL.path) { geo = try? Geo(weights: Models.geoURL, scientific: catalogue.all.map(\.sci)) }
-        // Month-only query uses its 15th day; a region choice spreads over the whole region grid (Geo.cover).
-        let spread = geo.flatMap { try? $0.spread(place, date: String(format: "2026-%02d-15", month)) }
+        // The year at the place, reused for any month (and by the species page).
+        let months = cache.first(where: { $0.0.hasPrefix("\(place.stableCode)|\(place.source)|") && !$0.1.months.isEmpty })?.1.months
+            ?? Geo.shared(catalogue).flatMap { try? $0.months(at: place) }
         let gbif = (try? Rarity(path: Models.rarityURL))?.monthCounts(place, month: month)
         var rows = [Likely]()
         for (i, sp) in catalogue.all.enumerated() {
-            let med = spread.flatMap { $0.typical[i].isNaN ? nil : $0.typical[i] }, mx = spread.flatMap { $0.wide[i].isNaN ? nil : $0.wide[i] }
-            let c = gbif?.counts[sp.sci]
-            guard (mx ?? 0) >= 0.01 || (c?.n ?? 0) > 0 else { continue }
-            rows.append(Likely(sci: sp.sci, median: med, max: mx, share: c.map { Double($0.n) / Double(max(1, gbif!.total)) }, tier: c?.tier))
+            let year = months?[i], med = year?[month - 1]
+            // Covered month without this species: tier 0 (无记录), as on the result page.
+            let c = gbif?.counts[sp.sci], tier = gbif == nil ? nil : c.map { $0.n > 0 ? max(1, $0.tier) : 0 } ?? 0
+            guard let fit = inclusion(typical: med, tier: tier) else { continue }
+            rows.append(Likely(sci: sp.sci, median: med, share: c.map { Double($0.n) / Double(max(1, gbif!.total)) }, tier: tier, months: year, rare: fit == .rare))
         }
-        let result = LikelyResult(rows: rows, geo: spread != nil, gbif: gbif != nil, coverage: gbif?.coverage)
+        let result = LikelyResult(rows: rows, geo: months != nil, gbif: gbif != nil, coverage: gbif?.coverage, months: months ?? [])
         cache.insert((key, result), at: 0); if cache.count > 4 { cache.removeLast() }
         return result
     }
@@ -64,7 +81,8 @@ struct ExploreView: View {
     @State private var likely: LikelyResult?
     @State private var computing = false
     @State private var results = [Catalogue.Species]()
-    @State private var limit = 50
+    @State private var rareResults = [Catalogue.Species]()
+    @State private var byKey = [String: Likely]()
     @State private var choosePlace = false
     @State private var iucn = [String: String]()
     var local: Bool { mode == "local" && model.homePlace != nil }
@@ -87,16 +105,22 @@ struct ExploreView: View {
                 if mode == "local" {
                     if model.homePlace == nil { Text("还没有地点：先选择地点；下面先列出全部物种。") }
                     else if let likely {
-                        Text(likely.geo ? (likely.gbif ? "按地点模型（中位数）与 GBIF 观测记录排序。\(likely.coverage == "country" ? "按全国数据估计。" : "")" : "地点模型不可用，按观测记录排序。") : (likely.gbif ? "" : "这个地方这个月没有观测数据，列出全部物种，不作“可能见到”判断。"))
-                            + Text(" 表示适宜度与被报告的程度，不是散步时见到的概率。“未见”= 全部记录里还没有。")
+                        Text(likely.geo ? (likely.gbif ? "按地点模型与 GBIF 观测记录排序。\(likely.coverage == "country" ? "按全国数据估计。" : "")" : "按地点模型排序；这个地方这个月没有观测数据。") : (likely.gbif ? "地点模型不可用，按观测记录排序。" : "这个地方这个月没有观测数据，列出全部物种，不作“可能见到”判断。"))
+                            + Text(" 表示适宜度与被报告的程度，不是散步时见到的概率；只有零星记录或模型值很低的鸟列在最后的“罕见 / 偶见”里。小条是这里全年 12 个月的模型估计（相对该鸟最可能的月份），下划线是所选月份。“未见”= 全部记录里还没有。")
                     }
                 } else { Text("离线搜索 \(model.catalogue.all.count) 种（中文、英文、学名、拼音或首字母）。没有内置参考图片或介绍。") }
             }
             Section(header: Text(header)) {
                 if computing { ProgressView("正在计算这里这个月的鸟…").accessibilityIdentifier("explore.computing") }
-                ForEach(results.prefix(limit)) { sp in row(sp) }
-                if results.count > limit { Button("再显示 50 种") { limit += 50 }.frame(minHeight: 44).accessibilityIdentifier("explore.more") }
+                // Every row, no paging (owner 2026-11-19): List builds rows lazily; a row only reads precomputed values.
+                ForEach(results) { sp in row(sp) }
                 if results.isEmpty && !computing { Text(seen == "seen" ? "还没有已见的鸟种。" : "没有匹配的鸟种。").accessibilityIdentifier("explore.empty") }
+            }
+            if local && !rareResults.isEmpty {
+                Section {
+                    ForEach(rareResults) { sp in row(sp) }
+                } header: { Text("罕见 / 偶见 · \(rareResults.count)").accessibilityIdentifier("explore.rare") }
+                  footer: { Text("只有零星观测记录，或地点模型估计很低：可能是迷鸟或偶尔路过。") }
             }
         }
         .scrollContentBackground(.hidden).background(Palette.canvas)
@@ -113,7 +137,10 @@ struct ExploreView: View {
             guard !Task.isCancelled else { return }
             // Same read as every other screen (Rarity.iucn); near-threatened and worse get a badge on the row.
             if iucn.isEmpty, let db = model.catalogue.rarity { iucn = db.iucn(codes: ["NT", "VU", "EN", "CR", "EW", "EX"]) }
-            results = filtered(); limit = 50
+            let all = filtered()
+            byKey = Dictionary(uniqueKeysWithValues: (likely?.rows ?? []).map { ($0.sci, $0) })
+            results = local ? all.filter { byKey[$0.sci]?.rare != true } : all
+            rareResults = local ? all.filter { byKey[$0.sci]?.rare == true } : []
         }
         .sheet(isPresented: $choosePlace) { PlacePicker(onChoose: { model.chooseHome($0) }).debugAppearance() }
         .navigationTitle("探索")
@@ -142,19 +169,62 @@ struct ExploreView: View {
         return list.filter { (seen == "all" || (seenSet[$0.sci] != nil) == (seen == "seen")) && (family.isEmpty || $0.family == family) && (!threatened || RarityBook.threatened.contains(iucn[$0.sci] ?? "")) }
     }
     func row(_ sp: Catalogue.Species) -> some View {
-        let l = likely?.rows.first { $0.sci == sp.sci }
+        let l = local ? byKey[sp.sci] : nil
         return NavigationLink(value: AppModel.Route.species(sp.sci)) {
-            HStack {
+            HStack(spacing: 12) {
+                SpeciesThumb(key: sp.sci)
                 VStack(alignment: .leading, spacing: 8) {
                     SpeciesName(title: sp.name, alt: sp.alt, sci: sp.sci, size: .row)
-                    if local, let l {
-                        Text([l.tier.map { "本地：" + ["无记录", "罕见", "少见", "不常见", "常见"][max(0, min(4, $0))] }, l.median.map { "地点模型 \($0.formatted(.percent.precision(.fractionLength(0))))" } ?? "地点模型未知", l.share.map { "观测记录 \($0.formatted(.percent.precision(.fractionLength(2))))" }].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit()
+                    if let l {
+                        // Text carries the word; the colored capsule (罕见 / 少见, as on the result page) only reinforces it.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { localTag(l); if let m = l.months { MonthStrip(values: m, current: month) } }
+                            VStack(alignment: .leading, spacing: 4) { localTag(l); if let m = l.months { MonthStrip(values: m, current: month) } }
+                        }
                     }
                 }
                 Spacer()
                 if let code = iucn[sp.sci] { IUCNChip(code: code, small: true) }
                 if model.ledger.allTime[sp.sci] != nil { Label("已见", systemImage: "checkmark.circle").font(.caption).foregroundStyle(Palette.secondary) }
-            }.frame(minHeight: 44)
+            }.frame(minHeight: 64)
         }.accessibilityIdentifier("explore.row.\(sp.sci)")
+    }
+    @ViewBuilder func localTag(_ l: Likely) -> some View {
+        if let word = l.label {
+            StateTag(text: (l.tier == nil ? "估计：" : "本地：") + word, state: ThemeContrast.rarity[word] ?? ThemeContrast.unavailable, strong: ["罕见", "少见"].contains(word), small: true).fixedSize()
+        }
+    }
+}
+
+/// The fixed leading image slot of a species row (64 pt, rounded 8). A neutral placeholder for now; an offline-cached
+/// thumbnail source can fill it by key later without touching the rows.
+struct SpeciesThumb: View {
+    let key: String
+    var size: CGFloat = 64
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8).fill(Palette.inset)
+            .overlay { Image(systemName: "bird").font(.title3).foregroundStyle(Palette.tertiary) }
+            .frame(width: size, height: size).accessibilityHidden(true)
+    }
+}
+
+/// Twelve small bars of the model's monthly values at a place, each relative to the species' own best month; the
+/// `current` month is outlined. Read by VoiceOver as the peak months.
+struct MonthStrip: View {
+    let values: [Double]
+    let current: Int
+    var body: some View {
+        let top = max(values.max() ?? 0, 0.001)
+        HStack(alignment: .bottom, spacing: 3) {
+            ForEach(0..<12, id: \.self) { i in
+                VStack(spacing: 2) {
+                    RoundedRectangle(cornerRadius: 1.5).fill(Palette.accent.opacity(0.12 + 0.88 * values[i] / top)).frame(width: 6, height: 14)
+                    // The selected month: a small ink tick under its bar.
+                    Capsule().fill(i + 1 == current ? Palette.ink : .clear).frame(width: 6, height: 2)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("全年：\(values.indices.filter { values[$0] >= top * 0.8 }.map { "\($0 + 1)" }.joined(separator: "、")) 月最可能")
     }
 }

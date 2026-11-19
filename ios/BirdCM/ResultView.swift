@@ -142,6 +142,13 @@ struct ResultView: View {
                 if let k=e.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.hero)}
                 else {SpeciesName(title:e.name,size:.hero,uncertain:e.key == nil)}
             }.accessibilityIdentifier("result.name").accessibilityValue(e.state=="none" ? e.model?.level ?? "unclassified":e.state).accessibilityAddTraits(.isHeader)
+            // The same species page as 探索 and 记录 (当地可能性, 分布图, 物种参考).
+            if let k=e.key,model.catalogue.contains(k) {
+                NavigationLink(value:AppModel.Route.species(k)) {
+                    HStack {Label("物种页：当地可能性、分布与参考",systemImage:"bird");Spacer();Image(systemName:"chevron.right").font(.caption)}
+                        .font(.subheadline).foregroundStyle(Palette.accent).frame(minHeight:44).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityIdentifier("result.speciesPage")
+            }
             if e.state=="species" {Label("已人工更正",systemImage:"person.crop.circle.badge.checkmark").font(.subheadline).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.corrected")}
             ViewThatFits(in:.horizontal) {HStack(spacing:16) {factChips(e,r)};VStack(alignment:.leading) {factChips(e,r)}}.padding(.top,4)
             if let result=e.model {

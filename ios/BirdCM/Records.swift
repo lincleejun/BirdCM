@@ -1,3 +1,4 @@
+import Charts
 import MapKit
 import SwiftUI
 
@@ -194,6 +195,10 @@ struct SpeciesPage: View {
                     Text("仅有自己的照片，没有内置参考图。你还没有记录这种鸟。").foregroundStyle(Palette.secondary)
                 }
                 Divider()
+                SpeciesLocal(key: key)
+                Divider()
+                SpeciesRangeMap(key: key)
+                Divider()
                 SpeciesReferenceSection(sci: key, own: stat != nil)
                 Divider()
                 if let code = EBird.names[key]?.code, !code.isEmpty { Link("在 eBird 查看", destination: URL(string: "https://ebird.org/species/" + code)!).frame(minHeight: 44).accessibilityIdentifier("species.ebird") }
@@ -235,6 +240,128 @@ struct SpeciesPage: View {
             Text("地点").font(.subheadline.bold())
             if !points.isEmpty { PlaceSnapshot(points: points, label: String(localized: "\(points.count) 个拍摄位置"), height: 150) }
             ForEach(rows, id: \.0) { r in LabeledContent(r.0, value: "\(r.1) 次").font(.subheadline) }
+        }
+    }
+}
+
+/// 当地可能性: this month's word at the home place (the GBIF tier when the table covers it, else the model's word on
+/// the same labels) and the model's 12 months there. Offline; the same place identification uses.
+struct SpeciesLocal: View {
+    @Environment(AppModel.self) var model
+    let key: String
+    enum Outcome: Equatable { case loading, unknown, months([Double], word: String, gbif: Bool) }
+    @State private var outcome = Outcome.loading
+    @State private var choosePlace = false
+    let month = Calendar(identifier: .gregorian).component(.month, from: Date())
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("当地可能性").font(.headline).accessibilityAddTraits(.isHeader)
+            if let place = model.homePlace {
+                let name = model.placeName(place) ?? place.label
+                switch outcome {
+                case .loading: ProgressView().frame(maxWidth: .infinity, minHeight: 44)
+                case .unknown: Text("地点模型没有这个物种，无法估计在 \(name) 的可能性。").font(.subheadline).foregroundStyle(Palette.secondary)
+                case let .months(values, word, gbif):
+                    Text("在 \(name) 本月：\(word)").font(.subheadline.weight(.semibold)).accessibilityIdentifier("species.localWord")
+                    Text(gbif ? "按 GBIF 观测记录的本地频次，与结果页一致。" : "这里本月没有观测数据，按地点模型估计。").font(.caption).foregroundStyle(Palette.secondary)
+                    Chart(0..<12, id: \.self) { i in
+                        BarMark(x: .value("月份", "\(i + 1)"), y: .value("可能性", values[i]))
+                            .foregroundStyle(i + 1 == month ? Palette.accent : Palette.accent.opacity(0.3))
+                            .accessibilityLabel("\(i + 1) 月").accessibilityValue(values[i].formatted(.percent.precision(.fractionLength(0))))
+                    }
+                    .chartYScale(domain: 0...max(0.05, (values.max() ?? 0) * 1.1))
+                    .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.percent.precision(.fractionLength(0)))) } } } }
+                    .frame(height: 140).accessibilityIdentifier("species.monthChart")
+                    Text("柱高是地点模型（BirdNET）估计的各月出现可能（每月取 4 个模型周的平均\(place.source == "region" ? "，地区内取中位数" : "")），不是观测数量；深色是本月。").font(.caption).foregroundStyle(Palette.secondary)
+                }
+            } else {
+                Text("还没有地点：设置后显示这种鸟在那里各月的可能性。").font(.subheadline).foregroundStyle(Palette.secondary)
+                Button("选择地点") { choosePlace = true }.frame(minHeight: 44).accessibilityIdentifier("species.choosePlace")
+            }
+        }
+        .sheet(isPresented: $choosePlace) { PlacePicker(onChoose: { model.chooseHome($0) }).debugAppearance() }
+        .task(id: "\(key)|\(model.homePlace?.stableCode ?? "")|\(model.homePlace?.source ?? "")") {
+            guard var place = model.homePlace else { return }
+            outcome = .loading
+            let catalogue = model.catalogue, key = key, m = month
+            // A region choice is looked up by its ISO code (old region places stored only a label), as in localRarity.
+            if place.source == "region", place.regionCode == nil { place.regionCode = Library.regionCodes[place.label] }
+            outcome = await Task.detached { () -> Outcome in
+                let year = Likelihood.compute(place: place, month: m, catalogue: catalogue).months
+                guard let j = catalogue.all.firstIndex(where: { $0.sci == key }), year.indices.contains(j), let values = year[j] else { return .unknown }
+                let gbif = catalogue.rarity?.lookup(key, place: place, month: m).label
+                if let gbif, Likelihood.tierNames.contains(gbif) { return .months(values, word: gbif, gbif: true) }
+                return .months(values, word: Geo.modelTier(values[m - 1]), gbif: false)
+            }.value
+        }
+    }
+}
+
+/// 分布图: the model over a global grid on a plain background with country outlines from the bundled region table
+/// (no map tiles, works offline). 全年 / 繁殖季 / 非繁殖季 come from one cached cells × months evaluation.
+struct SpeciesRangeMap: View {
+    @Environment(AppModel.self) var model
+    let key: String
+    @State private var season = Geo.Season.year
+    @State private var values: [UInt8]?
+    @State private var unknown = false
+    @State private var progress = 0.0
+    static let grid = Geo.rangeGrid()
+    /// Country rings in map units (x = lon + 180, y = 84 − lat), built once.
+    static let land: Path = {
+        var path = Path()
+        for ring in Catalogue.shared.rarity?.countryRings() ?? [] where ring.count >= 6 {
+            path.move(to: CGPoint(x: Double(ring[0]) + 180, y: Geo.rangeLat.1 - Double(ring[1])))
+            for i in stride(from: 2, to: ring.count, by: 2) { path.addLine(to: CGPoint(x: Double(ring[i]) + 180, y: Geo.rangeLat.1 - Double(ring[i + 1]))) }
+            path.closeSubpath()
+        }
+        return path
+    }()
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("分布图").font(.headline).accessibilityAddTraits(.isHeader)
+            if unknown {
+                Text("地点模型没有这个物种，无法画分布。").font(.subheadline).foregroundStyle(Palette.secondary)
+            } else {
+                Picker("季节", selection: $season) { ForEach(Geo.Season.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).accessibilityIdentifier("species.season")
+                let span = Geo.rangeLat.1 - Geo.rangeLat.0
+                ZStack {
+                    if let values { map(Geo.seasonMap(values, grid: Self.grid, season: season)) }
+                    else { RoundedRectangle(cornerRadius: 12).fill(Palette.surface); ProgressView(value: progress) { Text("正在计算分布…").font(.caption) }.padding(.horizontal, 40) }
+                }.aspectRatio(360 / span, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 12))
+                    .accessibilityElement(children: .ignore).accessibilityLabel("\(season.rawValue)分布图，地点模型估计").accessibilityIdentifier("species.rangeMap")
+                Text("地点模型（BirdNET）在 \(Int(Geo.rangeStep))° 网格上的估计，颜色越浓越可能出现，不是观测记录。全年取 12 个月中最高；繁殖季 = 北半球 5–7 月、南半球 11–1 月，非繁殖季 = 北半球 12–2 月、南半球 6–8 月（按格点所在半球，热带只是近似）。\(model.homePlace == nil ? "" : "圆圈是你的地点。")")
+                    .font(.caption).foregroundStyle(Palette.secondary)
+            }
+        }
+        .task(id: key) {
+            values = nil; unknown = false; progress = 0
+            let key = key, catalogue = model.catalogue
+            let result = await Task.detached(priority: .userInitiated) { () -> [UInt8]?? in
+                guard let geo = Geo.shared(catalogue), let j = catalogue.all.firstIndex(where: { $0.sci == key }) else { return .some(nil) }
+                return try? geo.range(j, sci: key) { f in Task { @MainActor in progress = max(progress, f) } }
+            }.value
+            switch result { case .some(.some(let v)): values = v; default: unknown = true }
+        }
+    }
+    func map(_ cells: [Double]) -> some View {
+        let home = model.homePlace
+        return Canvas { ctx, size in
+            let span = Geo.rangeLat.1 - Geo.rangeLat.0, sx = size.width / 360, sy = size.height / span, step = Geo.rangeStep
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Palette.surface))
+            let land = Self.land.applying(CGAffineTransform(scaleX: sx, y: sy))
+            ctx.fill(land, with: .color(Palette.inset))
+            for (c, v) in cells.enumerated() where v >= 0.02 {
+                let p = Self.grid[c]
+                let rect = CGRect(x: (p[1] + 180 - step / 2) * sx, y: (Geo.rangeLat.1 - p[0] - step / 2) * sy, width: step * sx + 0.5, height: step * sy + 0.5)
+                ctx.fill(Path(rect), with: .color(Palette.accent.opacity(0.2 + 0.8 * v)))
+            }
+            ctx.stroke(land, with: .color(Palette.secondary.opacity(0.5)), lineWidth: 0.5)
+            if let home {
+                let c = CGPoint(x: (home.lon + 180) * sx, y: (Geo.rangeLat.1 - home.lat) * sy)
+                let dot = Path(ellipseIn: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10))
+                ctx.stroke(dot, with: .color(Palette.canvas), lineWidth: 4); ctx.stroke(dot, with: .color(Palette.ink), lineWidth: 2)
+            }
         }
     }
 }

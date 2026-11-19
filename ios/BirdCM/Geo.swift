@@ -48,3 +48,102 @@ final class Geo {
         let out = GeoSpread(wide:wide,typical:typical); cached = (p,date,out); return out
     }
 }
+
+/// Species page and 探索: the geo model at one place through the year, and over the globe. Offline, a model estimate.
+extension Geo {
+    private static var sharedGeo: Geo?
+    private static let sharedLock = NSLock()
+    /// One Geo for browsing, indexed like `Catalogue.shared.all`; nil when the model is missing. `network`, `indices` and the
+    /// functions below are safe from any thread; `spread` (its cache) stays behind `Likelihood`'s lock.
+    static func shared(_ catalogue: Catalogue = .shared) -> Geo? {
+        sharedLock.lock(); defer { sharedLock.unlock() }
+        if sharedGeo == nil, FileManager.default.fileExists(atPath: Models.geoURL.path) { sharedGeo = try? Geo(weights: Models.geoURL, scientific: catalogue.all.map(\.sci)) }
+        return sharedGeo
+    }
+    /// 48 model weeks (Geo.week: four per month) → 12 months, each the mean of its four weeks.
+    static func monthly(_ weekly: [Double]) -> [Double] {
+        precondition(weekly.count == 48)
+        return (0..<12).map { m in weekly[m*4..<m*4+4].reduce(0, +) / 4 }
+    }
+    static func median(_ v: [Double]) -> Double {
+        let s = v.sorted(), mid = s.count / 2
+        return s.isEmpty ? .nan : s.count % 2 == 0 ? (s[mid-1] + s[mid]) / 2 : s[mid]
+    }
+    /// Words for a model value when the GBIF table has nothing for the place and month: the local-rarity labels, cut at
+    /// `Confirm.tau` (below it the result page warns 此地此季少见) and Explore's 0.01 floor; under that 不太可能.
+    // ponytail: 0.5 / 0.2 are judgement cut-offs on a model score, not calibrated against GBIF tiers.
+    static func modelTier(_ p: Double) -> String {
+        p >= 0.5 ? "常见" : p >= 0.2 ? "不常见" : p >= Confirm.tau ? "少见" : p >= 0.01 ? "罕见" : "不太可能"
+    }
+    /// 12 monthly values per catalogue species at a place: the point itself, or for a region the median over its grid
+    /// (like `typical`). nil for a species the model does not have (never 0). One 48-week batch per point.
+    func months(at p: Place) throws -> [[Double]?] {
+        let pts = p.source == "region" ? cover(p) : [Self.snap([p.lat, p.lon])]
+        var perPoint = [[[Double]?]]()
+        for pt in pts {
+            let q = try network.predict((1...48).map { [Float(pt[0]), Float(pt[1]), Float($0)] })
+            perPoint.append(indices.map { ids in ids.isEmpty ? nil : Self.monthly(q.map { row in Double(ids.map { row[$0] }.max()!) }) })
+        }
+        return indices.indices.map { j in indices[j].isEmpty ? nil : (0..<12).map { m in Self.median(perPoint.map { $0[j]![m] }) } }
+    }
+
+    // MARK: range map
+    enum Season: String, CaseIterable { case year = "全年", breeding = "繁殖季", nonBreeding = "非繁殖季" }
+    /// Months (1–12) of a season for a cell at `lat`: 繁殖季 north May–Jul / south Nov–Jan, 非繁殖季 north Dec–Feb / south Jun–Aug.
+    static func seasonMonths(_ s: Season, lat: Double) -> [Int] {
+        switch s {
+        case .year: return Array(1...12)
+        case .breeding: return lat >= 0 ? [5, 6, 7] : [11, 12, 1]
+        case .nonBreeding: return lat >= 0 ? [12, 1, 2] : [6, 7, 8]
+        }
+    }
+    static let rangeStep = 3.0
+    static let rangeLat = (-60.0, 84.0)
+    /// Cell centres [lat, lon], north row first, west to east: `step`° cells over latitudes 60° S – 84° N.
+    static func rangeGrid(step: Double = rangeStep) -> [[Double]] {
+        let rows = Int(((rangeLat.1 - rangeLat.0) / step).rounded()), cols = Int((360 / step).rounded())
+        var out = [[Double]]()
+        for r in 0..<rows {
+            let lat: Double = rangeLat.1 - (Double(r) + 0.5) * step
+            for c in 0..<cols { out.append([lat, -180 + (Double(c) + 0.5) * step]) }
+        }
+        return out
+    }
+    /// The model week sampled for each month (its second week).
+    static func rangeWeek(_ month: Int) -> Int { (month - 1) * 4 + 2 }
+    /// cells × 12 months (row-major, value × 255) of catalogue species `j`; nil when the model does not have it.
+    /// Cached in Caches/SpeciesRange per species and grid. Chunks run in parallel; `progress` 0…1 from any thread.
+    func range(_ j: Int, sci: String, step: Double = rangeStep, cache: Bool = true, progress: @escaping @Sendable (Double) -> Void = { _ in }) throws -> [UInt8]? {
+        let ids = indices[j]
+        guard !ids.isEmpty else { return nil }
+        let grid = Self.rangeGrid(step: step)
+        let file = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("SpeciesRange/\(sci.replacingOccurrences(of: " ", with: "_"))-\(step)-v1.u8")
+        if cache, let data = try? Data(contentsOf: file), data.count == grid.count * 12 { return [UInt8](data) }
+        let rows = grid.flatMap { c in (1...12).map { [Float(c[0]), Float(c[1]), Float(Self.rangeWeek($0))] } }
+        var out = [UInt8](repeating: 0, count: rows.count)
+        let chunk = 1024, chunks = (rows.count + chunk - 1) / chunk
+        let lock = NSLock(); var done = 0; var failure: Error?
+        out.withUnsafeMutableBufferPointer { buffer in
+            let base = buffer.baseAddress!
+            DispatchQueue.concurrentPerform(iterations: chunks) { k in
+                let lo = k * chunk, hi = min(rows.count, lo + chunk)
+                do {
+                    let q = try network.predict(Array(rows[lo..<hi]), columns: ids)
+                    for (i, r) in q.enumerated() { base[lo + i] = UInt8((Double(r.max()!) * 255).rounded()) }
+                } catch { lock.lock(); failure = error; lock.unlock() }
+                lock.lock(); done += 1; let f = Double(done) / Double(chunks); lock.unlock()
+                progress(f)
+            }
+        }
+        if let failure { throw failure }
+        if cache {
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data(out).write(to: file, options: .atomic)
+        }
+        return out
+    }
+    /// One value per cell (0…1): the highest of the season's months, by the cell's hemisphere.
+    static func seasonMap(_ values: [UInt8], grid: [[Double]], season: Season) -> [Double] {
+        grid.indices.map { c in Double(seasonMonths(season, lat: grid[c][0]).map { values[c * 12 + $0 - 1] }.max()!) / 255 }
+    }
+}

@@ -24,9 +24,15 @@ final class GeoNetwork {
         }
         constants = c
     }
-    func predict(_ points: [[Float]]) throws -> [[Float]] {
+    /// `columns`: only these output species (the last Gemm and sigmoid shrink from 14,082 columns to these).
+    func predict(_ points: [[Float]], columns: [Int]? = nil) throws -> [[Float]] {
         guard !points.isEmpty, points.allSatisfy({ $0.count == 3 }) else { return [] }
         var env = constants
+        if let columns, let w = env["model.species_head.head.3.weight"], let b = env["model.species_head.head.3.bias"] {
+            guard columns.allSatisfy({ (0..<w.rows).contains($0) }) else { throw CocoaError(.fileReadCorruptFile) }
+            env["model.species_head.head.3.weight"] = Tensor(values: columns.flatMap { w.values[$0*w.cols..<($0+1)*w.cols] }, rows: columns.count, cols: w.cols)
+            env["model.species_head.head.3.bias"] = Tensor(values: columns.map { b.values[$0] }, rows: 1, cols: columns.count)
+        }
         env["input"] = Tensor(values:points.flatMap{$0},rows:points.count,cols:3)
         for n in graph.nodes {
             let args = try n.inputs.map { name -> Tensor in
@@ -70,6 +76,15 @@ final class GeoNetwork {
                 continue
             case "Mul", "Add", "Sub", "Div":
                 let b = args[1], rows = max(a.rows,b.rows), cols = max(a.cols,b.cols)
+                // Same shape or a scalar on either side (most nodes): vDSP instead of the per-element broadcast loop.
+                if (a.rows == b.rows && a.cols == b.cols) || b.values.count == 1 || a.values.count == 1 {
+                    let count = rows*cols
+                    let x = a.values.count == count ? a.values : [Float](repeating:a.values[0],count:count)
+                    let y = b.values.count == count ? b.values : [Float](repeating:b.values[0],count:count)
+                    let v: [Float]
+                    switch n.op { case "Mul": v = vDSP.multiply(x,y); case "Add": v = vDSP.add(x,y); case "Sub": v = vDSP.subtract(x,y); default: v = vDSP.divide(x,y) }
+                    env[n.outputs[0]] = Tensor(values:v,rows:rows,cols:cols); continue
+                }
                 var v = [Float](repeating:0,count:rows*cols)
                 for r in 0..<rows { for j in 0..<cols {
                     let x = a.values[(a.rows==1 ? 0:r)*a.cols+(a.cols==1 ? 0:j)]
@@ -78,9 +93,9 @@ final class GeoNetwork {
                 } }
                 result = Tensor(values:v,rows:rows,cols:cols)
             case "Sin", "Cos", "Erf", "Tanh", "Sigmoid":
-                result = Tensor(values:a.values.map { x in
-                    switch n.op { case "Sin":return sin(x); case "Cos":return cos(x); case "Erf":return erf(x); case "Tanh":return tanh(x); default:return 1/(1+exp(-x)) }
-                },rows:a.rows,cols:a.cols)
+                let f: (Float) -> Float
+                switch n.op { case "Sin": f = sin; case "Cos": f = cos; case "Erf": f = erf; case "Tanh": f = tanh; default: f = { 1/(1+exp(-$0)) } }
+                result = Tensor(values:a.values.map(f),rows:a.rows,cols:a.cols)
             default: throw CocoaError(.fileReadCorruptFile)
             }
             env[n.outputs[0]] = result

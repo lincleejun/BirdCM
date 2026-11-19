@@ -60,6 +60,19 @@ final class Rarity {
         if hit[1] != nil && hit[0] == nil {hit[0]=String(hit[1]!.prefix(2))}
         return (hit[1],hit[0])
     }
+    /// Country outlines (level-0 rings, flat lon/lat pairs) for the species page's offline range map.
+    func countryRings() -> [[Float]] {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT s.pts FROM shapes s JOIN regions r ON r.id=s.region_id WHERE r.level=0", -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        var out = [[Float]]()
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let n = Int(sqlite3_column_bytes(stmt, 0)) / 4
+            guard let blob = sqlite3_column_blob(stmt, 0) else { continue }
+            out.append((0..<n).map { Float(bitPattern: UInt32(littleEndian: blob.loadUnaligned(fromByteOffset: $0 * 4, as: UInt32.self))) })
+        }
+        return out
+    }
     /// The region code for a place (explicit region choice first, else the point lookup), and the month's GBIF source region.
     func source(_ place: Place, month: Int) -> (code: String?, source: String?, coverage: String?) {
         let point: (division: String?, country: String?) = place.regionCode == nil ? regionAt(lat: place.lat, lon: place.lon) : (nil, nil)
