@@ -6,7 +6,8 @@ struct RecordsView: View {
     @Environment(AppModel.self) var model
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var search = ""
-    @State private var speciesSort = false
+    /// 照片 order: 最近查看 (default, the order of model.items), capture date, or species name.
+    @State private var photoSort = "viewed"
     @State private var sort = "recent"
     @State private var deleting: PhotoItem?
     var species: [SpeciesStat] {
@@ -19,14 +20,14 @@ struct RecordsView: View {
     }
     var photos: [PhotoItem] {
         let found = model.items.filter { model.matches($0, search) }
-        return speciesSort ? found.sorted { (model.label($0), $1.day) < (model.label($1), $0.day) } : found
+        switch photoSort {
+        case "name": return found.sorted { (model.label($0), $1.day) < (model.label($1), $0.day) }
+        case "date": return found.sorted { ($0.day, $0.wall) > ($1.day, $1.wall) }
+        default: return found
+        }
     }
     var body: some View {
-        @Bindable var model = model
-        VStack(spacing: 0) {
-            Picker("记录", selection: $model.recordsMode) {
-                Text("鸟种").tag("species"); Text("照片").tag("photos"); Text("待确认").tag("pending")
-            }.pickerStyle(.segmented).padding(.horizontal).padding(.vertical, 8).accessibilityIdentifier("records.mode")
+        Group {
             switch model.recordsMode {
             case "photos": photoList
             case "pending": pendingList
@@ -40,15 +41,19 @@ struct RecordsView: View {
             Button("取消", role: .cancel) {}
         } message: { Text("只从观羽的记录与统计中移除；相册或文件里的原图不受影响。") }
     }
+    /// Part of each list's scrolling content (owner 2026-11-18: a scrolled root keeps only its title).
+    var modePicker: some View {
+        @Bindable var model = model
+        return Picker("记录", selection: $model.recordsMode) {
+            Text("鸟种").tag("species"); Text("照片").tag("photos"); Text("待确认").tag("pending")
+        }.pickerStyle(.segmented).accessibilityIdentifier("records.mode")
+    }
     @ViewBuilder var speciesGrid: some View {
         if model.ledger.allTime.isEmpty {
-            ContentUnavailableView {
-                Label("还没有鸟种", systemImage: "bird")
-            } description: { Text(model.items.isEmpty ? "还没有记录，从识别一张照片开始。" : "已有照片，但还没有确定到种的鸟。可以去“待确认”更正。") } actions: {
-                Button("开始识别") { model.tab = .identify }.buttonStyle(.bordered)
-            }.accessibilityIdentifier("records.empty")
+            VStack(spacing: 0) { modePicker.padding(.horizontal).padding(.vertical, 8); speciesEmpty }
         } else {
             ScrollView {
+                modePicker.padding(.horizontal).padding(.vertical, 8)
                 let count = Text("\(model.ledger.allTime.count) 种").font(.headline)
                 let picker = Picker("排序", selection: $sort) { Text("最近见到").tag("recent"); Text("首次见到").tag("first"); Text("名称").tag("name") }.accessibilityIdentifier("records.sort")
                 ViewThatFits(in: .horizontal) { HStack { count; Spacer(); picker }; VStack(alignment: .leading) { count; picker } }.padding(.horizontal)
@@ -60,13 +65,24 @@ struct RecordsView: View {
             }
         }
     }
+    var speciesEmpty: some View {
+        ContentUnavailableView {
+            Label("还没有鸟种", systemImage: "bird")
+        } description: { Text(model.items.isEmpty ? "还没有记录，从识别一张照片开始。" : "已有照片，但还没有确定到种的鸟。可以去“待确认”更正。") } actions: {
+            Button("开始识别") { model.tab = .identify }.buttonStyle(.bordered)
+        }.accessibilityIdentifier("records.empty")
+    }
     var photoList: some View {
         List {
+            modePicker.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             Section {
                 TextField("搜索鸟名、地点或日期", text: $search, prompt: Text("搜索鸟名、地点或日期").foregroundColor(Palette.secondary)).accessibilityIdentifier("history.search").frame(minHeight: 44)
-                Button { speciesSort.toggle() } label: { Label(speciesSort ? "排序：鸟种名称" : "排序：日期（最新在前）", systemImage: "arrow.up.arrow.down").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading) }
-                    .accessibilityIdentifier("history.sort").accessibilityHint("切换按日期或按鸟种排序")
-            } footer: { Text(speciesSort ? "按鸟种名称排序。" : "按统计日期排序，最新在前。") }
+                let names = ["viewed": String(localized: "最近查看"), "date": String(localized: "拍摄日期"), "name": String(localized: "鸟种名称")]
+                Menu {
+                    Picker("排序", selection: $photoSort) { Text("最近查看").tag("viewed"); Text("拍摄日期").tag("date"); Text("鸟种名称").tag("name") }
+                } label: { Label("排序：\(names[photoSort] ?? "")", systemImage: "arrow.up.arrow.down").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading) }
+                    .accessibilityIdentifier("history.sort").accessibilityHint("选择排序方式")
+            } footer: { Text(photoSort == "name" ? "按鸟种名称排序。" : photoSort == "date" ? "按统计日期排序，最新在前。" : "最近打开或识别的在前；没打开过的按识别时间。") }
             if model.items.isEmpty { ContentUnavailableView("还没有记录，从识别一张照片开始", systemImage: "bird").listRowBackground(Palette.surface) }
             else if photos.isEmpty {
                 ContentUnavailableView { Label("没有匹配的记录", systemImage: "magnifyingglass") } description: { Text("试试中文名、英文名、学名、地点或日期。") } actions: { Button("清除搜索") { search = "" } }
@@ -81,6 +97,7 @@ struct RecordsView: View {
         let pending = model.ledger.pending
         let unprocessed = pending.filter { $0.subject.level == "unclassified" && $0.subject.state == "none" }.count
         return List {
+            modePicker.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             if pending.isEmpty {
                 ContentUnavailableView("所有已识别主体都已确定到种", systemImage: "checkmark.circle").accessibilityIdentifier("pending.empty")
             } else {
@@ -148,7 +165,7 @@ struct SpeciesPage: View {
                 Text(stat == nil ? "未见" : "已见").font(.headline).padding(.horizontal, 10).padding(.vertical, 4).foregroundStyle(stat == nil ? Palette.ink : Color.white).background(stat == nil ? Palette.paper : Palette.button, in: Capsule()).accessibilityIdentifier("species.seen")
                 VStack(alignment: .leading, spacing: 8) {
                     if let sp { LabeledContent("科", value: sp.family); LabeledContent("属", value: sp.genus) }
-                    if !UserDefaults.standard.bool(forKey: "hideIUCN"), let iucn = model.catalogue.rarity?.lookup(key, place: nil, month: nil).iucn { LabeledContent("IUCN", value: Rarity.iucnLabel(iucn)) }
+                    if let code = model.iucn(key) { IUCNChip(code: code) }
                 }.font(.subheadline)
                 if let stat {
                     Divider()

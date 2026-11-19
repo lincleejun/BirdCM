@@ -102,6 +102,9 @@ struct PhotoItem: Identifiable, Equatable {
     let day: String, wall: String, dateSource: String, offset: Int?, capture: String?
     let lat: Double?, lon: Double?, region: String?, placeLabel: String?, placeSource: String
     var subjects: [SubjectItem]
+    /// Last opened on this device (最近查看) and first identification instant, both UTC ISO strings.
+    var viewed: String? = nil
+    var identified: String = ""
     var placeKey: String { Library.placeKey(lat: lat, lon: lon, region: region) }
     var boxes: [[Double]] { subjects.map(\.box) }
     var crops: [[Double]]? { let c = subjects.compactMap(\.crop); return c.count == subjects.count ? c : nil }
@@ -196,6 +199,8 @@ final class Library {
             }
         }
         guard try db.rows("SELECT value FROM ll_meta WHERE key='format'").first?.s(0) == "birdcm-local-ios" else { throw StoreError(message: "记录库格式无法识别，未做任何改动。") }
+        // Device-local UI state (最近查看): outside the archive schema, never exported, no revision or statistics change.
+        try db.exec("CREATE TABLE IF NOT EXISTS ll_view(record_id TEXT PRIMARY KEY, viewed_utc TEXT NOT NULL)")
         if version == 0 {
             needsMigration = legacyNames().contains { $0.hasSuffix(".json") }
             if !needsMigration { try db.exec("PRAGMA user_version=1") }
@@ -448,8 +453,8 @@ final class Library {
             var out = [PhotoItem](), index = [String: Int]()
             for row in try db.rows("""
             SELECT r.id,r.asset_hash,a.relative_path,a.missing,r.local_day,coalesce(r.capture_wall,r.fallback_wall),r.date_source,coalesce(r.capture_offset_min,CASE WHEN r.capture_wall IS NULL THEN r.fallback_offset_min END),r.lat,r.lon,r.region_code,r.place_label,r.place_source,
-             s.id,s.ordinal,s.x0,s.y0,s.x1,s.y1,s.crop_json,s.model_level,s.model_key,s.correction_state,s.corrected_key,s.count_edit,s.excluded
-            FROM ll_record r JOIN ll_asset a ON a.hash=r.asset_hash LEFT JOIN ll_subject s ON s.record_id=r.id AND s.retired=0 AND s.needs_match=0
+             s.id,s.ordinal,s.x0,s.y0,s.x1,s.y1,s.crop_json,s.model_level,s.model_key,s.correction_state,s.corrected_key,s.count_edit,s.excluded,v.viewed_utc,r.first_identified_utc
+            FROM ll_record r JOIN ll_asset a ON a.hash=r.asset_hash LEFT JOIN ll_subject s ON s.record_id=r.id AND s.retired=0 AND s.needs_match=0 LEFT JOIN ll_view v ON v.record_id=r.id
             WHERE r.canonical=1 AND r.deleted_utc IS NULL ORDER BY r.local_day DESC,coalesce(r.capture_wall,r.fallback_wall) DESC,r.asset_hash,s.ordinal
             """) {
                 let id = row.s(0)!
@@ -457,7 +462,7 @@ final class Library {
                 if index[id] == nil {
                     index[id] = out.count
                     out.append(PhotoItem(id: UUID(uuidString: id)!, hash: row.s(1)!, path: row.s(2), missing: row.n(3) == 1, day: row.s(4)!, wall: row.s(5)!, dateSource: row.s(6)!, offset: row.n(7), capture: capture,
-                                         lat: row.f(8), lon: row.f(9), region: row.s(10), placeLabel: row.s(11), placeSource: row.s(12)!, subjects: []))
+                                         lat: row.f(8), lon: row.f(9), region: row.s(10), placeLabel: row.s(11), placeSource: row.s(12)!, subjects: [], viewed: row.s(26), identified: row.s(27) ?? ""))
                 }
                 guard let sid = row.s(13) else { continue }
                 let crop = row.s(19).flatMap { try? JSONDecoder().decode([Double].self, from: Data($0.utf8)) }
@@ -466,6 +471,19 @@ final class Library {
             }
             return out
         }
+    }
+    /// 最近查看 (owner 2026-11-18): last opened first; never opened → first identification; then capture time.
+    static func recentFirst(_ items: [PhotoItem]) -> [PhotoItem] {
+        items.sorted { a, b in
+            let x = a.viewed ?? a.identified, y = b.viewed ?? b.identified
+            return x != y ? x > y : a.wall > b.wall
+        }
+    }
+    /// Opening or identifying a photo counts as viewing it. Returns the stored instant.
+    @discardableResult func markViewed(_ id: UUID, now: Date = Date()) throws -> String {
+        let stamp = Self.utc(now)
+        _ = try locked { try db.run("INSERT OR REPLACE INTO ll_view VALUES(?,?)", [id.uuidString.lowercased(), stamp]) }
+        return stamp
     }
     @discardableResult func query(_ sql: String, _ v: [Any?] = []) throws -> [[Any?]] { try locked { try db.rows(sql, v) } }
     func groupEdits() throws -> [String: Int] {

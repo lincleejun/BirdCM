@@ -26,6 +26,28 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual([s.observations, s.estimate, s.species], [obs, est, species], p.title, file: file, line: line)
     }
 
+    /// 最近查看: last opened first, never opened by identification time, then capture time; device-local, not exported,
+    /// no revision bump, statistics unchanged.
+    func testRecentlyViewedOrder() throws {
+        let dir = tmp(), lib = try Library(dir: dir), A = "Sterna hirundo"
+        func add(_ wall: String, _ identified: String, _ n: Int) throws -> UUID {
+            var r = record([bird(A)], wall, "-08:00", P); r.date = date(identified)
+            return try lib.save(r, data: Data("frame \(n)".utf8), zone: pst, now: date(identified)).id
+        }
+        let old = try add("2026-01-01T08:00:00", "2026-03-01T00:00:00Z", 1)        // identified earliest
+        let mid = try add("2026-02-01T08:00:00", "2026-03-02T00:00:00Z", 2)
+        let new = try add("2026-03-01T08:00:00", "2026-03-03T00:00:00Z", 3)
+        let tieA = try add("2026-01-05T08:00:00", "2026-03-04T00:00:00Z", 4), tieB = try add("2026-01-06T08:00:00", "2026-03-04T00:00:00Z", 5)
+        XCTAssertEqual(Library.recentFirst(try lib.items()).map(\.id), [tieB, tieA, new, mid, old], "identification time, then capture time")
+        let before = try lib.snapshot(), stats = try ledger(lib).summary(nil)
+        try lib.markViewed(old, now: date("2026-04-01T00:00:00Z")); try lib.markViewed(mid, now: date("2026-04-02T00:00:00Z"))
+        XCTAssertEqual(Library.recentFirst(try lib.items()).map(\.id), [mid, old, tieB, tieA, new])
+        XCTAssertEqual(try lib.snapshot(), before, "no revision, record or subject change")
+        XCTAssertEqual(try ledger(lib).summary(nil).observations, stats.observations)
+        let archive = dir.appendingPathComponent("x.birdcm"); try lib.export(to: archive)
+        XCTAssertTrue(try SQL(archive.path, readOnly: true).rows("SELECT 1 FROM sqlite_master WHERE name='ll_view'").isEmpty, "not exported")
+        XCTAssertEqual(try Library(dir: dir).items().first { $0.id == mid }?.viewed, "2026-04-02T00:00:00.000Z", "survives reopening")
+    }
     func testDeterministicFixture() throws {
         let lib = try Library(dir: tmp()), A = "Sterna hirundo", B = "Ardea alba"
         var n = 0
