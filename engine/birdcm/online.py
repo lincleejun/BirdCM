@@ -58,7 +58,8 @@ def mapping(sci: str) -> dict | None:
     r = db.execute("SELECT * FROM species_map WHERE sci = ?", (sci,)).fetchone()
     if r is None:
         return None
-    arts = {a["lang"]: {"title": a["title"], "url": a["url"]} for a in db.execute("SELECT * FROM article WHERE sci = ?", (sci,))}
+    arts = {a["lang"]: {"title": a["title"], "url": f"https://{a['lang']}.wikipedia.org/wiki/" + urllib.parse.quote(a["title"].replace(" ", "_"))}
+            for a in db.execute("SELECT * FROM article WHERE sci = ?", (sci,))}
     return {**dict(r), "articles": arts}
 
 
