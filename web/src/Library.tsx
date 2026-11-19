@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { get, post, postText, upload } from "./api";
 import LocationPicker, { type Country } from "./Location";
+import SpeciesReference from "./Reference";
 import type { Place } from "./types";
 
 export interface Ref { kind: "photo" | "single" | "import"; id: string; subject_id: string; asset_hash: string; thumb: string; day?: string; sci?: string }
@@ -200,10 +201,6 @@ function SpeciesPage({ sci, gen, onBack, onOpen, dialog }: { sci: string; gen?: 
   }, [sci, gen]);
   useEffect(() => { head.current?.focus(); }, [sci]);
   const max = Math.max(1, ...(d?.months ?? [0]));
-  const links = [
-    ["eBird", `https://ebird.org/explore?q=${encodeURIComponent(sci)}`],
-    ["Wikipedia", `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(sci)}`],
-  ];
   return (
     <section className="ll" aria-labelledby="h-sp">
       <button className="btn link" onClick={onBack}>← 返回记录</button>
@@ -228,9 +225,8 @@ function SpeciesPage({ sci, gen, onBack, onOpen, dialog }: { sci: string; gen?: 
         <div className="result-section"><h3>照片（{d.total_photos} 张{d.total_photos > 50 ? "，显示最近 50 张" : ""}）</h3>
           {d.photo_refs.length ? <ul className="ll-gallery">{d.photo_refs.map((r) => <li key={r.asset_hash}>
             <button onClick={() => onOpen(r)} aria-label={`打开 ${r.day} 的照片`}><Thumb r={r} alt="" /><small>{r.day}</small></button></li>)}</ul>
-            : <p className="hint">仅有自己的照片，没有内置参考图</p>}</div>
-        <p className="hint ll-links">在浏览器里查：{links.map(([n, u]) => <a key={n} href={u} target="_blank" rel="noreferrer noopener">{n}</a>)}
-          <button className="btn link" onClick={() => navigator.clipboard?.writeText(sci)}>复制学名</button></p>
+            : <p className="hint">还没有自己的照片</p>}</div>
+        <SpeciesReference sci={sci} own={d.total_photos} />
       </>}
       {dialog}
     </section>
