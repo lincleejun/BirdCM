@@ -161,7 +161,7 @@ func title(_ r: Identification) -> String {
             if state=="no-location",homePlace == nil {pendingFixtureState=state;needsPlace=true;return}
             preview=UIImage(contentsOfFile:path)
             busy=true;status="找鸟 → 认种"
-            try? await Task.sleep(for:.milliseconds(200))
+            try? await Task.sleep(for:.milliseconds(UserDefaults.standard.bool(forKey:"uiTesting") ? 200:1000))
             preparePreview(state,path:path)
             if let r=current,let data=try? Data(contentsOf:URL(fileURLWithPath:path)) {
                 // Distinct bytes, days and species: the library deduplicates identical originals.
