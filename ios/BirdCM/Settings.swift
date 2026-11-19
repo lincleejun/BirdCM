@@ -42,7 +42,7 @@ struct SettingsView: View {
             } footer: { Text("清空前可以先在“备份与恢复”导出一份备份。") }
         }
         .scrollContentBackground(.hidden).background(Palette.paper)
-        .navigationTitle("设置").navigationBarTitleDisplayMode(.large)
+        .navigationTitle("设置")
         .task(id: model.items.count) { await scanDisk() }
         .sheet(isPresented: $about) { AboutView().debugAppearance() }
         .sheet(isPresented: $diagnostics) { DiagnosticsView().debugAppearance() }

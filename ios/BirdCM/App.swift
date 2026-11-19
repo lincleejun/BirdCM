@@ -68,7 +68,8 @@ func title(_ r: Identification) -> String {
     var current: Record?
     var photo: Photo?
     var preview: UIImage?
-    enum Route: Hashable { case result(UUID), species(String) }
+    /// `identifying`: the result page while it is still being made (owner 2026-11-18: no half-height card).
+    enum Route: Hashable { case result(UUID), species(String), identifying }
     enum Tab: Hashable { case identify, explore, records, stats, settings }
     var tab=Tab.identify
     var paths=[Tab:[Route]]()
@@ -76,11 +77,21 @@ func title(_ r: Identification) -> String {
     /// Push a result on the initiating tab (identification always on 识别).
     func show(_ id:UUID,on t:Tab?=nil) {
         let t=t ?? tab;tab=t
+        // The finished result takes the identifying page's place, so back returns to where the photo was picked.
+        if paths[t]?.last == .identifying {paths[t]?.removeLast()}
         if paths[t]?.last != .result(id) {paths[t,default:[]].append(.result(id))}
     }
     var showing:Bool {
         get {paths.values.contains{$0.contains{if case .result=$0 {true} else {false}}}}
         set {if newValue,let id=current?.id {show(id,on:.identify)} else if !newValue {for t in paths.keys {paths[t]?.removeAll{if case .result=$0 {true} else {false}}}}}
+    }
+    /// A new photo opens its result page at once on 识别; it fills in as detection and naming finish.
+    func begin() {tab = .identify;paths[.identify]=[.identifying]}
+    /// Navigation from the stacks: leaving the identifying page (back) stops the identification and saves nothing.
+    func setPath(_ t:Tab,_ new:[Route]) {
+        let left=(paths[t]?.contains(.identifying) ?? false) && !new.contains(.identifying)
+        paths[t]=new
+        if left && (busy || queued != nil) {cancel()}
     }
     var homePlace: Place? = UserDefaults.standard.data(forKey:"homePlace").flatMap {try? JSONDecoder().decode(Place.self,from:$0)}
     var pendingData: Data?
@@ -158,7 +169,7 @@ func title(_ r: Identification) -> String {
         guard let path=UserDefaults.standard.string(forKey:"fixtureImage") else {return}
         if let state=UserDefaults.standard.string(forKey:"fixtureState") {
             if state=="no-location",homePlace == nil {pendingFixtureState=state;needsPlace=true;return}
-            preview=UIImage(contentsOfFile:path)
+            begin();preview=UIImage(contentsOfFile:path)
             busy=true;status="找鸟 → 认种"
             try? await Task.sleep(for:.milliseconds(UserDefaults.standard.bool(forKey:"uiTesting") ? 200:1000))
             preparePreview(state,path:path)
@@ -204,7 +215,8 @@ func title(_ r: Identification) -> String {
         refreshes+=1;let n=refreshes,t0=Date()
         Task {
             let loaded=await Task.detached(priority:.userInitiated) {
-                Result {let items=try library.items();return (items,Ledger(items:items,edits:try library.groupEdits(),known:Catalogue.shared.contains))}
+                // Ledger reads the library order; lists show 最近查看 first.
+                Result {let items=try library.items();return (Library.recentFirst(items),Ledger(items:items,edits:try library.groupEdits(),known:Catalogue.shared.contains))}
             }.value
             guard n == refreshes else {return}
             switch loaded {
@@ -250,6 +262,8 @@ func title(_ r: Identification) -> String {
         let v=catalogue.rarity?.lookup(key,place:place,month:month) ?? RarityValue(label:"数据不足",iucn:nil)
         rarityCache[id]=v;return v
     }
+    /// IUCN for display on every surface (result, candidate, species page, 探索, 统计): the current table, read now.
+    func iucn(_ key:String?) -> String? {key.flatMap{catalogue.rarity?.iucn($0)}}
     /// Bird 1's effective name for lists: correction > model species; otherwise its pending state.
     func label(_ item:PhotoItem) -> String {
         guard let s=item.subjects.first else {return String(localized:"没找到鸟")}
@@ -309,7 +323,7 @@ func title(_ r: Identification) -> String {
         if let q=queued {Task{await identify(q)}}
     }
     /// Cancel the identification or re-rank on screen; its result, if it still arrives, is dropped.
-    func cancel() {run+=1;busy=false;queued=nil;picked=nil;status=""}
+    func cancel() {run+=1;busy=false;queued=nil;picked=nil;status="";paths[.identify]?.removeAll{$0 == .identifying}}
     /// The engine for a job, waiting while the models load (the job's own photo stays on screen). nil: cancelled or failed.
     private func waitForEngine(_ job:Int) async -> Engine? {
         while job == run {
@@ -324,6 +338,7 @@ func title(_ r: Identification) -> String {
     func identify(_ data: Data) async {
         guard !busy, !(previewing && engine == nil) else { return }
         run+=1;let job=run
+        begin()
         if let source=CGImageSourceCreateWithData(data as CFData,nil),let thumbnail=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:1024] as CFDictionary) {picked=UIImage(cgImage:thumbnail)} else {picked=nil}
         queued=data;found=nil;busy=true;status=String(localized:"找鸟")
         let started=Date()
@@ -358,6 +373,7 @@ func title(_ r: Identification) -> String {
             guard let library, migration == nil else { throw StoreError(message:String(localized:"本机记录还在整理，请稍后再试")) }
             var record=try library.save(made.0,data:data)
             if let url=library.url(record.id),let source=CropSource(url) {record.displayCrops=record.boxes.map{source.crop($0).normalized(in:source.size)};record=try library.save(record)}
+            _=try? library.markViewed(record.id)
             UIImpactFeedbackGenerator(style:.light).impactOccurred()
             current=record; photo=made.1; preview=UIImage(cgImage:made.1.frame.cgImage()); picked=nil; showing=true; refresh()
             sessionSeconds=Date().timeIntervalSince(started); status=""
@@ -367,8 +383,13 @@ func title(_ r: Identification) -> String {
             guard job == run else {return}
             status=""
             if modelError != nil {queued=data;return}     // the load failed under us: keep the photo for 重试
-            picked=nil;self.error=String(localized:"识别失败：\(error.localizedDescription)")
+            picked=nil;paths[.identify]?.removeAll{$0 == .identifying};self.error=String(localized:"识别失败：\(error.localizedDescription)")
         }
+    }
+    /// 最近查看: store the instant and move the photo to the front of the lists without a full reload.
+    func viewed(_ id:UUID) {
+        guard let stamp=try? library?.markViewed(id),let i=items.firstIndex(where:{$0.id==id}) else {return}
+        var item=items.remove(at:i);item.viewed=stamp;items.insert(item,at:0)
     }
     /// Open a record, optionally at one subject (pending list), on the current tab.
     func open(_ id: UUID,subject:Int?=nil,push:Bool=true) {
@@ -377,7 +398,7 @@ func title(_ r: Identification) -> String {
             guard var r=try library.record(id) else { throw CocoaError(.fileReadNoSuchFile) }
             if let subject,r.boxes.indices.contains(subject) {r.selected=subject;r.result=r.results[String(subject)]}
             guard let url=library.url(id),let decoded=Photo(data:try Data(contentsOf:url)) else { throw StoreError(message:String(localized:"原图不可用，记录仍保留")) }
-            current=r; photo=decoded; preview=UIImage(cgImage:decoded.frame.cgImage()); if push {show(id)}
+            current=r; photo=decoded; preview=UIImage(cgImage:decoded.frame.cgImage()); viewed(id); if push {show(id)}
         } catch { self.error=String(localized:"打开历史失败：\(error.localizedDescription)") }
     }
     func select(_ i: Int) async {
@@ -462,12 +483,16 @@ func title(_ r: Identification) -> String {
 struct RootView: View {
     @Environment(AppModel.self) var model
     @Environment(\.scenePhase) private var phase
+    /// Tab roots: the title sits in the bar row right under the status bar (owner 2026-11-18: no empty band above a large
+    /// title); everything else is scrolling content, so a scrolled root keeps only its title (like 统计).
     func stack<V:View>(_ t:AppModel.Tab,@ViewBuilder _ root:()->V) -> some View {
-        NavigationStack(path:Binding(get:{model.paths[t] ?? []},set:{model.paths[t]=$0})) {
-            root().navigationDestination(for:AppModel.Route.self) {route in
+        NavigationStack(path:Binding(get:{model.paths[t] ?? []},set:{model.setPath(t,$0)})) {
+            root().toolbarTitleDisplayMode(.inlineLarge)
+                .navigationDestination(for:AppModel.Route.self) {route in
                 switch route {
                 case .result(let id): ResultView(id:id)
                 case .species(let key): SpeciesPage(key:key)
+                case .identifying: IdentifyingPage()
                 }
             }
         }
@@ -582,8 +607,8 @@ struct IdentifyView: View {
             }
         }
         .scrollContentBackground(.hidden).background(Palette.paper)
+        .navigationTitle("观羽")
         .onAppear{Perf.mark("home.visible",once:true);DispatchQueue.main.async{Perf.mark("home.interactive",once:true)}}
-        .navigationTitle("观羽").navigationBarTitleDisplayMode(.large)
         .safeAreaInset(edge:.bottom) {
             // Always usable: a photo picked while the models load waits on the identifying screen.
             // One row (owner 2026-11-18: the stacked bar was too tall); the photo-access note lives in 设置 → 关于.
@@ -592,11 +617,11 @@ struct IdentifyView: View {
             let camera=Button{takePhoto()} label:{Label("拍照",systemImage:"camera").frame(maxWidth:.infinity,minHeight:50)}
                 .accessibilityIdentifier("home.camera").buttonStyle(SecondaryActionStyle()).disabled(model.busy)
             VStack(spacing:4) {
-                if typeSize.isAccessibilitySize {VStack(spacing:8) {photos;camera}} else {HStack(spacing:10) {photos;camera}}
+                // Owner 2026-11-18: 拍照 left, 从相册选择 (still the filled primary) right.
+                if typeSize.isAccessibilitySize {VStack(spacing:8) {camera;photos}} else {HStack(spacing:10) {camera;photos}}
                 ModelStatusLine()
             }.padding(.horizontal).padding(.vertical,6).background(Palette.paper)
         }
-        .overlay { if model.busy || model.queued != nil { IdentifyingView() } }
         .sheet(isPresented:$place) {PlacePicker(onChoose:{p in model.chooseHome(p)}).debugAppearance()}
         .sheet(isPresented:$map) {MapPlacePicker(initial:model.homePlace){p in model.chooseHome(p)}}
         .fullScreenCover(isPresented:$camera) {CameraPicker(close:{camera=false}){data in Task{await model.receive(data)}}.ignoresSafeArea()}
@@ -674,35 +699,52 @@ struct ModelStatusLine: View {
         }.font(.caption).foregroundStyle(Palette.secondary).frame(maxWidth:.infinity)
     }
 }
-struct IdentifyingView: View {
+/// The result page while it is being made: the photo at once (no letterbox bars), boxes when detection finishes, then the
+/// finished result replaces this page. Quiet placeholders and a one-line stage, never a card over home; a model-load
+/// failure shows here with 重试; back or 取消 stops it and saves nothing.
+struct IdentifyingPage: View {
     @Environment(AppModel.self) var model
     var body:some View {
         let failed = !model.busy && model.queued != nil
-        VStack(spacing:16) {
-            if let image=model.picked ?? model.preview {
-                Image(uiImage:image).resizable().scaledToFit()
-                    .overlay {if model.picked != nil, let found=model.found {GeometryReader {g in
-                        ForEach(found.indices,id:\.self) {i in let b=found[i]
-                            Rectangle().stroke(Color.white,lineWidth:2).shadow(radius:1)
-                                .frame(width:(b[2]-b[0])*g.size.width,height:(b[3]-b[1])*g.size.height)
-                                .position(x:(b[0]+b[2])/2*g.size.width,y:(b[1]+b[3])/2*g.size.height)
+        ScrollView {
+            VStack(alignment:.leading,spacing:16) {
+                if let image=model.picked ?? model.preview {
+                    Image(uiImage:image).resizable().scaledToFit()
+                        .overlay {if model.picked != nil,let found=model.found {GeometryReader {g in
+                            ForEach(found.indices,id:\.self) {i in let b=found[i]
+                                RoundedRectangle(cornerRadius:4).stroke(Color.white,lineWidth:2).shadow(radius:1)
+                                    .frame(width:(b[2]-b[0])*g.size.width,height:(b[3]-b[1])*g.size.height)
+                                    .position(x:(b[0]+b[2])/2*g.size.width,y:(b[1]+b[3])/2*g.size.height)
+                            }
+                        }}}
+                        .clipShape(RoundedRectangle(cornerRadius:12)).frame(maxHeight:360).frame(maxWidth:.infinity)
+                        .accessibilityLabel("正在识别的照片")
+                }
+                if failed {
+                    Label("模型没有加载成功",systemImage:"exclamationmark.triangle").font(.headline).foregroundStyle(Palette.rust)
+                    Text(model.modelError ?? "").font(.footnote)
+                    Text("照片还在这里，重试后会接着识别。").font(.footnote).foregroundStyle(Palette.secondary)
+                    Button("重试"){model.retry()}.buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("identifying.retry")
+                } else {
+                    HStack(spacing:8) {
+                        ProgressView().controlSize(.small)
+                        Text(model.status).font(.subheadline).foregroundStyle(Palette.secondary).accessibilityIdentifier("identifying.stage")
+                    }
+                    if model.picked != nil,let found=model.found {Text(found.isEmpty ? "没找到鸟":"找到 \(found.count) 只鸟").font(.subheadline).accessibilityIdentifier("identifying.found")}
+                    if model.status == AppModel.preparing {Text("模型就绪后自动继续：找鸟 → 认种").font(.footnote).foregroundStyle(Palette.secondary)}
+                    // Where the name, confidence and chips will be.
+                    VStack(alignment:.leading,spacing:10) {
+                        let widths=[0.55,0.35,0.45,0.7],heights:[CGFloat]=[30,18,14,30]
+                        ForEach(0..<4,id:\.self) {i in
+                            RoundedRectangle(cornerRadius:6).fill(Palette.secondary.opacity(0.16)).frame(height:heights[i]).frame(maxWidth:.infinity,alignment:.leading).scaleEffect(x:widths[i],anchor:.leading)
                         }
-                    }}}
-                    .frame(maxHeight:280).background(.black)
-            }
-            if model.picked != nil, let found=model.found {Text(found.isEmpty ? "没找到鸟":"找到 \(found.count) 只鸟").font(.subheadline).accessibilityIdentifier("identifying.found")}
-            if failed {
-                Label("模型没有加载成功",systemImage:"exclamationmark.triangle").font(.headline).foregroundStyle(Palette.rust)
-                Text(model.modelError ?? "").font(.footnote).multilineTextAlignment(.center)
-                Text("照片还在这里，重试后会接着识别。").font(.footnote).foregroundStyle(Palette.secondary)
-                Button("重试"){model.retry()}.buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("identifying.retry")
-            } else {
-                ProgressView();Text(model.status).font(.headline).accessibilityIdentifier("identifying.stage")
-                if model.status == AppModel.preparing {Text("模型就绪后自动继续：找鸟 → 认种").font(.subheadline).foregroundStyle(Palette.secondary)}
-                else if model.status != "按地点更新候选…" {Text("找鸟 → 认种").font(.subheadline).foregroundStyle(Palette.secondary)}
-            }
-            Button("取消"){model.cancel()}.frame(minHeight:44).accessibilityIdentifier("identifying.cancel")
-        }.padding(24).background(Palette.surface,in:RoundedRectangle(cornerRadius:24)).padding().accessibilityElement(children:.contain).accessibilityIdentifier("identifying")
+                    }.accessibilityHidden(true)
+                }
+            }.padding(20).accessibilityElement(children:.contain).accessibilityIdentifier("identifying")
+        }
+        .background(Palette.surface)
+        .navigationTitle("识别结果").navigationBarTitleDisplayMode(.inline)
+        .toolbar {ToolbarItem(placement:.topBarTrailing) {Button("取消"){model.cancel()}.accessibilityIdentifier("identifying.cancel")}}
     }
 }
 struct HistoryRow: View {

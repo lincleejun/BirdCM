@@ -63,7 +63,7 @@ struct ResultView: View {
                         if aliases>0 {Text("另有 \(aliases) 个旧识别版本：同一照片，只统计一次。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.aliases")}
                         if item?.missing == true {Text("原图不可用；记录与识别仍保留。").foregroundStyle(Palette.rust)}
                         Text("照片和识别记录仅保存在此设备。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.footer")
-                    }.fixedSize(horizontal:false,vertical:true).padding(20)
+                    }.fixedSize(horizontal:false,vertical:true).padding(.horizontal,20).padding(.top,12).padding(.bottom,20)
                 }.padding(.bottom,24)
             }
             .accessibilityIdentifier("result.scroll")
@@ -97,7 +97,7 @@ struct ResultView: View {
                     Text("候选把握 \(c.value.p.formatted(.percent.precision(.fractionLength(1))))")
                     let rarity=model.localRarity(c.value.scientific,r)
                     Text("当地当月：\(rarity.label)")
-                    if !UserDefaults.standard.bool(forKey:"hideIUCN") {Text("IUCN：\(Rarity.iucnLabel(rarity.iucn))")}
+                    if !UserDefaults.standard.bool(forKey:"hideIUCN") {if let code=model.iucn(c.value.scientific) {IUCNChip(code:code)} else {Text("IUCN：数据不足")}}
                     Text("候选并非已确认鉴定。当地频次来自观测记录，不代表实际种群数量。").foregroundStyle(Palette.secondary)
                 }.fixedSize(horizontal:false,vertical:true).padding().accessibilityIdentifier("candidate.details")}.toolbar{Button("完成"){candidate=nil}.accessibilityIdentifier("candidate.done")}}.presentationDetents([.medium,.large])
             }
@@ -106,7 +106,11 @@ struct ResultView: View {
                 do{if let data=try await pick.loadTransferable(type:Data.self){await model.receive(data)}}catch{model.error=error.localizedDescription}
                 self.pick=nil
             } }
-            .overlay {if model.busy{IdentifyingView()}}
+            // Re-ranking or a new box on this page: one quiet line at the top, not a card.
+            .overlay(alignment:.top) {if model.busy {
+                HStack(spacing:8) {ProgressView().controlSize(.small);Text(model.status).accessibilityIdentifier("identifying.stage");Button("取消"){model.cancel()}.accessibilityIdentifier("identifying.cancel")}
+                    .font(.subheadline).padding(.horizontal,14).padding(.vertical,8).background(.regularMaterial,in:Capsule()).padding(.top,8)
+            }}
             .onChange(of:"\(r.id)-\(r.selected)") {candidatesOpen=nil}
         } else if let id {
             ProgressView().onAppear{model.open(id,push:false)}
@@ -128,10 +132,7 @@ struct ResultView: View {
             // GBIF reporting tier at this photo's place and month (read now, not stored).
             Text("本地 · "+value.label).font(.subheadline).foregroundStyle(Palette.adaptive(colors.0,colors.0)).padding(8).background(Palette.adaptive(colors.1,colors.1),in:Capsule())
                 .accessibilityIdentifier("result.localRarity").accessibilityValue(value.label)
-            if let code=value.iucn {
-                let colors=ThemeContrast.iucn[code] ?? (0x000000,0xdddddd)
-                Text("IUCN · "+Rarity.iucnLabel(code)).font(.subheadline.bold()).foregroundStyle(Palette.adaptive(colors.0,colors.0)).padding(8).background(Palette.adaptive(colors.1,colors.1),in:Capsule())
-            }
+            if let code=model.iucn(key) {IUCNChip(code:code)}
         }
         if e.state=="none",let m=e.model,m.level != "species" || m.reason != nil {Text("近似种请核对").font(.subheadline).foregroundStyle(Palette.rust)}
     }
@@ -202,6 +203,16 @@ struct ResultView: View {
     }
 }
 struct CandidateSheet: Identifiable {let id=UUID();let value:Candidate}
+/// The one IUCN label: standard Red List colours, the same on every screen.
+struct IUCNChip: View {
+    let code:String
+    var small=false
+    var body:some View {
+        let colors=ThemeContrast.iucn[code] ?? (0x000000,0xdddddd)
+        Text("IUCN · "+Rarity.iucnLabel(code)).font(small ? .caption.bold():.subheadline.bold()).foregroundStyle(Palette.adaptive(colors.0,colors.0))
+            .padding(.horizontal,8).padding(.vertical,4).background(Palette.adaptive(colors.1,colors.1),in:Capsule()).accessibilityIdentifier("iucn.\(code)")
+    }
+}
 
 struct PlacePicker: View {
     @Environment(AppModel.self) var model
