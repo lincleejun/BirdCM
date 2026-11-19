@@ -86,16 +86,20 @@ final class Flows:XCTestCase {
             element("calendar.month.11").tap();outcome("stats.range")
             reveal("stats.map").tap();_=reveal("map.noPlace");sleep(2);try shot("map"+mode);back()
             reveal("stats.observationList").tap();let row=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'obs.row.'")).firstMatch
-            XCTAssertTrue(row.waitForExistence(timeout:5));row.tap();outcome("obs.count");try shot("observation-editor"+mode)
-            let field=element("obs.count");field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"5");element("obs.save").tap()
+            XCTAssertTrue(row.waitForExistence(timeout:5));row.tap();let field=reveal("obs.count");try shot("observation-editor"+mode)
+            field.tap();field.typeText(XCUIKeyboardKey.delete.rawValue+"5");reveal("obs.save").tap()
             expectation(for:NSPredicate(format:"label CONTAINS '估计 5'"),evaluatedWith:row);waitForExpectations(timeout:5);back()
             reveal("stats.ebird").tap();outcome("ebird.export");try shot("ebird"+mode)
-            element("ebird.export").tap();outcome("ebird.message");element("ebird.close").tap()
+            reveal("ebird.export").tap();XCTAssertTrue(reveal("ebird.message").exists);element("ebird.close").tap()
             tab("tab.explore","探索");outcome("explore.mode")
             let likely=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH 'explore.row.'")).firstMatch
-            XCTAssertTrue(likely.waitForExistence(timeout:60));try shot("explore-local"+mode)
-            reveal("home.more").tap();reveal("settings.backup").tap();reveal("backup.now").tap()
-            XCTAssertTrue(element("backup.folderOK").waitForExistence(timeout:20));try shot("backup-folder-ok"+mode)
+            for _ in 0..<40 where !likely.exists {app.swipeUp();sleep(1)}
+            XCTAssertTrue(likely.waitForExistence(timeout:30));try shot("explore-local"+mode)
+            reveal("home.more").tap();reveal("settings.backup").tap()
+            let now=element("backup.now");for _ in 0..<30 where !(now.exists && now.isHittable) {app.swipeUp()}
+            now.tap();let ok=element("backup.folderOK")
+            for _ in 0..<10 where !ok.exists {app.swipeDown();sleep(1)}
+            XCTAssertTrue(ok.waitForExistence(timeout:20));try shot("backup-folder-ok"+mode)
         }
         launch(extra:["-backupFolderFixture","/nonexistent/birdcm"]);reveal("home.more").tap();reveal("settings.backup").tap();reveal("backup.now").tap()
         XCTAssertTrue(element("backup.folderError").waitForExistence(timeout:20));try shot("backup-folder-error")
@@ -213,7 +217,7 @@ final class Flows:XCTestCase {
         try resultState("uncertain")
     }
     func testResultNormalCandidatesCollapsed() throws {
-        launch();pick();_=reveal("result.candidates.toggle");XCTAssertFalse(element("result.candidate.1").exists);XCTAssertTrue(element("result.candidates.toggle").label.contains("个候选"))
+        launch();pick();_=reveal("result.candidates.toggle");XCTAssertTrue(element("result.candidates").exists);XCTAssertFalse(element("result.candidate.1").exists);XCTAssertTrue(element("result.candidates.toggle").label.contains("个候选"))
     }
     func testResultGenus() throws {try resultState("genus")}
     /// Geo-prior warning (model `rare`) and GBIF tier (bundled table, US-CA in November) are independent facts.

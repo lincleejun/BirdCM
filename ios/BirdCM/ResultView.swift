@@ -184,13 +184,12 @@ struct ResultView: View {
             let others=Array(result.top5.enumerated()).filter{!shown.contains($0.element.scientific)}
             let open=candidatesOpen ?? (e.state=="uncertain" || (e.state=="none" && result.level=="uncertain"))
             VStack(alignment:.leading,spacing:4) {
+                // The stable section id sits on the heading: a container id would overwrite result.candidate.N, and a container element swallows their taps.
+                Text(e.state=="none" ? "其他可能":"模型原判断：\(title(result))").font(.headline).accessibilityIdentifier("result.candidates")
                 Button {candidatesOpen = !open} label:{HStack{
-                    VStack(alignment:.leading,spacing:2) {
-                        Text(e.state=="none" ? "其他可能":"模型原判断：\(title(result))").font(.headline)
-                        if !open {Text("\(others.count) 个候选 · 其余最高 \((others.map(\.element.p).max() ?? 0).formatted(.percent.precision(.fractionLength(0))))").font(.subheadline).foregroundStyle(Palette.secondary).monospacedDigit()}
-                    }
+                    Text(open ? "收起候选" : "\(others.count) 个候选 · 其余最高 \((others.map(\.element.p).max() ?? 0).formatted(.percent.precision(.fractionLength(0))))").font(.subheadline).foregroundStyle(Palette.secondary).monospacedDigit()
                     Spacer();Image(systemName:open ? "chevron.up":"chevron.down").font(.caption)
-                }.frame(minHeight:44).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityIdentifier("result.candidates.toggle").accessibilityHint(open ? "收起候选":"展开候选").padding(.bottom,open ? 8:0)
+                }.frame(minHeight:44).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityIdentifier("result.candidates.toggle").padding(.bottom,open ? 8:0)
                 if open {ForEach(others,id:\.offset){i,c in
                         Button {candidate=CandidateSheet(value:c)} label:{HStack{
                             VStack(alignment:.leading,spacing:4){Text(model.catalogue.name(c.scientific));Text(c.scientific).font(.caption).italic().foregroundStyle(Palette.secondary);ProgressView(value:c.p).tint(Palette.green)}
@@ -198,7 +197,7 @@ struct ResultView: View {
                         }.frame(minHeight:48)}.accessibilityIdentifier("result.candidate.\(i)").buttonStyle(.plain)
                         Divider()
                 }}
-            }.accessibilityElement(children:.contain).accessibilityIdentifier("result.candidates")
+            }
         }
     }
 }

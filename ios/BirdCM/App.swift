@@ -105,7 +105,8 @@ func title(_ r: Identification) -> String {
         #endif
         let dir=Models.support.appendingPathComponent(historyName)
         #if DEBUG
-        if UserDefaults.standard.bool(forKey:"uiTesting") && UserDefaults.standard.bool(forKey:"resetHistory") {try? FileManager.default.removeItem(at:dir);homePlace=nil;UserDefaults.standard.removeObject(forKey:"homePlace");UserDefaults.standard.removeObject(forKey:"recentPlaceData")}
+        if UserDefaults.standard.bool(forKey:"uiTesting") && UserDefaults.standard.bool(forKey:"resetHistory") {try? FileManager.default.removeItem(at:dir);homePlace=nil;UserDefaults.standard.removeObject(forKey:"homePlace");UserDefaults.standard.removeObject(forKey:"recentPlaceData")
+            for k in ["backupFolderBookmark","backupFolderName","backupFolderOwn","backupFolderLast","backupFolderRevision","backupFolderError"] {UserDefaults.standard.removeObject(forKey:k)}}
         if let legacy=UserDefaults.standard.string(forKey:"legacyFixture") {Self.seedLegacy(dir,count:Int(legacy) ?? 3)}
         #endif
         openLibrary(dir)

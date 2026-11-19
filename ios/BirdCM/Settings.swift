@@ -231,7 +231,10 @@ struct DocumentExporter: UIViewControllerRepresentable {
                 if FileManager.default.fileExists(atPath: old.path) { try? Self.coordinated(writing: old) { try FileManager.default.removeItem(at: $0) } }
             }
             d.set(own, forKey: "backupFolderOwn"); d.set(Date(), forKey: "backupFolderLast"); d.set(revision, forKey: "backupFolderRevision"); lastError = nil
-        } catch { lastError = String(localized: "这次没有备份成功：\(error.localizedDescription)。本机记录不受影响；之前的备份文件没有删除。") }
+        } catch {
+            let reason = error.localizedDescription.trimmingCharacters(in: CharacterSet(charactersIn: "。. "))
+            lastError = String(localized: "这次没有备份成功：\(reason)。本机记录不受影响；之前的备份文件没有删除。")
+        }
     }
     nonisolated static func coordinated(writing url: URL, _ body: (URL) throws -> Void) throws {
         var error: NSError?, inner: Error?
