@@ -97,7 +97,11 @@ echo "signed $(wc -l < "$B/macho.txt" | tr -d ' ') nested Mach-O files"
 
 step "dmg"
 ln -s /Applications "$B/dmg/Applications"
-rm -f "$DMG"
-hdiutil create -quiet -volname "观羽" -srcfolder "$B/dmg" -fs HFS+ -format ULMO "$DMG"
+# retried: on CI runners hdiutil sometimes fails once with "Resource busy"
+for try in 1 2 3; do
+  rm -f "$DMG"
+  hdiutil create -quiet -volname "观羽" -srcfolder "$B/dmg" -fs HFS+ -format ULMO "$DMG" && break
+  [ "$try" = 3 ] && exit 1; echo "hdiutil failed, retrying"; sleep 10
+done
 [ "$SIGN_ID" = - ] || codesign -s "$SIGN_ID" --timestamp "$DMG"
 echo "app $(du -sh "$APP" | cut -f1)   dmg $(du -h "$DMG" | cut -f1)   $DMG"
