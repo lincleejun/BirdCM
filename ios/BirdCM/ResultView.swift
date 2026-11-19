@@ -36,7 +36,7 @@ struct ResultView: View {
                         if r.boxes.isEmpty {
                             Text("没找到鸟").font(.largeTitle.bold()).accessibilityIdentifier("result.name")
                             Text("在照片上画框，或使用整张照片重试。这张照片仍保留在记录里，不计入鸟种。").foregroundStyle(Palette.secondary)
-                            Button("用整张照片识别") {Task{await model.analyze(index:0,box:[0,0,1,1],manual:true,newBox:true,place:r.place)}}.accessibilityIdentifier("result.wholePhoto").buttonStyle(.borderedProminent).frame(minHeight:44)
+                            Button("用整张照片识别") {Task{await model.analyze(index:0,box:[0,0,1,1],manual:true,newBox:true,place:r.place)}}.accessibilityIdentifier("result.wholePhoto").buttonStyle(PrimaryActionStyle(height:44))
                         } else { identification(r) }
                         Divider()
                         VStack(alignment:.leading,spacing:14) {
@@ -67,14 +67,14 @@ struct ResultView: View {
                 }.padding(.bottom,24)
             }
             .accessibilityIdentifier("result.scroll")
-            .background(Palette.surface)
+            .background(Palette.canvas)
             .navigationTitle("识别结果").navigationBarTitleDisplayMode(.inline)
             .toolbar {ToolbarItem(placement:.topBarTrailing){Menu {
                 Button("删除这条记录",role:.destructive){deleting=true}
             } label:{Image(systemName:"ellipsis").frame(width:44,height:44).accessibilityLabel("结果操作")}}}
             .safeAreaInset(edge:.bottom) {
                 // One bar above the tab bar; actions stack vertically at accessibility sizes instead of clipping.
-                let photos=PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current){Label("再选一张",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:54)}.buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("result.photos")
+                let photos=PhotosPicker(selection:$pick,matching:.images,preferredItemEncoding:.current){Label("再选一张",systemImage:"photo.on.rectangle").frame(maxWidth:.infinity,minHeight:54)}.buttonStyle(SecondaryActionStyle(height:54)).accessibilityIdentifier("result.photos")   // 保存 is the page's one high-emphasis action
                 let placeButton=Button("改地点",systemImage:"mappin.and.ellipse"){place=true}.accessibilityIdentifier("result.bottomPlace").frame(minHeight:44)
                 let delete=Button("删除",systemImage:"trash",role:.destructive){deleting=true}.labelStyle(.iconOnly).accessibilityIdentifier("result.delete").frame(minWidth:44,minHeight:44)
                 Group {
@@ -124,7 +124,7 @@ struct ResultView: View {
         }
     }
     @ViewBuilder func factChips(_ e:AppModel.Effective,_ r:Record) -> some View {
-        if e.model?.flying ?? 0 >= 0.5 && e.state != "uncertain" {Label("在飞",systemImage:"bird.fill").font(.subheadline).padding(8).background(Palette.canvas,in:Capsule())}
+        if e.model?.flying ?? 0 >= 0.5 && e.state != "uncertain" {Label("在飞",systemImage:"bird.fill").font(.subheadline).foregroundStyle(Palette.secondary)}
         if let key=e.key {
             let value=model.localRarity(key,r)
             // GBIF reporting tier at this photo's place and month (read now, not stored). Neutral text; 罕见 / 少见 on their pair.
@@ -136,46 +136,33 @@ struct ResultView: View {
     }
     @ViewBuilder func identification(_ r: Record) -> some View {
         let e=model.effective(r,r.selected)
+        // polish.md order: name → 本地 / IUCN and checks → model match → candidates → corrections → place and date.
         VStack(alignment:.leading,spacing:8) {
             Group {
                 if let k=e.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.hero)}
                 else {SpeciesName(title:e.name,size:.hero,uncertain:e.key == nil)}
             }.accessibilityIdentifier("result.name").accessibilityValue(e.state=="none" ? e.model?.level ?? "unclassified":e.state).accessibilityAddTraits(.isHeader)
-            if e.state=="species" {Label("已人工更正",systemImage:"person.crop.circle.badge.checkmark").font(.subheadline).foregroundStyle(Palette.accent).accessibilityIdentifier("result.corrected")}
-            ViewThatFits(in:.horizontal) {HStack {factChips(e,r)};VStack(alignment:.leading) {factChips(e,r)}}
+            if e.state=="species" {Label("已人工更正",systemImage:"person.crop.circle.badge.checkmark").font(.subheadline).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.corrected")}
+            ViewThatFits(in:.horizontal) {HStack(spacing:16) {factChips(e,r)};VStack(alignment:.leading) {factChips(e,r)}}.padding(.top,4)
+            if let result=e.model {
+                // Geo-prior warning from the model; separate from the GBIF tier above.
+                if result.rare {Label("地点模型：此地此季少见，请核对",systemImage:"exclamationmark.triangle").foregroundStyle(Palette.warning).font(.subheadline).accessibilityIdentifier("result.priorWarning")}
+                if let reason=result.reason {Text(reason).font(.subheadline).foregroundStyle(Palette.warning).accessibilityIdentifier(reason.contains("此地此季") ? "result.priorWarning":"result.reason")}
+            }
             if e.state=="none",let result=e.model {
                 if result.level=="species",let c=result.top5.first {
+                    Text("模型匹配 \(c.p.formatted(.percent.precision(.fractionLength(1))))").font(.subheadline.weight(.semibold)).monospacedDigit()
                     ProgressView(value:c.p).tint(Palette.accent)
-                    Text("把握 \(c.p.formatted(.percent.precision(.fractionLength(1))))").font(.subheadline).monospacedDigit()
                     if result.clear == false {Text("鸟的特征不够清楚，暂不计入鸟种；可以更正。").font(.subheadline).foregroundStyle(Palette.warning)}
-                } else if result.level=="genus" {Text("可以判断到属，具体鸟种不确定。属级把握 \((result.genusP ?? 0).formatted(.percent.precision(.fractionLength(1))))")}
+                } else if result.level=="genus" {Text("可以判断到属，具体鸟种不确定。属级把握 \((result.genusP ?? 0).formatted(.percent.precision(.fractionLength(1))))").monospacedDigit()}
                 else {Text("还不能确定是哪种鸟，看看这些可能。")}
             } else if e.state=="none" {
                 Text("这只还没识别。").foregroundStyle(Palette.secondary)
                 Button("识别这只"){Task{await model.select(r.selected)}}.accessibilityIdentifier("result.identifySubject").frame(minHeight:44)
             }
             if e.excluded {Text("已排除这个主体，不计入统计。").foregroundStyle(Palette.warning).accessibilityIdentifier("result.excluded")}
-            let actions=Group {
-                Button("更正鸟种",systemImage:"pencil"){correcting=true}.accessibilityIdentifier("result.correctSpecies")
-                Button(e.count.map{"数量 \($0)（已改）"} ?? "数量 1",systemImage:"number"){counting=true}.accessibilityIdentifier("result.count")
-                Button(e.excluded ? "恢复这个主体":"不是鸟 · 排除",systemImage:e.excluded ? "arrow.uturn.backward":"xmark.circle"){if let s=e.subject {model.edit{try $0.exclude(s,!e.excluded)}}}.accessibilityIdentifier("result.exclude")
-            }.buttonStyle(.bordered).controlSize(.large)
-            ViewThatFits(in:.horizontal) {HStack{actions};VStack(alignment:.leading){actions}}.font(.subheadline).disabled(e.subject == nil || model.busy)
-            VStack(alignment:.leading,spacing:8) {
-                Text("\(model.placeName(r.place) ?? String(localized:"没有地点")) ·\(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline)
-                if let p=r.place {Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)}
-            }
-            if let result=e.model {
-                Button {place=true} label:{Text(result.priorUnknown == true ? "这个鸟种缺少当地资料，仅凭照片判断。" : r.place == nil ? "没有位置，只凭图像。":"已按拍摄地点和季节修正。") .font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.prior")}.buttonStyle(.plain).frame(minHeight:44).accessibilityHint("设置拍摄地点")
-                // Geo-prior warning from the model; separate from the GBIF tier above.
-                if result.rare {Label("地点模型：此地此季少见，请核对",systemImage:"exclamationmark.triangle").foregroundStyle(Palette.warning).font(.subheadline).accessibilityIdentifier("result.priorWarning")}
-                if let reason=result.reason {Text(reason).font(.subheadline).foregroundStyle(Palette.warning).accessibilityIdentifier(reason.contains("此地此季") ? "result.priorWarning":"result.reason")}
-            }
         }
         if let result=e.model {
-            Divider()
-            Text("按 GBIF 观测记录的当地当月份额分级；记录数不是实际种群数量。覆盖不足的地区显示数据不足。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.facts")
-            Divider()
             // Owner rule: collapsed when the answer is settled (species, genus or a correction); open only for 不确定.
             let shown:Set<String>=e.state=="species" ? [e.key ?? ""] : e.state=="none" && result.level=="species" ? [result.top5.first?.scientific ?? ""] : []
             let others=Array(result.top5.enumerated()).filter{!shown.contains($0.element.scientific)}
@@ -194,6 +181,21 @@ struct ResultView: View {
                         }.frame(minHeight:48)}.accessibilityIdentifier("result.candidate.\(i)").buttonStyle(.plain)
                         Divider()
                 }}
+            }
+        }
+        Divider()
+        VStack(alignment:.leading,spacing:8) {
+            let actions=Group {
+                Button("更正鸟种",systemImage:"pencil"){correcting=true}.accessibilityIdentifier("result.correctSpecies")
+                Button(e.count.map{"数量 \($0)（已改）"} ?? "数量 1",systemImage:"number"){counting=true}.accessibilityIdentifier("result.count")
+                Button(e.excluded ? "恢复这个主体":"不是鸟 · 排除",systemImage:e.excluded ? "arrow.uturn.backward":"xmark.circle"){if let s=e.subject {model.edit{try $0.exclude(s,!e.excluded)}}}.accessibilityIdentifier("result.exclude")
+            }.buttonStyle(.bordered).controlSize(.large)
+            ViewThatFits(in:.horizontal) {HStack{actions};VStack(alignment:.leading){actions}}.font(.subheadline).disabled(e.subject == nil || model.busy)
+            Text("\(model.placeName(r.place) ?? String(localized:"没有地点")) · \(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline).monospacedDigit().padding(.top,4)
+            if let p=r.place {Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)}
+            if let result=e.model {
+                Button {place=true} label:{Text(result.priorUnknown == true ? "这个鸟种缺少当地资料，仅凭照片判断。" : r.place == nil ? "没有位置，只凭图像。":"已按拍摄地点和季节修正。") .font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.prior")}.buttonStyle(.plain).frame(minHeight:44).accessibilityHint("设置拍摄地点")
+                Text("按 GBIF 观测记录的当地当月份额分级；记录数不是实际种群数量。覆盖不足的地区显示数据不足。").font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.facts")
             }
         }
     }

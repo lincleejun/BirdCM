@@ -55,11 +55,12 @@ struct StatsView: View {
         default: period = .all
         }
     }
-    func tile(_ title: String, _ value: Int, _ id: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("\(value)").font(.largeTitle.bold()).monospacedDigit()
+    /// polish.md: open numbers, no box; tabular digits; orange only for the 新种 number.
+    func tile(_ title: String, _ value: Int, _ id: String, highlight: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)").font(.system(.largeTitle, weight: .bold)).monospacedDigit().foregroundStyle(highlight && value > 0 ? Palette.newSpecies : Palette.ink)
             Text(title).font(.subheadline).foregroundStyle(Palette.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
             .accessibilityElement(children: .combine).accessibilityIdentifier(id)
     }
     var body: some View {
@@ -80,9 +81,9 @@ struct StatsView: View {
                 }
                 Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                     GridRow { tile("鸟种", s.species, "stats.species"); tile("观察记录", s.observations, "stats.observations") }
-                    GridRow { tile("估计数量", s.estimate, "stats.estimate"); tile("新种", s.newSpecies, "stats.newSpecies") }
+                    GridRow { tile("估计数量", s.estimate, "stats.estimate"); tile("新种", s.newSpecies, "stats.newSpecies", highlight: true) }
                 }
-                Text("照片 \(s.photos) 张 · 待确认 \(s.pending) 个（\(s.pendingPhotos) 张）· 没找到鸟 \(s.noBird) 张").font(.subheadline).accessibilityIdentifier("stats.coverage")
+                Text("照片 \(s.photos) 张 · 待确认 \(s.pending) 个（\(s.pendingPhotos) 张）· 没找到鸟 \(s.noBird) 张").font(.subheadline).monospacedDigit().accessibilityIdentifier("stats.coverage")
                 Text("观察记录 = 同一鸟种、同一天、同一地点合为一次；估计数量取同日同地点单张照片的最大值，可能重复见到同一只鸟；地点未知的同日记录合并，可能低估次数。新种 = 这段时间里第一次记录到的鸟种。").font(.caption).foregroundStyle(Palette.secondary)
                 let future = model.ledger.observations.filter { $0.day > today && Ledger.inRange($0.day, period.range) }.count
                 if future > 0 { Label("\(future) 条观察记录的日期在今天之后，请检查相机时间", systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Palette.warning) }
@@ -149,7 +150,7 @@ struct StatsView: View {
                     ForEach(threatened, id: \.key) { k, v in HStack { SpeciesName(key: k, size: .row); Spacer(); IUCNChip(code: v, small: true) }.accessibilityElement(children: .combine) }
                 }
             } else { ProgressView("正在查本地稀有度…").font(.caption) }
-        }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }.padding(12).frame(maxWidth: .infinity, alignment: .leading).overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.border))   // a resting panel: one quiet border, no fill, no shadow
     }
 }
 
@@ -168,10 +169,12 @@ struct PhotoCalendar: View {
     func cell(_ d: Ledger.Day?, _ n: Int) -> some View {
         ZStack(alignment: .topLeading) {
             if let d, let c = d.cover {
-                if c.item.missing { RoundedRectangle(cornerRadius: 6).fill(Palette.accent.opacity(0.35)).overlay(Text("\(d.species.count)").font(.caption.bold())) }
+                if c.item.missing { RoundedRectangle(cornerRadius: 6).fill(Palette.inset) }
                 else { CropThumbnail(url: model.url(c.item.id), id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal).clipShape(RoundedRectangle(cornerRadius: 6)) }
-            } else { Color.clear }
-            Text("\(n)").font(.caption2.bold()).padding(2).foregroundStyle(d == nil ? Palette.secondary : .white).shadow(color: d == nil ? .clear : .black, radius: 1)
+            } else { RoundedRectangle(cornerRadius: 6).fill(Palette.inset) }
+            // Every date on an opaque backing (polish.md): readable on any photo, no shadow.
+            Text("\(n)").font(.caption2.weight(.semibold)).monospacedDigit().foregroundStyle(d == nil ? Palette.secondary : Palette.ink).padding(.horizontal, 3).padding(.vertical, 1)
+                .background(d == nil ? Color.clear : Palette.surface, in: RoundedRectangle(cornerRadius: 4)).padding(3)
             if let d, d.species.count > 1 {
                 Text("\(d.species.count)").font(.caption2.bold()).monospacedDigit().padding(.horizontal, 4).foregroundStyle(Palette.onAccent).background(Palette.accent, in: Capsule()).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(2)
             }
@@ -210,7 +213,7 @@ struct PhotoCalendar: View {
             let lead = (Calendar(identifier: .gregorian).component(.weekday, from: first) + 5) % 7     // Monday first
             let count = Int(range.1.suffix(2))!
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
-                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { Text($0).font(.caption2).foregroundStyle(Palette.secondary) }
+                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { Text($0).font(.caption).foregroundStyle(Palette.secondary) }
                 ForEach(0..<(lead + count), id: \.self) { i in
                     if i < lead { Color.clear.aspectRatio(1, contentMode: .fit) } else {
                         let n = i - lead + 1, key = String(format: "%04d-%02d-%02d", y, m, n), d = days[key]
@@ -232,11 +235,11 @@ struct PhotoCalendar: View {
                 Button { period = .month(y, m) } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 8).fill(Palette.surface)
+                            RoundedRectangle(cornerRadius: 8).fill(Palette.inset)
                             if let cover, !cover.item.missing { CropThumbnail(url: model.url(cover.item.id), id: cover.item.id, boxes: cover.item.boxes, crops: cover.item.crops, index: cover.ordinal).clipShape(RoundedRectangle(cornerRadius: 8)) }
                         }.aspectRatio(1, contentMode: .fit)
                         Text("\(m) 月").font(.subheadline.bold())
-                        Text(obs == 0 ? "没有记录" : "\(species) 种 · \(obs) 条观察").font(.caption).foregroundStyle(Palette.secondary)
+                        Text(obs == 0 ? "无记录" : "\(species) 种 · \(obs) 条观察").font(.caption).foregroundStyle(Palette.secondary).monospacedDigit()
                     }
                 }.buttonStyle(.plain).accessibilityElement(children: .combine).accessibilityIdentifier("calendar.month.\(m)")
             }
@@ -285,6 +288,7 @@ struct SightingList: View {
                 }.buttonStyle(.plain).accessibilityIdentifier("obs.row.\(o.species).\(o.day)")
             }
         }
+        .scrollContentBackground(.hidden).background(Palette.canvas)
         .navigationTitle(day.map { "\($0) 的观察" } ?? "观察记录 · \(title)").navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { o in SightingSheet(sighting: o).debugAppearance() }
     }
@@ -388,6 +392,7 @@ struct SightingMap: View {
             }
             Section("地点未知") { LabeledContent("同日合并的记录", value: "\(none) 条").accessibilityIdentifier("map.noPlace") }
         }
+        .scrollContentBackground(.hidden).background(Palette.canvas)
         .navigationTitle("地图").navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: Binding(get: { picked != nil }, set: { if !$0 { picked = nil } })) {
             NavigationStack {

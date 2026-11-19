@@ -78,7 +78,7 @@ struct SpeciesName: View {
     @ViewBuilder var second: some View {
         let wraps=size == .card || typeSize.isAccessibilitySize
         if wraps || alt.isEmpty || sci.isEmpty {
-            (alt.isEmpty ? latin:sci.isEmpty ? Text(alt):Text(alt)+Text(" · ")+latin).lineLimit(wraps ? 2:1).padding(.trailing,2)
+            (alt.isEmpty ? latin:sci.isEmpty ? Text(alt):Text(alt)+Text(" · ")+latin).lineLimit(wraps ? 2:1).fixedSize(horizontal:false,vertical:true).padding(.trailing,2)
         } else {
             ViewThatFits(in:.horizontal) {
                 (Text(alt)+Text(" · ")+latin).lineLimit(1).padding(.trailing,2)
@@ -842,7 +842,7 @@ struct HistoryRow: View {
                 Text(item.dateSource=="photo" || item.dateSource=="user" ? item.wall.replacingOccurrences(of:"T",with:" "):item.day+" · 按识别日期").font(.caption).monospacedDigit()
                 Text(model.placeName(item) ?? String(localized:"没有地点")).font(.caption).foregroundStyle(Palette.secondary)
                 if item.missing {Text("原图不可用").font(.caption).foregroundStyle(Palette.warning)}
-                if item.subjects.contains(where:{$0.state != "none"}) {Text("已人工更正").font(.caption).foregroundStyle(Palette.accent)}
+                if item.subjects.contains(where:{$0.state != "none"}) {Text("已人工更正").font(.caption).foregroundStyle(Palette.secondary)}
             }
             Spacer();Image(systemName:"chevron.right").font(.caption).foregroundStyle(Palette.secondary)
         }.fixedSize(horizontal:false,vertical:true).padding(.vertical,6).accessibilityElement(children:.combine)

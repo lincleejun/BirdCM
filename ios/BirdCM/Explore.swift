@@ -153,7 +153,7 @@ struct ExploreView: View {
                 }
                 Spacer()
                 if let code = iucn[sp.sci] { IUCNChip(code: code, small: true) }
-                if model.ledger.allTime[sp.sci] != nil { Label("已见", systemImage: "checkmark.circle.fill").font(.caption.bold()).foregroundStyle(Palette.accent) }
+                if model.ledger.allTime[sp.sci] != nil { Label("已见", systemImage: "checkmark.circle").font(.caption).foregroundStyle(Palette.secondary) }
             }.frame(minHeight: 44)
         }.accessibilityIdentifier("explore.row.\(sp.sci)")
     }

@@ -162,7 +162,8 @@ struct SpeciesPage: View {
                     CropThumbnail(url: model.url(c.item.id), id: c.item.id, boxes: c.item.boxes, crops: c.item.crops, index: c.ordinal).frame(height: 240).clipShape(RoundedRectangle(cornerRadius: 16)).accessibilityLabel("最近一次的照片")
                 }
                 SpeciesName(key: key, size: .hero).accessibilityIdentifier("species.name").accessibilityAddTraits(.isHeader)
-                Text(stat == nil ? "未见" : "已见").font(.headline).padding(.horizontal, 10).padding(.vertical, 4).foregroundStyle(stat == nil ? Palette.ink : Palette.onAccent).background(stat == nil ? Palette.inset : Palette.accent, in: Capsule()).accessibilityIdentifier("species.seen")
+                // A plain state in gray (polish.md): accent is for actions and selection only.
+                Text(stat == nil ? "我的观察 · 未见" : "我的观察 · 已见").font(.subheadline).foregroundStyle(Palette.secondary).accessibilityIdentifier("species.seen")
                 VStack(alignment: .leading, spacing: 8) {
                     if let sp { LabeledContent("科", value: sp.family); LabeledContent("属", value: sp.genus) }
                     if let code = model.iucn(key) { IUCNChip(code: code) }

@@ -151,23 +151,28 @@ struct BirdPager:View {
         ScrollView(.horizontal) {
             HStack(spacing:12) {ForEach(0...count,id:\.self) {i in
                 Button {page=i} label:{VStack(spacing:3) {
+                    // Selected: an accent outline and accent label, not a tinted block.
                     CropThumbnail(url:model.url(record.id),record:record,index:i,original:i==count)
                         .frame(width:48,height:38).clipShape(RoundedRectangle(cornerRadius:8))
-                    Text(i==count ? "原图":"鸟 \(i+1)").font(.caption.bold())
-                }.padding(4).background(page==i ? Palette.accent.opacity(0.15):.clear,in:RoundedRectangle(cornerRadius:12))}
+                        .overlay {RoundedRectangle(cornerRadius:8).stroke(page==i ? Palette.accent:.clear,lineWidth:2)}
+                    Text(i==count ? "原图":"鸟 \(i+1)").font(.caption.weight(page==i ? .semibold:.regular)).foregroundStyle(page==i ? Palette.accent:Palette.secondary)
+                }.padding(4)}
                     .buttonStyle(.plain).accessibilityIdentifier(i==count ? "result.original":"result.subject.\(i)").accessibilityAddTraits(page==i ? .isSelected:[])
             }}
         }.scrollIndicators(.hidden).fixedSize(horizontal:false,vertical:true)
     }
     @ViewBuilder var actions:some View {
         if page<count,let s=source,let image {
-            HStack(spacing:6) {
+            // Accessibility sizes: one action per line instead of a clipped row.
+            let layout=typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment:.leading,spacing:8)):AnyLayout(HStackLayout(spacing:6))
+            layout {
                 if maskState != "none" && maskState != "unsupported" {
-                    Toggle(isOn:$removeBackground) {Label("去背景",systemImage:"scissors")}.toggleStyle(.button).disabled(working).accessibilityIdentifier("result.background")
+                    // polish.md: 去背景 is a visible, labelled secondary action (≥ 44 pt), never hidden in a menu.
+                    Toggle(isOn:$removeBackground) {Label("去背景",systemImage:"scissors").frame(minHeight:30)}.toggleStyle(.button).buttonStyle(.bordered).disabled(working).accessibilityIdentifier("result.background")
                 }
-                Button {Task{await save(source:s,window:window(s,page))}} label:{Label(saved ? "已保存":"保存",systemImage:"square.and.arrow.down")}.disabled(saving).accessibilityIdentifier("result.save")
-                ShareLink(item:BirdShare(source:s,window:window(s,page),name:species,mask:removeBackground ? mask:nil),preview:SharePreview(species,image:Image(decorative:image,scale:1))) {Label("分享",systemImage:"square.and.arrow.up")}.accessibilityIdentifier("result.share")
-            }.buttonStyle(.bordered).font(.caption).frame(minHeight:44)
+                Button {Task{await save(source:s,window:window(s,page))}} label:{Label(saved ? "已保存":"保存",systemImage:"square.and.arrow.down").font(.subheadline.weight(.semibold))}.buttonStyle(PrimaryActionStyle(height:44)).disabled(saving).accessibilityIdentifier("result.save")
+                ShareLink(item:BirdShare(source:s,window:window(s,page),name:species,mask:removeBackground ? mask:nil),preview:SharePreview(species,image:Image(decorative:image,scale:1))) {Label("分享",systemImage:"square.and.arrow.up").frame(minHeight:30)}.buttonStyle(.bordered).accessibilityIdentifier("result.share")
+            }.font(.subheadline).frame(minHeight:44)
         }
     }
     @ViewBuilder var notes:some View {
