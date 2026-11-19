@@ -290,6 +290,9 @@ main.res-main { padding-top: 0; }
 .conf-line { font-size: 14px; margin: 10px 0 8px; }
 .ref { color: var(--text-tertiary); font-size: 13px; }
 .preview-info .ref { display: inline; }
+/* a place: its name, the point as a small grey caption (Location.tsx PlaceName) */
+.place-coords { margin-left: 6px; color: var(--text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ll-pick-place { margin: 8px 0 4px; font-size: 14px; }
 .panel-h { font: 600 14px/20px var(--sans); margin: 16px 0 6px; padding-top: 14px; border-top: 1px solid var(--border); }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 12px 0 0; font-size: 14px; line-height: 20px; }
 .facts dt { color: var(--text-secondary); }

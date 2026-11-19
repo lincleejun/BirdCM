@@ -17,10 +17,35 @@ function remember(p: Place | null) {
   try { if (p) localStorage.setItem(KEY, JSON.stringify(p)); else localStorage.removeItem(KEY); } catch { /* not remembered */ }
 }
 
-export function placeText(loc: string | Place | null | undefined): string {
-  if (!loc) return "未选位置";
-  if (typeof loc === "string") return `${loc} · 地区中心点`;
-  return `${loc.label || fmt(loc.lat, loc.lon)} · ${SOURCE[loc.source] ?? "地图选点"}${loc.source !== "region" ? `（${fmt(loc.lat, loc.lon)}）` : ""}`;
+/** A place for people (owner, 2026-11-18): its English name from the engine (a point: the cached OpenStreetMap name,
+ * else its region; a region: by code or our label), the point itself as a small caption. `name` given = no request
+ * (lists carry it); while an online lookup is queued it asks again a few times. */
+export function PlaceName({ lat, lon, code, label, name }: { lat?: number | null; lon?: number | null; code?: string | null; label?: string | null; name?: string | null }) {
+  const point = lat != null && lon != null;
+  const [n, setN] = useState<string | null | undefined>(name);
+  useEffect(() => {
+    if (name !== undefined) { setN(name); return; }
+    let dead = false, tries = 0, t = 0;
+    const qs = point ? `lat=${lat}&lon=${lon}` : `code=${encodeURIComponent(code ?? "")}&label=${encodeURIComponent(label ?? "")}`;
+    const ask = () => get<{ label: string | null; pending: boolean }>(`/api/places/name?${qs}`).then((r) => {
+      if (dead) return;
+      setN(r.label);
+      if (r.pending && ++tries < 5) t = window.setTimeout(ask, 1500);
+    }).catch(() => { if (!dead) setN(label ?? null); });
+    ask();
+    return () => { dead = true; clearTimeout(t); };
+  }, [lat, lon, code, label, name, point]);
+  const shown = n ?? (point ? null : label);
+  const xy = point ? fmt(lat!, lon!) : null;
+  return <span className="place-name">{shown ?? xy ?? "—"}{shown && xy && <small className="place-coords">{xy}</small>}</span>;
+}
+
+/** A chosen location (a scan's, a single photo's): its name, how it was chosen, the point as a caption. */
+export function PlaceOf({ loc }: { loc: string | Place | null | undefined }) {
+  if (!loc) return <>未选位置</>;
+  if (typeof loc === "string") return <><PlaceName label={loc} /> · 地区中心点</>;
+  return loc.source === "region" ? <><PlaceName code={loc.code} label={loc.label} /> · 地区中心点</>
+    : <><PlaceName lat={loc.lat} lon={loc.lon} /> · {SOURCE[loc.source] ?? "地图选点"}</>;
 }
 const fmt = (lat: number, lon: number) => `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
@@ -101,7 +126,7 @@ export default function LocationPicker({ value, onChange, catalogue, compact = f
     <div className="loc">
       {value && !editing ? (
         <div className="row">
-          <div className="folder set" style={{ flex: 1 }}>{placeText(value)}</div>
+          <div className="folder set" style={{ flex: 1 }}><PlaceOf loc={value} /></div>
           <button type="button" className="btn" onClick={() => setEditing(true)}>更改</button>
           <button type="button" className="btn link" onClick={() => set(null)}>清除</button>
         </div>
@@ -200,7 +225,7 @@ function MapDialog({ start, catalogue, onClose, onPick }: { start: Place | null;
         <div ref={box} className="map-box" />
         {tilesOk === false && <p className="hint">地图图块加载不了（可能离线）。可以用上面的本地地名或输入坐标。</p>}
         <div className="row" style={{ marginTop: 8 }}>
-          <span className="hint">{pt ? `${nearestName(catalogue, pt.lat, pt.lon)}（${pt.lat.toFixed(4)}, ${pt.lon.toFixed(4)}）` : "还没选点"}</span>
+          <span className="hint">{pt ? <PlaceName lat={pt.lat} lon={pt.lon} /> : "还没选点"}</span>
           <button className="btn primary" disabled={!pt} onClick={() => pt && onPick({ ...pt, label: nearestName(catalogue, pt.lat, pt.lon), source: "map" })}>用这个点</button>
         </div>
       </div>

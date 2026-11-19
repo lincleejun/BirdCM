@@ -2,7 +2,7 @@
 // imports. Every number here comes from /api/library/*; names and rarity are read-time labels from the engine.
 import { useEffect, useRef, useState } from "react";
 import { get, post, postText, upload } from "./api";
-import LocationPicker, { type Country } from "./Location";
+import LocationPicker, { type Country, PlaceName } from "./Location";
 import SpeciesReference from "./Reference";
 import { PlainName } from "./names";
 import type { Place } from "./types";
@@ -23,11 +23,11 @@ interface SpeciesItem {
   first_day: string | null; last_day: string | null; observations: number; estimated_count: number; photos: number; cover_ref: Ref | null;
 }
 interface Obs {
-  key: string; sci: string; zh: string | null; en: string | null; day: string; place_key: string; place: { label: string | null; source: string; region_code: string | null };
+  key: string; sci: string; zh: string | null; en: string | null; day: string; place_key: string; place: { label: string | null; source: string; region_code: string | null; points: [number, number][] };
   estimate: number; estimate_source: "max" | "edit"; max_in_photo: number; photo_count: number; rare: boolean; first_seen: boolean;
   fallback_date: boolean; contexts: { region: string | null; tier: number | null; label: string; note: string | null }[]; source_refs: Ref[];
 }
-interface PhotoItem extends Ref { day: string; level: string; species_key: string | null; zh?: string | null; en?: string | null; reason?: string; subjects?: number; date_source?: string; place_label?: string | null }
+interface PhotoItem extends Ref { day: string; level: string; species_key: string | null; zh?: string | null; en?: string | null; reason?: string; subjects?: number; date_source?: string; place_label?: string | null; lat?: number | null; lon?: number | null }
 
 const IUCN_ZH: Record<string, string> = { LC: "无危", NT: "近危", VU: "易危", EN: "濒危", CR: "极危", DD: "数据缺乏", NE: "未评估", EX: "灭绝", EW: "野外灭绝" };
 const ESTIMATE_NOTE = "同日同地点取单张最大值；可能重复见到同一只鸟";
@@ -179,7 +179,7 @@ function PhotoList({ gen, status, onOpen, empty, sci, day }: { gen?: number; sta
               <span>{!x.reason && x.species_key ? <PlainName zh={x.zh ?? null} en={x.en ?? null} sci={x.species_key} size="row" />
                 : <span className="history-name">{x.reason ?? (x.level === "photo" ? "未找到鸟" : "待确认")}</span>}
                 <span className="history-meta">{x.day}{x.date_source?.startsWith("identified") ? "（拍摄日期缺失，按首次识别日期统计）" : ""}
-                  {x.place_label ? ` · ${x.place_label}` : ""}{x.subjects && x.subjects > 1 ? ` · ${x.subjects} 个主体` : ""} · {x.kind === "photo" ? "批量选片" : x.kind === "single" ? "认一张" : "导入"}</span></span>
+                  {x.lat != null && x.lon != null ? <> · <PlaceName lat={x.lat} lon={x.lon} name={x.place_label ?? null} /></> : x.place_label ? ` · ${x.place_label}` : ""}{x.subjects && x.subjects > 1 ? ` · ${x.subjects} 个主体` : ""} · {x.kind === "photo" ? "批量选片" : x.kind === "single" ? "认一张" : "导入"}</span></span>
             </button></li>))}
       </ul>
       {total > items.length && n < 100 && <button className="btn" onClick={() => setN(100)}>再显示更多（共 {total}）</button>}
@@ -191,7 +191,7 @@ function SpeciesPage({ sci, gen, onBack, onOpen, dialog }: { sci: string; gen?: 
   interface Detail {
     key: string; zh: string | null; en: string | null; family: string | null; genus: string; iucn: string | null; seen: boolean;
     first_day: string | null; last_day: string | null; scope: { observations: number; estimated_count: number; photos: number };
-    months: number[]; places: { place_key: string; label: string | null; source: string; region_code: string | null; observations: number }[];
+    months: number[]; places: { place_key: string; label: string | null; source: string; region_code: string | null; lat: number | null; lon: number | null; observations: number }[];
     photo_refs: Ref[]; total_photos: number;
   }
   const [d, setD] = useState<Detail | null>(null);
@@ -222,7 +222,8 @@ function SpeciesPage({ sci, gen, onBack, onOpen, dialog }: { sci: string; gen?: 
           </ol></div>
         <div className="result-section"><h3>地点</h3>
           {d.places.length ? <ul className="ll-places">{d.places.map((p) => <li key={p.place_key}>
-            {p.place_key === "none" ? `地点未知（${NO_PLACE_NOTE}）` : p.region_code ? `${p.label ?? p.region_code}（只选了地区 ${p.region_code}）` : (p.label || p.place_key)}
+            {p.place_key === "none" ? `地点未知（${NO_PLACE_NOTE}）` : p.region_code ? `${p.label ?? p.region_code}（只选了地区 ${p.region_code}）`
+              : p.lat != null && p.lon != null ? <PlaceName lat={p.lat} lon={p.lon} name={p.label} /> : (p.label || p.place_key)}
             <small> · {p.observations} 条</small></li>)}</ul> : <p className="hint">没有观察记录</p>}</div>
         <div className="result-section"><h3>照片（{d.total_photos} 张{d.total_photos > 50 ? "，显示最近 50 张" : ""}）</h3>
           {d.photo_refs.length ? <ul className="ll-gallery">{d.photo_refs.map((r) => <li key={r.asset_hash}>
@@ -393,7 +394,8 @@ function ObsList({ gen, from, to, rare, onSpecies, onOpen, onChanged }: {
             <div>
               <button className="ll-obs-name" onClick={() => onSpecies(o.sci)}><PlainName zh={o.zh} en={o.en} sci={o.sci} size="row" /></button>
               {o.first_seen && <span className="pill">新种</span>}{o.rare && <span className="pill rare">本地{o.contexts.find((c) => c.tier === 1) ? "罕见" : "少见"}</span>}
-              <span className="history-meta">{o.day} · {o.place_key === "none" ? "地点未知" : o.place.region_code ? `${o.place.label ?? o.place.region_code}（地区）` : o.place.label ?? o.place_key}
+              <span className="history-meta">{o.day} · {o.place_key === "none" ? "地点未知" : o.place.region_code ? `${o.place.label ?? o.place.region_code}（地区）`
+                : o.place.points.length ? <PlaceName lat={o.place.points[0][0]} lon={o.place.points[0][1]} name={o.place.label} /> : o.place.label ?? o.place_key}
                 {" · "}{o.photo_count} 张 · 估计 {o.estimate} 只{o.estimate_source === "edit" ? `（你改的；单张最多 ${o.max_in_photo}）` : ""}
                 {o.fallback_date ? " · 拍摄日期缺失" : ""} · 稀有度 {o.contexts.map((c) => c.label + (c.note ? `（${c.note}）` : "")).join(" / ")}</span>
               <span className="row ll-count"><input type="number" min={1} max={999998} aria-label="本次观察数量" placeholder={String(o.estimate)}
@@ -456,7 +458,7 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
   const [shown, setShown] = useState(false);
   const [info, setInfo] = useState<{ regions: { code: string; observations: number }[]; no_place_observations: number; truncated: boolean } | null>(null);
   const [tiles, setTiles] = useState<boolean | null>(null);
-  const [pick, setPick] = useState<Ref[]>([]);
+  const [pick, setPick] = useState<{ lat: number; lon: number; refs: Ref[] } | null>(null);
   useEffect(() => {
     if (!shown || gen === undefined) return;
     let dead = false, map: { remove: () => void } | null = null;
@@ -479,7 +481,7 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
           layer.clearLayers(); setInfo(r);
           for (const c of r.clusters) {
             L.marker([c.lat, c.lon], { icon: L.divIcon({ className: "ll-pin", html: `<span>${c.observations}</span>`, iconSize: [30, 30] }),
-              title: `${c.observations} 条观察记录（照片位置）` }).on("click", () => setPick(c.refs)).addTo(layer);
+              title: `${c.observations} 条观察记录（照片位置）` }).on("click", () => setPick(c)).addTo(layer);
           }
           if (first && r.clusters.length) { first = false; m.fitBounds(L.latLngBounds(r.clusters.map((c) => [c.lat, c.lon] as [number, number])).pad(0.3), { maxZoom: 11 }); }
         }).catch(() => {});
@@ -496,7 +498,8 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
       {shown && <>
         <div ref={box} className="map-box ll-map" aria-label="观察记录地图（数字是该处的观察记录数）" />
         {tiles === false && <p className="hint">地图图块加载不了（可能离线）。下面的地区和列表仍然可用。</p>}
-        {pick.length > 0 && <div className="ll-gallery">{pick.map((r) => <button key={r.asset_hash + r.subject_id} onClick={() => onOpen(r)}>
+        {pick && <p className="ll-pick-place"><PlaceName lat={pick.lat} lon={pick.lon} /></p>}
+        {pick && <div className="ll-gallery">{pick.refs.map((r) => <button key={r.asset_hash + r.subject_id} onClick={() => onOpen(r)}>
           <Thumb r={r} alt="" /><small>{r.day} · <i>{r.sci}</i></small></button>)}</div>}
         {info && <p className="hint">{info.truncated ? "点太多，只显示观察记录最多的 500 处；放大看更多。" : ""}
           {info.regions.length > 0 && <>只选了地区的观察记录（不在地图上标点）：{info.regions.map((x) => `${x.code} ${x.observations}`).join(" · ")}。</>}

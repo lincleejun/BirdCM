@@ -12,7 +12,7 @@ interface Card {
   attribution?: string; width?: number; height?: number;
 }
 interface Reference { summary: Card; image: Card; links: { name: string; url: string }[] }
-interface Settings { enabled: boolean; disclosed: boolean; disclosure: string }
+interface Settings { enabled: boolean; disclosed: boolean; places: boolean; disclosure: string }
 type Kind = "summary" | "image";
 
 const ext = { target: "_blank", rel: "noopener noreferrer" } as const;
@@ -67,6 +67,8 @@ export default function SpeciesReference({ sci, own }: { sci: string; own: numbe
     <div className="result-section ref-section" aria-labelledby="h-ref">
       <div className="row"><h3 id="h-ref">物种参考</h3>
         {s && <label className="inline"><input type="checkbox" checked={s.enabled} onChange={(e) => setting({ enabled: e.target.checked, disclosed: true })} /> 在线资料（Wikipedia / Wikimedia）</label>}
+        {s && <label className="inline" title="只把经纬度（约 1 公里）发给 OpenStreetMap Nominatim；关闭后显示离线的地区名">
+          <input type="checkbox" checked={s.places} onChange={(e) => setting({ places: e.target.checked })} /> 用网络显示地名（OpenStreetMap）</label>}
         <button className="btn link" onClick={clearCache}>删除网络缓存</button></div>
       {s && !s.enabled && <p className="hint" role="status">在线资料已关闭：不会联网，只显示已经缓存的资料。</p>}
       {s && !s.disclosed && <div className="ref-disclosure" role="note">

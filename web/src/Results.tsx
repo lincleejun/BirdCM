@@ -5,7 +5,7 @@ const CHIPS = 3;                                   // species chips shown before
 import CorrectPanel, { type Pick, type Scope } from "./Correct";
 import ExportDialog from "./Export";
 import KeepControl, { KeepButton, keepOf, type KeepSetting } from "./Keep";
-import LocationPicker, { type Country, placeText } from "./Location";
+import LocationPicker, { type Country, PlaceName, PlaceOf } from "./Location";
 import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks, Verdict } from "./names";
 import type { Exif, PhotoResult, PhotoRow, Place, Scan, Snapshot } from "./types";
 
@@ -479,7 +479,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
           {brand}
           <p className="scan-id" title={`${scan.folder}${scan.recursive ? "（包含子文件夹）" : ""}${stepText}`}>
             <button type="button" className="scan-folder" title={`${scan.folder} · 点一下复制路径`} onClick={() => navigator.clipboard?.writeText(scan.folder).catch(() => {})}>{folderName}</button>
-            <span className="scan-meta"> · {placeText(scan.region)}{dateRange ? ` · ${dateRange}` : ""} · </span>
+            <span className="scan-meta"> · <PlaceOf loc={scan.region} />{dateRange ? ` · ${dateRange}` : ""} · </span>
             <span id="scan-copy" role="status">{state}</span>
           </p>
           {!complete && scan.state !== "finalizing" && scan.state !== "queued" && (
@@ -768,7 +768,9 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
         <dl className="facts">
           <dt>相机</dt><dd>{e?.camera ?? "—"}</dd><dt>镜头</dt><dd>{e?.lens ?? "—"}</dd>
           <dt>对焦模式</dt><dd>{e?.focus_mode ?? "—"}</dd><dt>拍摄时间</dt><dd>{fmtTime(e?.taken_at)}</dd>
-          {r && <><dt>地点</dt><dd>{r.region.source === "photo" ? `GPS ${r.region.gps!.map((v) => v.toFixed(4)).join(", ")}` : r.region.name ?? "—"}{" "}
+          {r && <><dt>地点</dt><dd>{r.region.source === "photo" ? <PlaceName lat={r.region.gps![0]} lon={r.region.gps![1]} />
+            : r.region.prior && r.region.prior.source !== "region" ? <PlaceName lat={r.region.prior.lat} lon={r.region.prior.lon} />
+            : r.region.name ? <PlaceName code={r.region.code} label={r.region.name} /> : "—"}{" "}
             <span className="ref">· {r.region.prior ? `${PRIOR_SRC[r.region.prior.source]}${r.region.prior.week ? `，第 ${r.region.prior.week} 周` : "，全年"}` : "没有位置，只凭图像"}</span></dd></>}
           <dt>文件</dt><dd>{p.file}<span className="ref path"> {p.path}</span></dd>
         </dl>

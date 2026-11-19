@@ -27,7 +27,7 @@ export interface Detection {
   eye: Point | null; eye_p: number | null; beak: Point | null; beak_p: number | null; p_fly: number | null;
 }
 export interface Region {
-  name: string | null; source: "photo" | "scan" | null; gps: [number, number] | null;
+  name: string | null; code?: string | null; source: "photo" | "scan" | null; gps: [number, number] | null;
   prior?: { lat: number; lon: number; source: "photo" | "map" | "device" | "region"; week: number | null } | null;
 }
 export interface Place { lat: number; lon: number; label: string; source: "map" | "device" | "region"; code?: string }   // code: ISO 3166 of a chosen region

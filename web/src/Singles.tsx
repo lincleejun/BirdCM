@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { del, get, post, upload } from "./api";
-import LocationPicker, { type Country, placeText } from "./Location";
+import LocationPicker, { type Country, PlaceName, PlaceOf } from "./Location";
 import CorrectPanel from "./Correct";
 import { Verdict, Candidates, named, SpName } from "./names";
 import { nameOf } from "./Results";
@@ -15,7 +15,7 @@ interface Single {
 }
 interface Slim {
   id: number; name: string; created_at: number; region: string | Place | null; error: string | null;
-  result: { species: Species | null; rejected: boolean; reject_reason: string | null; taken_at: string | null; gps: number[] | null } | null;
+  result: { species: Species | null; rejected: boolean; reject_reason: string | null; taken_at: string | null; gps: number[] | null; place?: string | null } | null;
 }
 
 const pct = (p: number) => `${Math.round(p * 100)}%`;
@@ -100,7 +100,8 @@ export default function Singles({ catalogue }: { catalogue: Country[] }) {
                   <span>{h.result && !h.result.rejected && h.result.species ? <SpName sp={h.result.species} size="row" />
                     : <span className={`history-name${h.result?.rejected ? " uncertain" : ""}`}>{name}</span>}
                     <span className="history-meta">{fmtTime(h.result?.taken_at)} · {h.name}</span>
-                    <span className="history-meta">{h.result?.gps ? "照片自带位置" : h.region ? placeText(h.region) : "地点未记录"}</span></span>
+                    <span className="history-meta">{h.result?.gps ? <><PlaceName lat={h.result.gps[0]} lon={h.result.gps[1]} name={h.result.place ?? null} /> · 照片自带位置</>
+                      : h.region ? <PlaceOf loc={h.region} /> : "地点未记录"}</span></span>
                 </button>
                 <button type="button" className="history-delete" onClick={() => remove(h.id)} aria-label={`删除这条记录（${name}）`}>删除</button>
               </li>
@@ -247,11 +248,11 @@ function Result({ rec, busy, err, catalogue, onBack, onAct, onDelete, onPick, on
           </section>
           <section className="result-section" aria-labelledby="region-h">
             <h3 id="region-h">拍摄地区</h3>
-            {e?.gps ? <div className="location"><span>GPS {e.gps.map((v) => v.toFixed(4)).join(", ")}</span><span className="hint">照片自带位置</span></div>
+            {e?.gps ? <div className="location"><span><PlaceName lat={e.gps[0]} lon={e.gps[1]} /></span><span className="hint">照片自带位置</span></div>
               : askRegion ? <LocationPicker compact value={typeof rec.region === "object" ? rec.region : null} catalogue={catalogue}
                   onChange={(p) => { setAskRegion(false); onAct({ region: p ?? "" }); }} />
               : <div className="location">
-                  <span className={rec.region ? "" : "hint"}>{rec.region ? placeText(rec.region) : "没有拍摄地点：只凭图像认，不知道当地有没有这种鸟。"}</span>
+                  <span className={rec.region ? "" : "hint"}>{rec.region ? <PlaceOf loc={rec.region} /> :"没有拍摄地点：只凭图像认，不知道当地有没有这种鸟。"}</span>
                   <button className="btn" onClick={() => setAskRegion(true)}>{rec.region ? "改地点" : "补充地点"}</button>
                 </div>}
             {!e?.gps && <p className="hint">补充地点后会按当地、当季可能出现的鸟重新判断。</p>}
