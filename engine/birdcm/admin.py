@@ -29,6 +29,7 @@ import urllib.request
 from pathlib import Path
 
 from birdcm import config
+from birdcm.i18n import t
 
 ENV = {"data_dir": "BIRDCM_DATA_DIR", "cache_dir": "BIRDCM_CACHE_DIR"}
 DEFAULT_PORT = 8765
@@ -241,14 +242,14 @@ def serve(port_: int | None, log: bool = True) -> int:
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
-        return fail(3, error="already_running", message="观羽引擎已经在运行", engine=running())
+        return fail(3, error="already_running", message=t("admin.running"), engine=running())
     with contextlib.suppress(OSError):
         os.setpgid(0, 0)                         # stop() can then end the decode workers and exiftool with us
     if not port_free(port_):
         h = port_holder(port_)
         alt = next((p for p in range(port_ + 1, port_ + 50) if port_free(p)), None)
-        who = f"{h['command']}（pid {h['pid']}）" if h else "另一个程序"
-        return fail(4, error="port_busy", port=port_, holder=h, suggest=alt, message=f"端口 {port_} 被 {who}占用")
+        who = t("admin.holder", cmd=h["command"], pid=h["pid"]) if h else t("admin.other_program")
+        return fail(4, error="port_busy", port=port_, holder=h, suggest=alt, message=t("admin.port_busy", port=port_, who=who))
     from birdcm import app
     try:
         app.preflight()
@@ -263,7 +264,7 @@ def serve(port_: int | None, log: bool = True) -> int:
     print(json.dumps({"event": "starting", **info, "log": str(home() / "engine.log")}), flush=True)
     if log:
         _log_to(home() / "engine.log")
-    print(f"{time.strftime('%F %T')} 观羽引擎启动 {json.dumps(info, ensure_ascii=False)}", flush=True)
+    print(f"{time.strftime('%F %T')} {t('admin.started')} {json.dumps(info, ensure_ascii=False)}", flush=True)
     app.run(app.prepare(port_), port_)            # the same start-up and shutdown as `birdcm serve`
     return 0                                     # (after a SIGTERM uvicorn re-raises it once shut down: no return)
 
@@ -279,7 +280,7 @@ def clear_cache(database: bool = False) -> dict:
     out = {"freed": freed, "database": False}
     if database:
         if running() is not None:
-            raise AdminError("先停止服务，再删除数据库")
+            raise AdminError(t("admin.stop_first_db"))
         singles = config.data_dir() / "singles"
         out["freed"] += du(singles) + sum(du(p) for p in db_files() if p.exists())
         shutil.rmtree(singles, ignore_errors=True)
@@ -305,24 +306,24 @@ def move(kind: str, dest: str) -> dict:
     stopped, never into a photo folder that was scanned, copy -> verify -> config -> delete the old copy."""
     env = ENV[f"{kind}_dir"]
     if env in OVERRIDDEN:
-        raise AdminError(f"{env} 由环境变量指定，这里不能更改")
+        raise AdminError(t("admin.env_set", env=env))
     if running() is not None:
-        raise AdminError("先停止服务再移动")
+        raise AdminError(t("admin.stop_first_move"))
     src = config.data_dir() if kind == "data" else config.cache_dir()
     target = Path(dest).expanduser().resolve()
     if target.exists() and not target.is_dir():
-        raise AdminError(f"不是文件夹：{target}")
+        raise AdminError(t("admin.not_dir", p=target))
     if target.is_dir() and any(target.iterdir()) and target != src:
         target = target / "BirdCM"
         if target.exists() and any(target.iterdir()) and target != src:
-            raise AdminError(f"{target} 里已经有内容，请选一个空文件夹")
+            raise AdminError(t("admin.not_empty", p=target))
     if target == src:
         return {"moved": False, kind: str(src)}
     if config.inside(target, src):
-        raise AdminError("不能移到它自己里面")
+        raise AdminError(t("admin.into_itself"))
     for f in scanned_folders():
         if config.inside(target, f):
-            raise AdminError(f"{target} 在扫描过的照片文件夹 {f} 里面；观羽不往照片文件夹里写东西，请选别处")
+            raise AdminError(t("admin.photo_folder", p=target, f=f))
     # the app's own files (config, lock, log) stay where they are, also when they share the data directory
     keep = {p.resolve() for p in (config_path(), lock_path(), *home().glob("engine.log*"))}
     items = [p for p in src.iterdir() if p.resolve() not in keep] if src.is_dir() else []
@@ -335,7 +336,7 @@ def move(kind: str, dest: str) -> dict:
     moved = sum(du(p) for p in items)
     copied = sum(du(target / p.name) for p in items)
     if copied != moved:
-        raise AdminError(f"复制不完整（{copied} / {moved} 字节），原位置未改动")
+        raise AdminError(t("admin.copy_incomplete", copied=copied, moved=moved))
     write_config(**{f"{kind}_dir": str(target)})
     os.environ[env] = str(target)
     for p in items:
@@ -373,7 +374,7 @@ def models_status(remote: bool = True, opener=None) -> dict:
             state = remote_state(e["url"], opener) if remote else "unknown"
             state = {"released": "missing", "unknown": "missing"}.get(state, state)
         files.append({"name": e["name"], "role": e["role"], "bytes": e["bytes"], "state": state,
-                      "optional": bool(e.get("optional")), "effect": models.OPTIONAL_EFFECT.get(e["role"], ""),
+                      "optional": bool(e.get("optional")), "effect": models.effect(e["role"]),
                       "path": str(p) if p else None, "downloaded": bool(p and p.parent == own), "license": e.get("license")})
     by = lambda s: [f for f in files if f["state"] == s]  # noqa: E731
     return {"files": files, "ready": not any(f["state"] != "present" and not f["optional"] for f in files),
@@ -412,7 +413,7 @@ def models_fetch(emit=lambda o: print(json.dumps(o, ensure_ascii=False), flush=T
                         last = time.monotonic()
                         emit({"file": name, "done": done, "total": e["bytes"]})
             if h.hexdigest() != e["sha256"]:
-                raise ValueError("sha256 不符")
+                raise ValueError(t("admin.sha_mismatch"))
             part.rename(dest / name)
             models.remember(dest / name, e["sha256"])         # the status right after does not hash it again
             emit({"file": name, "state": "present", "done": done, "total": e["bytes"]})
@@ -435,7 +436,7 @@ def models_remove(names: list[str] | None = None) -> dict:
     """Delete downloaded model files (only those in <cache>/models; a development BIRDCM_MODEL_DIR is never touched)."""
     from birdcm import models
     if running() is not None:
-        raise AdminError("先停止服务再删除模型")
+        raise AdminError(t("admin.stop_first_models"))
     d = config.cache_dir() / "models"
     known = {e["name"] for e in models.manifest()["file"]}
     removed = []

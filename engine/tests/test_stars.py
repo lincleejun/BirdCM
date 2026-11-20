@@ -1,5 +1,6 @@
 """stars.py: the research module's self-check, on PhotoResult-shaped rows, plus the spec points of design §9."""
 from birdcm.stars import Config, group_bursts, percentiles, rate
+from birdcm.i18n import text  # star reasons are codes: rendered in Chinese (conftest)
 
 
 def res(t, sharp, aes, sp="Aa bb", **k):
@@ -30,7 +31,7 @@ def test_quota_order():
 def test_burst_cap_passes_slot_on():
     o = run([res(100 + 0.5 * i if i >= 5 else 10.0 * i, i, 0.4 + i / 100) for i in range(10)])
     assert stars(o) == [1, 1, 1, 1, 3, 2, 2, 2, 3, 3]
-    assert "连拍组" in o[7]["star_reason"]
+    assert "连拍组" in text(o[7]["star_reason"])
     assert len({o[i]["burst_group"] for i in range(5, 10)}) == 1 and o[9]["burst_rank"] == 1
 
 
@@ -38,8 +39,8 @@ def test_species_floor_and_gates():
     rs = [res(10.0 * i, 10 + i, 0.5 + i / 100) for i in range(10)]
     rs += [res(200, 0.1, 0.4, sp="Cc dd"), res(210, 9, 0.9, sp="Ee ff", boxes=[{"box": [0, 0, 1, 1], "score": 0.1}])]
     o = run(rs)
-    assert o[10]["stars"] == 2 and "保底" in o[10]["star_reason"]
-    assert o[11]["stars"] == 0 and "检测把握" in o[11]["star_reason"]
+    assert o[10]["stars"] == 2 and "保底" in text(o[10]["star_reason"])
+    assert o[11]["stars"] == 0 and "检测把握" in text(o[11]["star_reason"])
 
 
 def test_caps_and_rejects():
@@ -48,16 +49,16 @@ def test_caps_and_rejects():
     rs[8]["focus"] = [0.95, 0.05]                                    # far off the bird
     rs.append(res(500, None, None, rejected=True, reject_reason="没有清楚的鸟"))
     o = run(rs)
-    assert o[9]["stars"] == 2 and "眼睛" in o[9]["star_reason"]
-    assert o[8]["stars"] == 2 and "对焦点" in o[8]["star_reason"]
-    assert stars(o)[5:8] == [3, 3, 3] and o[10]["stars"] == -1 and o[10]["star_reason"] == "没有清楚的鸟"
+    assert o[9]["stars"] == 2 and "眼睛" in text(o[9]["star_reason"])
+    assert o[8]["stars"] == 2 and "对焦点" in text(o[8]["star_reason"])
+    assert stars(o)[5:8] == [3, 3, 3] and o[10]["stars"] == -1 and text(o[10]["star_reason"]) == "没有清楚的鸟"
 
 
 def test_gates_aes_and_no_eye_beak():
     o = run([res(0, 5, 0.2), res(10, 5, 0.5, eye_p=0.1, beak_p=0.1), res(20, 5, 0.5)])
-    assert stars(o)[:2] == [0, 1] and "美学" in o[0]["star_reason"] and "角度" in o[1]["star_reason"]
+    assert stars(o)[:2] == [0, 1] and "美学" in text(o[0]["star_reason"]) and "角度" in text(o[1]["star_reason"])
     o = run([res(0, 0.5, 0.5), res(10, 5, 0.5)], min_sharp=1)
-    assert o[0]["stars"] == 0 and "清晰度" in o[0]["star_reason"]
+    assert o[0]["stars"] == 0 and "清晰度" in text(o[0]["star_reason"])
 
 
 def test_composite_and_missing_sharpness():
@@ -78,10 +79,10 @@ def test_ratio_config_and_unidentified_group():
     assert Config.from_ratio({"preset": "strict", "p3": 20, "p2": 30, "burst_cap": 9, "bogus": 1}).q3 == 0.2
     assert Config.from_ratio({"burst_cap": 9}).burst_cap == 9
     o = run([res(10.0 * i, i, 0.5 + i / 100, sp=None) for i in range(10)], p3=10, p2=20)
-    assert stars(o).count(3) == 1 and stars(o).count(2) == 2 and "未确认鸟种" in o[9]["star_reason"]
+    assert stars(o).count(3) == 1 and stars(o).count(2) == 2 and "未确认鸟种" in text(o[9]["star_reason"])
     o = run([res(10.0 * i, i, 0.5 + i / 100, species={"level": "species", "label": {"sci": "X y", "en": "X", "zh": None, "p": 0.6}, "top5": []})
              for i in range(4)])
-    assert "未确认" in o[0]["star_reason"]                              # p < 0.9: not counted as identified
+    assert "未确认" in text(o[0]["star_reason"])                              # p < 0.9: not counted as identified
 
 
 def test_deterministic_and_failed_rows():

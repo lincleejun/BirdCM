@@ -16,6 +16,7 @@ from birdcm.app import create_app
 from birdcm.store import Store
 from test_corrections import H, PORT, res
 from test_queue import FakeEngine
+from birdcm.i18n import t
 
 pytestmark = pytest.mark.skipif(not shutil.which("exiftool"), reason="needs exiftool")
 FIX = Path(__file__).parent / "fixtures" / "xmp"
@@ -100,11 +101,11 @@ def test_write_merge_undo(tmp_path, monkeypatch):
     before = {n: (folder / n).read_bytes() for n in ("B.xmp", "C.XMP")}
 
     plan = c.post(f"/api/scans/{sid}/xmp", json={"dry": True}, headers=H).json()
-    assert plan == {"create": 1, "modify": 2, "skipped": {xmp.SKIP_FORMAT: 2}, "last": None}
+    assert plan == {"create": 1, "modify": 2, "skipped": {t(xmp.SKIP_FORMAT): 2}, "last": None}
     assert sorted(p.name for p in folder.iterdir()) == ["A.ARW", "B.ARW", "B.xmp", "C.ARW", "C.XMP", "D.JPG", "E.DNG"]  # dry writes nothing
 
     r = c.post(f"/api/scans/{sid}/xmp", json={}, headers=H).json()
-    assert (r["created"], r["modified"], r["skipped"]) == (1, 2, {xmp.SKIP_FORMAT: 2})
+    assert (r["created"], r["modified"], r["skipped"]) == (1, 2, {t(xmp.SKIP_FORMAT): 2})
     # one sidecar per RAW, same stem, the existing C.XMP kept its name; nothing for D.JPG / E.DNG, no temporary file left
     assert sorted(p.name for p in folder.iterdir()) == ["A.ARW", "A.xmp", "B.ARW", "B.xmp", "C.ARW", "C.XMP", "D.JPG", "E.DNG"]
     assert sums(folder) == originals
@@ -169,7 +170,7 @@ def test_refuses_odd_sidecars(tmp_path, monkeypatch):
     (folder / "C.XMP").symlink_to(tmp_path / "elsewhere.xmp")
     r = c.post(f"/api/scans/{sid}/xmp", json={}, headers=H).json()
     assert r["created"] == 1 and r["modified"] == 0
-    assert r["skipped"] == {xmp.SKIP_FORMAT: 2, xmp.SKIP_BAD: 1, xmp.SKIP_ODD: 1}
+    assert r["skipped"] == {t(xmp.SKIP_FORMAT): 2, t(xmp.SKIP_BAD): 1, t(xmp.SKIP_ODD): 1}
     assert (folder / "B.xmp").read_bytes() == b"<not xml" and not (tmp_path / "elsewhere.xmp").exists()
 
 

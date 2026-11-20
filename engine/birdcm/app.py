@@ -24,6 +24,8 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from birdcm import archive, config, decode, geo, library, models, places, stars
+from birdcm import i18n
+from birdcm.i18n import t
 from birdcm.pipeline import EQUIVALENT_DATA, EQUIVALENT_OLD_KEY, fingerprint, image_paths
 from birdcm.queue import Scheduler
 from birdcm.store import Store
@@ -46,9 +48,9 @@ def check_pixels(path: Path) -> None:
         with Image.open(path) as im:
             n = im.width * im.height
     except Exception as e:  # noqa: BLE001
-        raise ValueError(f"打不开这张照片：{e}") from None
+        raise ValueError(t("app.open_photo", e=e)) from None
     if n > MAX_PIXELS:
-        raise ValueError(f"照片太大（{n / 1e6:.0f} MP），上限 {MAX_PIXELS / 1e6:.0f} MP")
+        raise ValueError(t("app.too_many_pixels", mp=n / 1e6, cap=MAX_PIXELS / 1e6))
 
 
 def check_location(loc) -> None:
@@ -56,12 +58,12 @@ def check_location(loc) -> None:
     if loc is None or isinstance(loc, str):
         return
     if not geo.valid(loc.get("lat"), loc.get("lon")) or loc.get("source", "map") not in ("map", "device", "region"):
-        raise ValueError("位置要有合法的经纬度（纬度 −90–90，经度 −180–180），来源是 map / device / region")
+        raise ValueError(t("app.bad_location"))
     if not isinstance(loc.get("label", ""), str) or len(loc.get("label", "")) > 200:
-        raise ValueError("位置名称要是文字")
+        raise ValueError(t("app.location_label"))
     code = loc.get("code")
     if code is not None and not (isinstance(code, str) and re.fullmatch(r"[A-Z]{2}(-[A-Z0-9]{1,3})?", code)):
-        raise ValueError("地区代码要是 ISO 3166 代码（如 US、US-CA）")
+        raise ValueError(t("app.region_code"))
 
 
 def slim_result(res: dict | None, subject: int | None) -> dict | None:
@@ -73,6 +75,41 @@ def slim_result(res: dict | None, subject: int | None) -> dict | None:
     return {"species": b["species"] if b else res.get("species"), "rejected": res["rejected"], "reject_reason": res["reject_reason"],
             "taken_at": res["exif"].get("taken_at"), "gps": (g := res["exif"].get("gps")),
             "place": places.name(*g)["label"] if g and len(g) == 2 and geo.valid(*g) else None}
+
+
+class Lang:
+    """Pure ASGI: the request's language (i18n) from ?lang= or Accept-Language; neither -> Chinese, as before R8."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        from urllib.parse import parse_qs
+        q = parse_qs(scope.get("query_string", b"").decode("latin-1")).get("lang", [None])[0]
+        h = dict(scope["headers"]).get(b"accept-language", b"").decode("latin-1")
+        tok = i18n.use(i18n.pick(q) or i18n.pick(h) or "zh")
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            i18n.reset(tok)
+
+
+def local(d: dict | None) -> dict | None:
+    """A photo, result or single as stored -> its stored messages (star and reject reasons, errors) in the request's
+    language (i18n.text)."""
+    if not isinstance(d, dict):
+        return d
+    d = dict(d)
+    for k in ("star_reason", "reject_reason", "error"):
+        if k in d:
+            d[k] = i18n.text(d[k])
+    if isinstance(d.get("star_auto"), dict):
+        d["star_auto"] = {**d["star_auto"], "reason": i18n.text(d["star_auto"].get("reason"))}
+    if isinstance(d.get("result"), dict):
+        d["result"] = local(d["result"])
+    return d
 
 
 class Guard:
@@ -314,12 +351,13 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     api = FastAPI(title="BirdCM", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     from starlette.middleware.gzip import GZipMiddleware
     api.add_middleware(GZipMiddleware, minimum_size=4096)    # the list snapshot is JSON: ~1/10 on the wire (event streams excluded)
+    api.add_middleware(Lang)
     api.state.store, api.state.scheduler, api.state.token = store, sched, token
 
     def get_scan(sid: int) -> dict:
         s = store.scan(sid)
         if not s:
-            raise HTTPException(404, "没有这个扫描")
+            raise HTTPException(404, t("app.no_scan"))
         return s
 
     @api.get("/api/session")
@@ -352,7 +390,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         try:
             return places_search(q)
         except Exception as e:  # offline, timeout, HTTP error: the map's local matches still work
-            raise HTTPException(502, f"在线地名搜索用不了：{e}")
+            raise HTTPException(502, t("app.place_search", e=e))
 
     @api.get("/api/places/name")
     def place_name(lat: float | None = None, lon: float | None = None, code: str | None = None, label: str | None = None):
@@ -362,14 +400,14 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             from birdcm import rarity
             return {"label": places.region_text(code or rarity.label_iso(label)) or label, "online": False, "pending": False}
         if not geo.valid(lat, lon):
-            raise HTTPException(422, "经纬度不对")
+            raise HTTPException(422, t("app.bad_point"))
         return names.name(lat, lon)
 
     @api.post("/api/pick-folder")
     def pick_folder():
         if sys.platform != "darwin":
-            raise HTTPException(501, "只在 macOS 上能弹出选择窗口，请直接输入路径")
-        r = subprocess.run(["osascript", "-e", 'POSIX path of (choose folder with prompt "选择照片文件夹")'],
+            raise HTTPException(501, t("app.pick_macos"))
+        r = subprocess.run(["osascript", "-e", f'POSIX path of (choose folder with prompt "{t("app.pick_prompt")}")'],
                            capture_output=True, text=True, timeout=600)
         return {"folder": r.stdout.strip().rstrip("/") or None}
 
@@ -377,7 +415,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def new_scan(body: NewScan):
         folder = Path(body.folder).expanduser()
         if not folder.is_absolute() or not folder.is_dir():
-            raise HTTPException(400, f"不是文件夹：{body.folder}")
+            raise HTTPException(400, t("app.not_dir", p=body.folder))
         folder = folder.resolve()
         try:
             config.check_own_dirs(folder)
@@ -403,7 +441,12 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def snapshot(sid: int):
         snap = store.snapshot(sid, slim_results=True)
         if not snap:
-            raise HTTPException(404, "没有这个扫描")
+            raise HTTPException(404, t("app.no_scan"))
+        if any(i18n.legacy(p["star_reason"]) for p in snap["photos"]):
+            with contextlib.suppress(Exception):   # reasons stored as Chinese sentences (before R8): re-rated once, as codes
+                sched.rerate_now(sid)
+            snap = store.snapshot(sid, slim_results=True)
+        snap["photos"] = [local(p) for p in snap["photos"]]
         # plain JSON already: json.dumps directly (FastAPI's encoder walk was 2/3 of a 5,000-photo snapshot)
         return Response(json.dumps({**snap, **store.related(sid), "stale": is_stale(snap["scan"])}, ensure_ascii=False,
                                    separators=(",", ":")),
@@ -443,7 +486,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                 evs = await run_in_threadpool(store.events_after, sid, cursor)
                 for e in evs:
                     cursor = e["n"]
-                    yield sse(e)
+                    yield sse({**e, "data": local(e["data"])} if e["kind"] == "photo" else e)
                 if evs:
                     quiet = time.monotonic()
                     continue
@@ -483,13 +526,13 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         try:
             sched.set_ratio(sid, body)                     # computed first, stored with its stars only on success
         except Exception as e:  # noqa: BLE001
-            raise HTTPException(400, f"这个设置算不出星级：{type(e).__name__}: {e}") from None
+            raise HTTPException(400, t("app.bad_rating", e=f"{type(e).__name__}: {e}")) from None
         return {"ok": True}
 
     def photo_file(pid: int, which: int, request: Request | None = None):
         p = store.photo(pid)
         if not p:
-            raise HTTPException(404, "没有这张照片")
+            raise HTTPException(404, t("app.no_photo"))
         thumb, preview = image_paths(p["path"], p["size"], p["mtime_ns"])
         path = (thumb, preview)[which]
         if not path.exists():                  # not processed yet: make it now, in a worker process (crash / timeout safe)
@@ -497,7 +540,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                 previews.make({"path": p["path"], "size": p["size"], "mtime_ns": p["mtime_ns"],
                                "thumb": str(thumb), "preview": str(preview)})
             except Exception as e:  # noqa: BLE001
-                raise HTTPException(404, f"无法生成预览：{e}") from None
+                raise HTTPException(404, t("app.no_preview", e=e)) from None
         # the ETag names this database, this photo row and this cached image: another database or a re-made preview
         # never matches (Codex P5); a matching If-None-Match gets 304 instead of the image again
         st = path.stat()
@@ -524,7 +567,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         from fastapi.responses import Response
         p = store.photo(pid)
         if not p or p["scan_id"] != sid:
-            raise HTTPException(404, "这次扫描里没有这张照片")
+            raise HTTPException(404, t("app.not_in_scan"))
         import hashlib
         tag = '"' + hashlib.sha1(f"{store.path}|{pid}|{p['path']}|{p['size']}|{p['mtime_ns']}|full".encode()).hexdigest()[:20] + '"'
         headers = {"Cache-Control": "private, no-cache", "ETag": tag}
@@ -533,7 +576,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         try:
             data = previews.full({"path": p["path"], "size": p["size"], "mtime_ns": p["mtime_ns"]})
         except Exception as e:  # noqa: BLE001 - gone, changed, unreadable or a crashed worker
-            raise HTTPException(404, f"无法读取原图：{e}") from None
+            raise HTTPException(404, t("app.no_original", e=e)) from None
         return Response(data, media_type="image/jpeg", headers=headers)
 
     @api.get("/api/species")
@@ -549,9 +592,9 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         from birdcm import names
         get_scan(sid)
         if body.scope not in ("one", "burst", "same"):
-            raise HTTPException(400, "范围只能是 one / burst / same")
+            raise HTTPException(400, t("app.scope"))
         if not body.undo and body.sci is not None and body.sci not in names.catalogue():
-            raise HTTPException(400, f"名录里没有这个学名：{body.sci}")
+            raise HTTPException(400, t("app.unknown_sci", sci=body.sci))
         photos = store.snapshot(sid, slim_results=True)["photos"]        # ids, bursts and the shown species only
 
         def named(p):
@@ -560,11 +603,11 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         if body.photo_ids is not None:                                  # exactly these, stored like one-by-one
             ids, body.scope = sorted(set(body.photo_ids)), "one"
             if not ids:
-                raise HTTPException(400, "没有选照片")
+                raise HTTPException(400, t("app.none_picked"))
             if not set(ids) <= {p["id"] for p in photos}:
-                raise HTTPException(404, "这次扫描里没有这张照片")
+                raise HTTPException(404, t("app.not_in_scan"))
         elif not (me := next((p for p in photos if p["id"] == body.photo_id), None)):
-            raise HTTPException(404, "这次扫描里没有这张照片")
+            raise HTTPException(404, t("app.not_in_scan"))
         elif body.scope == "one":
             ids = [me["id"]]
         elif body.scope == "burst":
@@ -585,14 +628,14 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         corrections (survive re-scans and settings changes); laid over the rating, so no other photo changes."""
         get_scan(sid)
         if body.stars is not None and body.stars not in (-1, 0, 1, 2, 3):
-            raise HTTPException(400, "星级只能是 -1（淘汰）、0、1、2、3")
+            raise HTTPException(400, t("app.star_value"))
         ids = set(body.photo_ids)
         if not ids:
-            raise HTTPException(400, "没有选照片")
+            raise HTTPException(400, t("app.none_picked"))
         have = {r[0] for r in store._db().execute(
             f"SELECT id FROM photo WHERE scan_id = ? AND id IN ({','.join('?' * len(ids))})", (sid, *ids))}
         if have != ids:
-            raise HTTPException(404, "这次扫描里没有这张照片")
+            raise HTTPException(404, t("app.not_in_scan"))
         store.set_star_fixes(sorted(ids), body.stars)
         sched.rerate_now(sid)
         return {"ok": True, "photos": len(ids)}
@@ -633,12 +676,12 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         from birdcm import names
         rec = store.single(sid)
         if not rec:
-            raise HTTPException(404, "没有这条记录")
+            raise HTTPException(404, t("app.no_record"))
         if not body.undo and body.sci is not None and body.sci not in names.catalogue():
-            raise HTTPException(400, f"名录里没有这个学名：{body.sci}")
+            raise HTTPException(400, t("app.unknown_sci", sci=body.sci))
         store.update_single(sid, correction=None if body.undo else {"sci": body.sci, **(names.catalogue().get(body.sci or "", {}))})
         rec = store.single(sid)
-        return {**rec, "stale": single_stale(rec)}
+        return local({**rec, "stale": single_stale(rec)})
 
     @api.get("/api/scans/{sid}/ebird/plan")
     def ebird_plan(sid: int):
@@ -661,7 +704,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             photos = [p for p in photos if p["id"] in keep]
         for v in body.counts.values():
             if not (v.upper() == "X" or (v.isdigit() and 0 < int(v) < 999999)):
-                raise HTTPException(400, "数量只能是正整数或 X")
+                raise HTTPException(400, t("app.count"))
         try:
             text = ebird.record_csv(photos, scan["region"], body.species, body.counts, body.comments, body.protocol, body.with_files)
         except ValueError as e:
@@ -673,15 +716,15 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         """One photo's full row (every box's own species, the likeness thumbnail): what the list snapshot leaves out."""
         p = store.photo(pid)
         if not p:
-            raise HTTPException(404, "没有这张照片")
-        return p
+            raise HTTPException(404, t("app.no_photo"))
+        return local(p)
 
     @api.get("/api/photos/{pid}/exif")
     def photo_exif(pid: int):
         """Shooting info of a photo not processed yet (selected while queued)."""
         p = store.photo(pid)
         if not p:
-            raise HTTPException(404, "没有这张照片")
+            raise HTTPException(404, t("app.no_photo"))
         if p["result"]:
             return p["result"]["exif"]
         try:
@@ -717,23 +760,23 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         except Exception:  # noqa: BLE001 - kept with the entry (failed()); the person can retry
             pass
         rec = store.single(sid)
-        return {**rec, "stale": single_stale(rec)}
+        return local({**rec, "stale": single_stale(rec)})
 
     @api.post("/api/singles")
     async def upload(request: Request):
         try:
             declared = int(request.headers.get("content-length", ""))
         except ValueError:
-            raise HTTPException(411, "需要 Content-Length") from None
+            raise HTTPException(411, t("app.content_length")) from None
         if declared > MAX_UPLOAD + (1 << 16):           # before the form is parsed (and spooled to a temp file)
-            raise HTTPException(413, f"照片超过 {MAX_UPLOAD >> 20} MB")
+            raise HTTPException(413, t("app.upload_too_big", mb=MAX_UPLOAD >> 20))
         form = await request.form(max_files=1, max_fields=4)
         f = form.get("file")
         if f is None or not hasattr(f, "read"):
-            raise HTTPException(400, "没有收到照片")
+            raise HTTPException(400, t("app.no_upload"))
         ext = Path(f.filename or "").suffix.lower()
         if ext not in decode.SCAN_EXT | {".png"}:
-            raise HTTPException(400, "只支持 ARW、DNG、JPG、PNG")
+            raise HTTPException(400, t("app.upload_type"))
         singles_dir.mkdir(parents=True, exist_ok=True)
         stored = f"{secrets.token_hex(12)}{ext}"                       # our own name, never the uploaded one
         size = 0
@@ -743,7 +786,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                 if size > MAX_UPLOAD:
                     out.close()
                     (singles_dir / stored).unlink(missing_ok=True)
-                    raise HTTPException(413, f"照片超过 {MAX_UPLOAD >> 20} MB")
+                    raise HTTPException(413, t("app.upload_too_big", mb=MAX_UPLOAD >> 20))
                 out.write(chunk)
         try:
             check_pixels(singles_dir / stored)
@@ -758,29 +801,29 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                 check_location(region)
             except ValueError:
                 (singles_dir / stored).unlink(missing_ok=True)
-                raise HTTPException(400, "位置格式不对") from None
-        sid = store.add_single(stored, Path(f.filename or "照片").name[:200], region)
+                raise HTTPException(400, t("app.bad_region")) from None
+        sid = store.add_single(stored, Path(f.filename or t("app.upload_name")).name[:200], region)
         return await run_in_threadpool(run_single, sid, region, None, sched.state == "ready")
 
     @api.post("/api/singles/{sid}/identify")
     def reidentify(sid: int, body: Identify):
         rec = store.single(sid)
         if not rec:
-            raise HTTPException(404, "没有这条记录")
+            raise HTTPException(404, t("app.no_record"))
         if body.box is None and body.region is None and body.subject is not None:
             n = len((rec["result"] or {}).get("boxes") or [])
             if not 0 <= body.subject < n:
-                raise HTTPException(400, "没有这只鸟")
+                raise HTTPException(400, t("app.no_bird"))
             store.update_single(sid, subject=body.subject)
             rec = store.single(sid)
-            return {**rec, "stale": single_stale(rec)}
+            return local({**rec, "stale": single_stale(rec)})
         try:
             check_location(body.region)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         box = body.box
         if box is not None and not (len(box) == 4 and 0 <= box[0] < box[2] <= 1 and 0 <= box[1] < box[3] <= 1):
-            raise HTTPException(400, "框的坐标不对")
+            raise HTTPException(400, t("app.bad_box"))
         return run_single(sid, body.region if body.region is not None else rec["region"], [box] if box else rec["boxes"])
 
     def single_stale(rec: dict) -> bool:
@@ -796,20 +839,20 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.get("/api/singles")
     def list_singles():
         return [{k: r[k] for k in ("id", "name", "created_at", "region", "subject", "error")} |
-                {"result": slim_result(r["result"], r["subject"]), "stale": single_stale(r)} for r in store.singles()]
+                {"result": local(slim_result(r["result"], r["subject"])), "stale": single_stale(r)} for r in store.singles()]
 
     @api.get("/api/singles/{sid}")
     def get_single(sid: int):
         rec = store.single(sid)
         if not rec:
-            raise HTTPException(404, "没有这条记录")
-        return {**rec, "stale": single_stale(rec)}
+            raise HTTPException(404, t("app.no_record"))
+        return local({**rec, "stale": single_stale(rec)})
 
     @api.get("/api/singles/{sid}/image")
     def single_image(sid: int, size: str = "preview"):
         rec = store.single(sid)
         if not rec:
-            raise HTTPException(404, "没有这条记录")
+            raise HTTPException(404, t("app.no_record"))
         path = stored_path(rec)
         st = path.stat()
         thumb, preview = image_paths(str(path), st.st_size, st.st_mtime_ns)
@@ -831,7 +874,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def delete_single(sid: int):
         names = store.delete_singles(sid)
         if not names:
-            raise HTTPException(404, "没有这条记录")
+            raise HTTPException(404, t("app.no_record"))
         remove(names)
         return {"deleted": len(names)}
 
@@ -851,13 +894,13 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             return None
         p = library.parse_wall(v)
         if not p or p[3] != "day":
-            raise HTTPException(422, f"{name} 要是 YYYY-MM-DD")
+            raise HTTPException(422, t("app.day", name=name))
         return p[2]
 
     def view(frm: str | None, to: str | None):
         """The status and the index of one generation (a dirty index is rebuilt in the background meanwhile)."""
         if not store.library_ok:
-            raise HTTPException(503, "数据库是更新版本的观羽写的：这个版本不改动它的记录本")
+            raise HTTPException(503, t("app.newer_db"))
         st = lib.refresh()
         return st, lib.index(), day_arg(frm, "from"), day_arg(to, "to")
 
@@ -877,7 +920,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                         sort: str = "recent", offset: int = 0, limit: int = 50):
         if seen not in ("all", "yes", "no") or rarity not in ("all", "0", "1", "2", "3", "4") or iucn not in ("all", "threatened") \
                 or sort not in ("recent", "first", "name"):
-            raise HTTPException(422, "seen / rarity / iucn / sort 的取值不对")
+            raise HTTPException(422, t("app.species_query"))
         st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
         offset, limit = page(offset, limit)
         return {**st, "generation": ix.generation, **library.species_list(ix, frm, to, q[:100], seen, rarity, iucn, family[:100], sort, offset, limit)}
@@ -890,7 +933,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.get("/api/library/photos")
     def library_photos(request: Request, sci: str | None = None, day: str | None = None, status: str = "all", offset: int = 0, limit: int = 50):
         if status not in ("all", "pending", "no-bird"):
-            raise HTTPException(422, "status 只能是 all / pending / no-bird")
+            raise HTTPException(422, t("app.status_query"))
         st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
         offset, limit = page(offset, limit)
         return {**st, "generation": ix.generation, **library.photo_list(ix, sci, day_arg(day, "day"), status, frm, to, offset, limit)}
@@ -906,7 +949,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.get("/api/library/calendar")
     def library_calendar(year: int):
         if not 1 <= year <= 9999:
-            raise HTTPException(422, "year 不对")
+            raise HTTPException(422, t("app.year"))
         st, ix, _, _ = view(None, None)
         return {**st, "generation": ix.generation, **ix.calendar(year)}
 
@@ -916,7 +959,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             s, w, n, e = (float(x) for x in bounds.split(","))
             assert -90 <= s < n <= 90 and -180 <= w <= 180 and -180 <= e <= 180
         except (ValueError, AssertionError):
-            raise HTTPException(422, "bounds 要是 south,west,north,east") from None
+            raise HTTPException(422, t("app.bounds")) from None
         st, ix, frm, to = view(request.query_params.get("from"), request.query_params.get("to"))
         return {**st, "generation": ix.generation, **ix.map(s, w, n, e, frm, to, sci)}
 
@@ -925,11 +968,11 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def library_count(body: CountBody):
         st, ix, _, _ = view(None, None)
         if body.expected_generation != ix.generation:
-            raise HTTPException(409, "统计已经更新，请重新载入后再改")
+            raise HTTPException(409, t("app.reload"))
         if body.group_key not in ix.groups:
-            raise HTTPException(404, "没有这条观察记录")
+            raise HTTPException(404, t("app.no_observation"))
         if body.count is not None and not 1 <= body.count <= library.MAX_COUNT:
-            raise HTTPException(422, "数量只能是 1–999998")
+            raise HTTPException(422, t("app.count_range"))
         gen = store._write(lambda db: library.write_group_edit(db, body.group_key, body.count))
         return {**lib.status(), "generation": gen}
 
@@ -939,19 +982,19 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         from birdcm import names
         st, ix, _, _ = view(None, None)
         if body.expected_generation != ix.generation or st["updating"]:
-            raise HTTPException(409, "统计正在更新或已经更新，请重新载入后再改")
+            raise HTTPException(409, t("app.reload_busy"))
         r = body.source_ref
         row = next((x for x in ix.by_hash.get(str(r.get("asset_hash")), []) if x["source_kind"] == r.get("kind")
                     and x["source_id"] == str(r.get("id")) and x["subject_id"] == r.get("subject_id")), None)
         if row is None:
-            raise HTTPException(404, "没有这张照片或这个主体")
+            raise HTTPException(404, t("app.no_subject"))
         try:
             edit = library.check_edit(body.edit, names.catalogue())
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
         photo_wide = edit["op"] in ("date", "place")
         if not photo_wide and row["subject_id"] == "photo":
-            raise HTTPException(422, "鸟种、数量、排除只能改某一只鸟，不能改整张照片")
+            raise HTTPException(422, t("app.subject_only"))
         res = None
         if row["source_kind"] == "photo":
             res = (store.photo(int(row["source_id"])) or {}).get("result")
@@ -959,7 +1002,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             rec = store.single(int(row["source_id"])) or {}
             res = rec.get("result")
         if edit["op"] == "place" and (edit["value"] or {}).get("source") == "photo" and not ((res or {}).get("exif") or {}).get("gps"):
-            raise HTTPException(422, "这张照片没有 GPS，不能恢复成照片位置")
+            raise HTTPException(422, t("app.no_gps"))
         box = json.loads(row["box_json"]) if row["box_json"] else None
         store._write(lambda db: library.write_subject_edit(db, row["asset_hash"], "photo" if photo_wide else row["subject_id"], edit, box))
         # the subject bird of a scan / single photo: the scan view's correction says the same (one source of truth)
@@ -992,7 +1035,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             archive.export(lib, out, frm, to)
         except Exception as e:  # noqa: BLE001 - disk full, unreadable file: nothing half-written is sent
             out.unlink(missing_ok=True)
-            raise HTTPException(500, f"导出失败：{type(e).__name__}: {e}") from None
+            raise HTTPException(500, t("app.export_failed", e=f"{type(e).__name__}: {e}")) from None
         from starlette.background import BackgroundTask
         name = f"BirdCM-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}{'-selection' if frm or to else ''}.birdcm"
         return FileResponse(out, media_type=archive.MIME, filename=name, background=BackgroundTask(out.unlink, missing_ok=True))
@@ -1002,13 +1045,13 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         try:
             declared = int(request.headers.get("content-length", ""))
         except ValueError:
-            raise HTTPException(411, "需要 Content-Length") from None
+            raise HTTPException(411, t("app.content_length")) from None
         if declared > archive.MAX_ARCHIVE or declared * 2 > archive.free_bytes(staging.folder):
-            raise HTTPException(413, "文件太大，或磁盘空间不够暂存和导入它")
+            raise HTTPException(413, t("app.import_too_big"))
         form = await request.form(max_files=1, max_fields=2)
         f = form.get("file")
         if f is None or not hasattr(f, "read"):
-            raise HTTPException(422, "没有收到文件")
+            raise HTTPException(422, t("app.no_file"))
         path = staging.new_path()
         with open(path, "wb") as out:                     # bounded chunks onto disk, never the whole file in memory
             while chunk := await f.read(1 << 20):
@@ -1025,15 +1068,15 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def library_import_apply(body: ApplyBody):
         item = staging.get(body.token)
         if item is None:
-            raise HTTPException(404, "导入已过期（30 分钟），请重新选择文件")
+            raise HTTPException(404, t("app.import_expired"))
         if item["result"] is not None:
             return item["result"]                            # a retry of a committed import: the same answer, nothing again
         if body.mode not in ("merge", "restore") or any(v not in ("local", "file") for v in body.choices.values()):
-            raise HTTPException(422, "mode 只能是 merge / restore，选择只能是 local / file")
+            raise HTTPException(422, t("app.import_mode"))
         if body.mode == "restore" and (item["summary"]["scope"] != "full" or not body.confirm_restore):
-            raise HTTPException(422, "只有完整备份能恢复，并且要先确认会替换记录本")
+            raise HTTPException(422, t("app.restore_confirm"))
         if body.expected_generation != lib.status()["generation"]:
-            raise HTTPException(409, "统计已经更新，请重新预览")
+            raise HTTPException(409, t("app.preview_again"))
         safety = None
         if body.mode == "restore":                           # a local safety copy first
             safety = config.data_dir() / "backups" / f"BirdCM-before-restore-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.birdcm"
@@ -1053,7 +1096,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         r = store._db().execute("SELECT r.*, a.relative_path, a.missing, a.mime FROM ll_record r JOIN ll_asset a ON a.hash = r.asset_hash "
                                 "WHERE r.id = ?", (rid,)).fetchone()
         if not r:
-            raise HTTPException(404, "没有这条导入记录")
+            raise HTTPException(404, t("app.no_import"))
         return dict(r)
 
     @api.get("/api/library/import-records/{rid}")
@@ -1071,10 +1114,10 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def library_import_image(rid: str, size: str = "preview"):
         r = import_record(rid)
         if r["missing"] or not r["relative_path"]:
-            raise HTTPException(404, "这张照片的原图不在这台电脑上")
+            raise HTTPException(404, t("app.original_elsewhere"))
         path = lib.imports_dir / Path(r["relative_path"]).name        # only our own stored name, never a client path
         if not path.is_file():
-            raise HTTPException(404, "原图不见了")
+            raise HTTPException(404, t("app.original_gone"))
         if size == "original":
             return FileResponse(path, media_type=r["mime"], headers={"Cache-Control": "private, no-cache"})
         st = path.stat()
@@ -1084,7 +1127,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             try:
                 previews.make({"path": str(path), "size": st.st_size, "mtime_ns": st.st_mtime_ns, "thumb": str(thumb), "preview": str(prev)})
             except Exception as e:  # noqa: BLE001
-                raise HTTPException(404, f"无法生成预览：{e}") from None
+                raise HTTPException(404, t("app.no_preview", e=e)) from None
         return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, no-cache"})
 
     @api.get("/api/library/ebird/plan")
@@ -1110,7 +1153,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         row = next((x for x in ix.by_hash.get(asset_hash, []) if x["source_kind"] == kind and x["source_id"] == id
                     and x["subject_id"] == subject_id and x["box_json"]), None)
         if row is None:
-            raise HTTPException(404, "没有这只鸟")
+            raise HTTPException(404, t("app.no_bird"))
         try:
             if kind == "photo":
                 p = store.photo(int(id))
@@ -1125,7 +1168,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                 st = path.stat()
                 src, size, mtime = str(path), st.st_size, st.st_mtime_ns
         except (OSError, TypeError, ValueError):
-            raise HTTPException(404, "原图不可用") from None
+            raise HTTPException(404, t("app.original_unavailable")) from None
         thumb, prev = image_paths(src, size, mtime)
         out = prev.with_name(prev.stem + "-c" + hashlib.sha1(row["box_json"].encode()).hexdigest()[:10] + ".jpg")
         if not out.exists():
@@ -1134,7 +1177,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
                     previews.make({"path": src, "size": size, "mtime_ns": mtime, "thumb": str(thumb), "preview": str(prev)})
                 library.crop_file(prev, json.loads(row["box_json"]), out)
             except Exception:  # noqa: BLE001 - not mounted, unreadable: no picture, the count stands
-                raise HTTPException(404, "原图不可用") from None
+                raise HTTPException(404, t("app.original_unavailable")) from None
         return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
     @api.post("/api/library/ebird")
@@ -1142,10 +1185,10 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         from fastapi.responses import Response
         from birdcm import ebird
         if body.fallback not in ("refuse", "include", "exclude"):
-            raise HTTPException(422, "fallback 只能是 refuse / include / exclude")
+            raise HTTPException(422, t("app.fallback"))
         st, ix, frm, to = view(body.start, body.end)
         if st["hashing"]:                            # the stand-in generation may count a file seen twice: not for a file to keep
-            raise HTTPException(409, "正在给照片做指纹，做完再导出")
+            raise HTTPException(409, t("app.fingerprinting"))
         try:
             text = ebird.lifelist_csv(ix, frm, to, body.species, body.counts, body.use_estimates, body.fallback)
         except ValueError as e:
@@ -1169,7 +1212,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     @api.post("/api/online/settings")
     def online_set(body: dict):
         if any(not isinstance(body.get(k, False), bool) for k in ("enabled", "disclosed", "places", "updates")):
-            raise HTTPException(422, "enabled / disclosed / places / updates 要是 true / false")
+            raise HTTPException(422, t("app.online_flags"))
         return online.set_settings(body.get("enabled"), body.get("disclosed"), body.get("places"), body.get("updates"))
 
     @api.post("/api/update")
@@ -1196,7 +1239,7 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def species_reference_image(sci: str):
         f = online.cached_file(sci[:200])
         if f is None:
-            raise HTTPException(404, "没有缓存的授权参考图")
+            raise HTTPException(404, t("app.no_cached_image"))
         return FileResponse(f[0], media_type=f[1], headers={"Cache-Control": "private, no-cache"})
 
     if WEB.is_dir():
@@ -1229,14 +1272,14 @@ def prepare(port: int):
         d.mkdir(parents=True, exist_ok=True)
     guarded, _api = create_app(port)
     if not decode.ExifTool.available():
-        print("警告：找不到 exiftool，拍摄信息和对焦点会是空的。`brew install exiftool` 安装。", file=sys.stderr)
+        print(t("app.warn_exiftool"), file=sys.stderr)
     st = models.status()
     if not st["ready"]:
-        print(f"缺模型文件：{', '.join(st['missing'])}。{st['fetch_hint']}", file=sys.stderr)
+        print(t("models.missing", names=", ".join(st["missing"]), hint=st["fetch_hint"]), file=sys.stderr)
     for o in st["optional_missing"]:
-        print(f"{'还没有发布' if not o['released'] else '没有'} {o['name']}：{o['effect']}", file=sys.stderr)
+        print(t("app.warn_unreleased" if not o["released"] else "app.warn_optional", name=o["name"], effect=o["effect"]), file=sys.stderr)
     if not WEB.is_dir():
-        print(f"没有找到界面文件 {WEB}；先在 web/ 里运行 `npm install && npm run build`。", file=sys.stderr)
+        print(t("app.warn_web", web=WEB), file=sys.stderr)
     return guarded
 
 
@@ -1252,6 +1295,6 @@ def serve(port: int = 8765, open_browser: bool = True) -> int:
     url = f"http://127.0.0.1:{port}/"
     if open_browser:
         threading.Timer(1.5, webbrowser.open, (url,)).start()
-    print(f"观羽 BirdCM: {url}", flush=True)
+    print(f"观羽 BirdCM: {url}", flush=True)                # the name in both languages, like the README
     run(guarded, port)
     return 0

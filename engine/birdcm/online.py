@@ -26,6 +26,7 @@ from functools import cache
 from pathlib import Path
 
 from birdcm import config
+from birdcm.i18n import R, t, text
 
 # BIRDCM_SPECIES_MAP, else the source checkout's data/, else the Mac app's Resources/engine/data/ (macos/build.sh copies
 # it there; the bundled interpreter is Resources/engine/python, so sys.prefix's parent is Resources/engine)
@@ -43,10 +44,7 @@ MAX_JSON, MAX_IMAGE = 1 << 20, 2 << 20
 TIMEOUT, DEADLINE = 3.0, 8.0                                  # per socket operation / per item
 BY_SA = "https://creativecommons.org/licenses/by-sa/4.0/"
 
-DISCLOSURE = ("在线资料会把你打开的鸟种学名或来源编号发送给 Wikipedia / Wikimedia，以及你启用的图片来源。只有点击「在线查名称/百科」才发送"
-              "输入的搜索词。不会发送你的照片、拍摄信息或观察记录；除下面的地名外也不发送位置。网站也会接收到网络连接所需的 IP 地址等信息。关闭后仍可离线搜索、"
-              "查看自己的记录和已经缓存的资料；可另行删除网络缓存。"
-              "「用网络显示地名」只把要显示地名的经纬度（取到约 1 公里）发送给 OpenStreetMap Nominatim，换成地名后存在本机；关闭后显示离线的地区名。")
+DISCLOSURE = "online.disclosure"                                # i18n key
 
 
 # ---- the mapping ------------------------------------------------------------------------------------------------------
@@ -79,12 +77,12 @@ def links(m: dict | None, sci: str) -> list[dict]:
         return []
     out = []
     if m["wd_state"] in ACCEPT:
-        for lang, name in (("zh", "维基百科（中文）"), ("en", "Wikipedia (English)")):
+        for lang, name in (("zh", t("online.wiki_zh")), ("en", "Wikipedia (English)")):
             if lang in m["articles"]:
                 out.append({"name": name, "url": m["articles"][lang]["url"]})
         out.append({"name": "Wikidata", "url": f"https://www.wikidata.org/wiki/{m['wd_qid']}"})
     elif m["wd_qid"]:                                  # broader / narrower / split-lump: only the source, said to differ
-        out.append({"name": "Wikidata（来源分类与 AviList 不同）", "url": f"https://www.wikidata.org/wiki/{m['wd_qid']}"})
+        out.append({"name": t("online.wikidata_differs"), "url": f"https://www.wikidata.org/wiki/{m['wd_qid']}"})
     if m["inat_state"] in ACCEPT and m["inat_id"]:
         out.append({"name": "iNaturalist", "url": f"https://www.inaturalist.org/taxa/{m['inat_id']}"})
     if m["gbif_state"] in ACCEPT and m["gbif_legacy_key"]:
@@ -106,7 +104,7 @@ def settings() -> dict:
     except (OSError, ValueError):
         s = {}
     return {"enabled": bool(s.get("enabled", True)), "disclosed": bool(s.get("disclosed", False)),
-            "places": bool(s.get("places", True)), "updates": bool(s.get("updates", False)), "disclosure": DISCLOSURE}
+            "places": bool(s.get("places", True)), "updates": bool(s.get("updates", False)), "disclosure": t(DISCLOSURE)}
 
 
 def set_settings(enabled: bool | None = None, disclosed: bool | None = None, places: bool | None = None,
@@ -282,9 +280,9 @@ def card(kind: str, sci: str, network: bool, force: bool = False) -> dict:
     errors become states."""
     m = mapping(sci)
     if m is None or m["wd_state"] not in ACCEPT:
-        why = ("资料未对应：没有映射数据" if m is None else
-               f"来源分类与 AviList 不同（{m['wd_note'] or m['wd_state']}），不显示在线资料" if m["wd_state"] in ("broader", "narrower", "split-lump")
-               else "资料未对应：映射里没有这个物种的已核验条目")
+        why = (t("online.unmapped") if m is None else
+               t("online.taxonomy_differs", note=m["wd_note"] or m["wd_state"]) if m["wd_state"] in ("broader", "narrower", "split-lump")
+               else t("online.unverified"))
         return {"state": "unmapped", "why": why}
     with _inflight_lock:
         lock = _inflight.setdefault((kind, sci), threading.Lock())
@@ -300,7 +298,7 @@ def card(kind: str, sci: str, network: bool, force: bool = False) -> dict:
                 _write(kind, sci, e, e.pop("blob", None))
                 age = 0
             except NotFound:                           # e.g. the file's rendition is gone: absent for a day
-                e, age = {"state": "none", "fetched": time.time(), "why": "来源上已没有这个文件"}, 0
+                e, age = {"state": "none", "fetched": time.time(), "why": R("online.file_gone")}, 0
                 _write(kind, sci, e)
             except Busy:
                 return _shown(e, age, "busy")
@@ -314,12 +312,12 @@ def card(kind: str, sci: str, network: bool, force: bool = False) -> dict:
 def _shown(e: dict | None, age: float | None, problem: str | None) -> dict:
     if e is None:
         return {"state": problem or "unavailable"}
-    out = {k: v for k, v in e.items() if k not in ("sci", "meta")}
+    out = {k: text(v) if k in ("why", "credit", "changes") else v for k, v in e.items() if k not in ("sci", "meta")}
     out["cached_at"] = time.strftime("%Y-%m-%d", time.localtime(e["fetched"]))
     if e["state"] == "ok" and age is not None and age > FRESH:
         out["state"] = "stale"
     if e["state"] == "ok" and "text" in e and age is not None and age > TEXT_MAX:
-        return {"state": "stale", "why": "缓存的简介已超过 180 天，只保留来源链接", "source_url": e.get("source_url"), "cached_at": out["cached_at"]}
+        return {"state": "stale", "why": t("online.text_old"), "source_url": e.get("source_url"), "cached_at": out["cached_at"]}
     if problem:
         out["problem"] = problem
         if e["state"] == "ok":
@@ -331,7 +329,7 @@ def _shown(e: dict | None, age: float | None, problem: str | None) -> dict:
 def _summary(sci: str, m: dict) -> dict:
     """zh article first (its zh-Hans variant), then en; no translation. A disambiguation page or one whose Wikidata
     item is not the mapped QID is not this species' summary."""
-    why = "维基百科没有这个物种的中文或英文条目"
+    why = R("online.no_article")
     for lang in ("zh", "en"):
         a = m["articles"].get(lang)
         if not a:
@@ -340,7 +338,7 @@ def _summary(sci: str, m: dict) -> dict:
         try:
             body, _ = NET.get(url, MAX_JSON, headers={"Accept-Language": "zh-cn"} if lang == "zh" else None)
         except NotFound:
-            why = f"{lang} 条目已不存在"
+            why = R("online.article_gone", lang=lang)
             continue
         try:
             s = json.loads(body)
@@ -348,13 +346,13 @@ def _summary(sci: str, m: dict) -> dict:
         except (ValueError, KeyError, TypeError, AttributeError):
             raise Offline("malformed summary") from None
         if s.get("type") == "disambiguation" or s.get("wikibase_item") != m["wd_qid"] or not text:
-            why = f"{lang} 条目与这个物种不对应（消歧义或 Wikidata 条目不符）"
+            why = R("online.article_wrong", lang=lang)
             continue
         page = (s.get("content_urls") or {}).get("desktop") or {}
         return {"state": "ok", "fetched": time.time(), "lang": lang, "title": _plain(s.get("displaytitle") or "") or s.get("title") or a["title"], "text": text,
                 "source_url": page.get("page") or a["url"], "history_url": page.get("revisions"),
                 "revision": s.get("revision"), "licence": "CC BY-SA 4.0", "licence_url": BY_SA,
-                "credit": "维基百科贡献者", "changes": "原文摘录" + ("；简体由维基百科自动转换" if lang == "zh" else "")}
+                "credit": R("online.credit_wiki"), "changes": R("online.changes_extract_zh" if lang == "zh" else "online.changes_extract")}
     return {"state": "none", "fetched": time.time(), "why": why}
 
 
@@ -386,20 +384,20 @@ def licence(meta: dict) -> tuple[bool, dict | str]:
     restricted, being deleted, or (unless CC0) without a reliable author do not. meta = Commons extmetadata (values, not {value: ...})."""
     code = (meta.get("License") or "").strip().lower()
     if str(meta.get("NonFree", "")).lower() in ("true", "1"):
-        return False, "非自由文件"
+        return False, R("online.non_free")
     if (meta.get("DeletionReason") or "").strip():
-        return False, "文件正在删除讨论中"
+        return False, R("online.deletion")
     if _plain(meta.get("Restrictions") or ""):
-        return False, "文件带额外限制"
+        return False, R("online.restricted")
     author = _author(meta)
     url = (meta.get("LicenseUrl") or "").strip()
     if code == "cc0":                 # no attribution required: without a reliable author the page points to the file page
         return True, {"licence": "CC0 1.0", "licence_url": url or "https://creativecommons.org/publicdomain/zero/1.0/", "nc": False, "author": author}
     if not author:
-        return False, "缺可靠的作者署名"
+        return False, R("online.no_author")
     m = _CC.match(code)
     if not m or "-nd" in code:
-        return False, f"许可不在白名单：{meta.get('LicenseShortName') or code or '未知'}"
+        return False, R("online.licence", name=meta.get("LicenseShortName") or code or R("online.unknown"))
     name = "CC BY" + ("-NC" if m["nc"] else "") + ("-SA" if m["sa"] else "") + f" {m['v']}"
     path = "by" + ("-nc" if m["nc"] else "") + ("-sa" if m["sa"] else "")
     return True, {"licence": name, "licence_url": url or f"https://creativecommons.org/licenses/{path}/{m['v']}/", "nc": bool(m["nc"]),
@@ -410,7 +408,7 @@ def _image(sci: str, m: dict) -> dict:
     """The Commons file the build chose (Wikidata P18), its metadata, the licence gate, then the 640 px rendition."""
     f = m.get("commons_file")
     if not f:
-        return {"state": "none", "fetched": time.time(), "why": "Wikidata 没有这个物种的图片"}
+        return {"state": "none", "fetched": time.time(), "why": R("online.no_wikidata_image")}
     q = urllib.parse.urlencode({"action": "query", "prop": "imageinfo", "titles": f"File:{f}", "format": "json", "formatversion": 2,
                                 "iiprop": "url|extmetadata|sha1|mime|size", "iiurlwidth": 640,
                                 "iiextmetadatafilter": "Artist|Credit|Attribution|LicenseShortName|License|LicenseUrl|UsageTerms|"
@@ -420,18 +418,18 @@ def _image(sci: str, m: dict) -> dict:
         page = json.loads(body)["query"]["pages"][0]
         info = page["imageinfo"][0]
     except (ValueError, KeyError, IndexError, TypeError):
-        return {"state": "none", "fetched": time.time(), "why": "Commons 上找不到这个文件"}
+        return {"state": "none", "fetched": time.time(), "why": R("online.no_commons_file")}
     meta = {k: (v or {}).get("value", "") for k, v in (info.get("extmetadata") or {}).items()}
     ok, lic = licence(meta)
     if not ok:
-        return {"state": "none", "fetched": time.time(), "why": f"暂无可用的授权参考图（{lic}）", "source_url": info.get("descriptionurl")}
+        return {"state": "none", "fetched": time.time(), "why": R("online.no_licensed_image", why=lic), "source_url": info.get("descriptionurl")}
     thumb = info.get("thumburl") or ""
     if not info.get("mime", "").startswith("image/") or urllib.parse.urlsplit(thumb).hostname not in HOSTS:
-        return {"state": "none", "fetched": time.time(), "why": "暂无可用的授权参考图（不是图片）"}
+        return {"state": "none", "fetched": time.time(), "why": R("online.no_licensed_image", why=R("online.not_image"))}
     blob, h = NET.get(thumb, MAX_IMAGE, accept="image/*")
     if not h.get("content-type", "").startswith("image/"):
         raise Offline("not an image")
     return {"state": "ok", "fetched": time.time(), "file": f, "source_url": info.get("descriptionurl"), **lic,
             "credit": _plain(meta.get("Credit") or ""), "attribution": _plain(meta.get("Attribution") or ""),
             "width": info.get("thumbwidth"), "height": info.get("thumbheight"), "mime": h.get("content-type"),
-            "changes": "缩放为 640 px 宽", "meta": meta, "blob": blob}
+            "changes": R("online.changes_scaled"), "meta": meta, "blob": blob}
