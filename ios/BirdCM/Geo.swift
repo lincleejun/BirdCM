@@ -78,7 +78,7 @@ extension Geo {
     /// 12 monthly values per catalogue species at a place: the point itself, or for a region the median over its grid
     /// (like `typical`). nil for a species the model does not have (never 0). One 48-week batch per point.
     /// Points of a region forwarded at once by `months(at:)`. Fixed, not the core count: an iPhone has 6 cores
-    /// (2 performance), and each concurrent 48-row forward holds ~17 MB of activations.
+    /// (2 performance), and each concurrent 48-row forward holds its live activations and the full 14,082-column output.
     static let monthsWorkers = 4
     func months(at p: Place) throws -> [[Double]?] {
         let pts = p.source == "region" ? cover(p) : [Self.snap([p.lat, p.lon])]
@@ -163,7 +163,7 @@ extension Geo {
         if cache, let data = try? Data(contentsOf: file), data.count == grid.count * 12 { return [UInt8](data) }
         let rows = grid.flatMap { c in (1...12).map { [Float(c[0]), Float(c[1]), Float(Self.rangeWeek($0))] } }
         var out = [UInt8](repeating: 0, count: rows.count)
-        // predict keeps every activation until it returns (~120 × 384 floats a row): small chunks bound memory per core.
+        // predict frees each activation after its last use, so a chunk holds only its live ones: chunks bound memory per core.
         let chunk = 256, chunks = (rows.count + chunk - 1) / chunk
         let lock = NSLock(); var done = 0; var failure: Error?
         out.withUnsafeMutableBufferPointer { buffer in

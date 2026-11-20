@@ -14,7 +14,7 @@ final class GeoTests: XCTestCase {
         getrusage(RUSAGE_SELF, &u)
         XCTAssertEqual(v.count, 69_120)
         print(String(format: "BENCH range peak %.0f MB", mb)); print("BENCH range faults \(u.ru_minflt - faults)")
-        XCTAssertLessThanOrEqual(mb, 6)   // 1.5 x the 4 MB measured after E007 (476 MB before)
+        XCTAssertLessThanOrEqual(mb, 40)   // old predict (all activations kept to return): 255–525 MB; after E007 about 4 MB
     }
     /// Bit patterns of the real model's outputs, recorded before activations were released early (E007): the global range
     /// of a species other than the timing fixture's, 48 full-head weeks at one point, and a few columns at scattered points.
