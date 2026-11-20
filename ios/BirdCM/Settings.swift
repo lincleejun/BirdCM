@@ -40,6 +40,12 @@ struct SettingsView: View {
                 Text("开启时只把坐标发给 Apple 换取英文地名（约 1 公里精度，存在本机）；关闭后显示离线的国家 · 州/省。")
             }
             Section {
+                // The system's per-app language (zh-Hans / en), not an in-app switch: iOS restarts the app in the new language.
+                Button { if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) } } label: {
+                    LabeledContent("语言", value: Locale.current.localizedString(forIdentifier: Bundle.main.preferredLocalizations.first ?? "zh-Hans") ?? "")
+                }.accessibilityIdentifier("settings.language")
+            } footer: { Text("在系统设置里为观羽选择简体中文或 English。") }
+            Section {
                 Button("关于与数据来源") { about = true }.accessibilityIdentifier("home.about")
                 Button("诊断") { diagnostics = true }.accessibilityIdentifier("home.diagnostics")
             } header: { Text("关于") } footer: { Text("系统选片无需相册访问授权；仅读取你选择的照片。") }

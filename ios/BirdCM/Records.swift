@@ -289,7 +289,7 @@ struct SpeciesPage: View {
 struct SpeciesLocal: View {
     @Environment(AppModel.self) var model
     let key: String
-    enum Outcome: Equatable { case loading, unknown, months([Double], word: String, gbif: Bool) }
+    enum Outcome { case loading, unknown, months([Double], word: String, gbif: Bool, rarity: RarityValue?) }
     @State private var outcome = Outcome.loading
     @State private var choosePlace = false
     let month = Calendar(identifier: .gregorian).component(.month, from: Date())
@@ -301,8 +301,11 @@ struct SpeciesLocal: View {
                 switch outcome {
                 case .loading: ProgressView().frame(maxWidth: .infinity, minHeight: 44)
                 case .unknown: Text("地点模型没有这个物种，无法估计在 \(name) 的可能性。").font(.subheadline).foregroundStyle(Palette.secondary)
-                case let .months(values, word, gbif):
-                    Text("在 \(name) 本月：\(loc(word))").font(.subheadline.weight(.semibold)).accessibilityIdentifier("species.localWord")
+                case let .months(values, word, gbif, rarity):
+                    HStack(spacing: 12) {
+                        Text("在 \(name) 本月：\(loc(word))").font(.subheadline.weight(.semibold)).accessibilityIdentifier("species.localWord")
+                        if let rarity { ValueTag(value: rarity, small: true) }
+                    }
                     Text(gbif ? "按 GBIF 观测记录的本地频次（与结果页同一套分级）。" : "这里本月没有观测数据，按地点模型估计。").font(.caption).foregroundStyle(Palette.secondary)
                     Chart(0..<12, id: \.self) { i in
                         BarMark(x: .value("月份", "\(i + 1)"), y: .value("可能性", values[i]))
@@ -329,9 +332,9 @@ struct SpeciesLocal: View {
             outcome = await Task.detached { () -> Outcome in
                 let year = Likelihood.compute(place: place, month: m, catalogue: catalogue).months
                 guard let j = catalogue.all.firstIndex(where: { $0.sci == key }), year.indices.contains(j), let values = year[j] else { return .unknown }
-                let gbif = catalogue.rarity?.lookup(key, place: place, month: m).label
-                if let gbif, Likelihood.tierNames.contains(gbif) { return .months(values, word: gbif, gbif: true) }
-                return .months(values, word: Geo.modelTier(values[m - 1]), gbif: false)
+                let rarity = catalogue.rarity?.lookup(key, place: place, month: m)
+                if let gbif = rarity?.label, Likelihood.tierNames.contains(gbif) { return .months(values, word: gbif, gbif: true, rarity: rarity) }
+                return .months(values, word: Geo.modelTier(values[m - 1]), gbif: false, rarity: rarity)
             }.value
         }
     }

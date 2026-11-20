@@ -39,7 +39,7 @@ enum Palette {
     static func bg(_ s:ThemeContrast.Semantic) -> Color {token(s.bg)}
 }
 /// The one species name block (docs/design/polish/polish.md; web: names.tsx SpeciesName): line 1 the name in the UI
-/// language (Chinese; English when there is none), line 2 in secondary gray "other common name · *Latin*", 2 pt apart,
+/// language (Chinese; English when there is none or the UI is English), line 2 in secondary gray "other common name · *Latin*", 2 pt apart,
 /// never a third line for the Latin. Hero and row keep line 2 on one line: the common name gives way first and goes,
 /// with its dot, when not even two of its characters fit; the Latin truncates only when it alone is too wide. A card
 /// (owner 2026-11-18) and accessibility sizes let line 2 wrap to two lines. Text never shrinks; VoiceOver reads all names.
@@ -68,7 +68,8 @@ struct SpeciesName: View {
     var label:String {[title,alt,sci].filter{!$0.isEmpty}.joined(separator:String(localized:"，"))}
     var body: some View {
         VStack(alignment:.leading,spacing:2) {
-            Text(title).font(.system(size:primary,weight:.semibold)).foregroundStyle(uncertain ? Palette.warning:Palette.ink).lineLimit(1)
+            // A long English name (no Chinese title in an English UI) takes a second line instead of truncating.
+            Text(title).font(.system(size:primary,weight:.semibold)).foregroundStyle(uncertain ? Palette.warning:Palette.ink).lineLimit(2).fixedSize(horizontal:false,vertical:true)
             if !alt.isEmpty || !sci.isEmpty {second.font(.system(size:secondary)).foregroundStyle(Palette.secondary)}
         }
         .accessibilityElement(children:.ignore).accessibilityLabel(label)

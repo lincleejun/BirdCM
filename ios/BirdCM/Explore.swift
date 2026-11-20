@@ -174,17 +174,20 @@ struct ExploreView: View {
         let l = local ? byKey[sp.sci] : nil
         return NavigationLink(value: AppModel.Route.species(sp.sci)) {
             HStack(spacing: 12) {
-                SpeciesThumb(key: sp.sci, size: 64)
+                // 已见 as a badge on the thumbnail (owner 2026-11-20): it takes no width from the facts line, so a seen row
+                // keeps the same layout as the others in either language.
+                let seen = model.ledger.allTime[sp.sci] != nil, code = iucn[sp.sci]
+                SpeciesThumb(key: sp.sci, size: 64).overlay(alignment: .bottomTrailing) {
+                    if seen { Image(systemName: "checkmark.circle.fill").font(.body).foregroundStyle(Palette.onAccent, Palette.accent).padding(3).accessibilityLabel("已见").accessibilityIdentifier("explore.seen") }
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     SpeciesName(title: sp.name, alt: sp.alt, sci: sp.sci, size: .row)
                     // Facts under the name so the name keeps the row's width. Text carries the local word; the colored
                     // capsule (罕见 / 少见, as on the result page) only reinforces it.
-                    let seen = model.ledger.allTime[sp.sci] != nil, code = iucn[sp.sci]
-                    if l != nil || seen || code != nil {
+                    if l != nil || code != nil {
                         let tags = Group {
                             if let l { localTag(l) }
                             if let code { IUCNChip(code: code, small: true) }
-                            if seen { Label("已见", systemImage: "checkmark.circle").font(.caption).foregroundStyle(Palette.secondary).fixedSize() }
                         }
                         ViewThatFits(in: .horizontal) {
                             HStack(spacing: 8) { tags; if let m = l?.months { MonthStrip(values: m, current: month) } }

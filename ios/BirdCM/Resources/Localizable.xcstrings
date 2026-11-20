@@ -86,7 +86,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": " reflects habitat suitability and how often a bird is reported, not the chance of seeing it on a walk; birds with only scattered records or a very low model value are listed last under “Rare / vagrant”. The small bars are the model estimate for each of the 12 months here (relative to the bird’s most likely month); the underline is the selected month. “Not seen” = not in any of your records yet."
+            "value": " The order reflects habitat suitability and how often a bird is reported, not the chance of seeing it on a walk; birds with only scattered records or a very low model value are listed last under “Rare / vagrant”. The small bars are the model estimate for each of the 12 months here (relative to the bird’s most likely month); the underline is the selected month. “Not seen” = not in any of your records yet."
           }
         },
         "zh-Hans": {
@@ -134,7 +134,29 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ · %2$lld species · %3$lld observations"
+            "value": "%1$@ · %2$lld species · %#@arg3@"
+          },
+          "substitutions": {
+            "arg3": {
+              "argNum": 3,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observation"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observations"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -342,7 +364,29 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@, %2$@, %3$lld species, %4$lld observations"
+            "value": "%1$@, %2$@, %3$lld species, %#@arg4@"
+          },
+          "substitutions": {
+            "arg4": {
+              "argNum": 4,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observation"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observations"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -390,7 +434,49 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld birds to confirm, from %2$lld photos; %3$lld of them not identified yet. They do not count towards species or observations."
+            "value": "%#@arg1@, from %#@arg2@; %3$lld of them not identified yet. They do not count towards species or observations."
+          },
+          "substitutions": {
+            "arg1": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg bird to confirm"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg birds to confirm"
+                    }
+                  }
+                }
+              }
+            },
+            "arg2": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -406,7 +492,29 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld candidates · best of the rest %2$@"
+            "value": "%#@arg1@ · best of the rest %2$@"
+          },
+          "substitutions": {
+            "arg1": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg candidate"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg candidates"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -420,9 +528,21 @@
     "%lld 个拍摄位置": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld photo locations"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photo location"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photo locations"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -436,9 +556,21 @@
     "%lld 只": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld birds"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld bird"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld birds"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -452,9 +584,21 @@
     "%lld 张": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld photos"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photo"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld photos"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -502,7 +646,29 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Month %1$lld: %2$lld times"
+            "value": "Month %1$lld: %#@arg2@"
+          },
+          "substitutions": {
+            "arg2": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg time"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg times"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -532,9 +698,21 @@
     "%lld 条观察记录的日期在今天之后，请检查相机时间": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld observations are dated after today; check the camera clock"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld observation is dated after today; check the camera clock"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld observations are dated after today; check the camera clock"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -548,9 +726,21 @@
     "%lld 条观察记录的照片位置": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Photo locations of %lld observations"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Photo locations of %lld observation"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Photo locations of %lld observations"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -564,9 +754,21 @@
     "%lld 次": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld times"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld time"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld times"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -582,7 +784,49 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld observations · %2$lld photos · first %3$@"
+            "value": "%#@arg1@ · %#@arg2@ · first %3$@"
+          },
+          "substitutions": {
+            "arg1": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observation"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observations"
+                    }
+                  }
+                }
+              }
+            },
+            "arg2": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -598,7 +842,49 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld observations · estimate %2$lld · %3$lld photos · latest %4$@"
+            "value": "%#@arg1@ · estimate %2$lld · %#@arg3@ · latest %4$@"
+          },
+          "substitutions": {
+            "arg1": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observation"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observations"
+                    }
+                  }
+                }
+              }
+            },
+            "arg3": {
+              "argNum": 3,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -630,7 +916,29 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld species · %2$lld observations"
+            "value": "%1$lld species · %#@arg2@"
+          },
+          "substitutions": {
+            "arg2": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observation"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observations"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -644,9 +952,21 @@
     "%lld 种在 eBird 名录里没有对应英文名，只写学名；上传时可能需要在 Fix Species 里手动对应。": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld species have no English name in the eBird taxonomy and are written with the scientific name only; you may need to match them by hand under Fix Species when uploading."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld species has no English name in the eBird taxonomy and is written with the scientific name only; you may need to match them by hand under Fix Species when uploading."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld species have no English name in the eBird taxonomy and are written with the scientific name only; you may need to match them by hand under Fix Species when uploading."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -1192,7 +1512,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Not a bird · exclude"
+            "value": "Not a bird"
           }
         },
         "zh-Hans": {
@@ -1352,7 +1672,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose from Photos"
+            "value": "Photos"
           }
         },
         "zh-Hans": {
@@ -1416,7 +1736,29 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Estimate %1$lld%2$@ · %3$lld photos"
+            "value": "Estimate %1$lld%2$@ · %#@arg3@"
+          },
+          "substitutions": {
+            "arg3": {
+              "argNum": 3,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -2138,7 +2480,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose another"
+            "value": "Another"
           }
         },
         "zh-Hans": {
@@ -2186,7 +2528,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Source %@"
+            "value": "Credit: %@"
           }
         },
         "zh-Hans": {
@@ -2678,6 +3020,7 @@
       }
     },
     "原文摘录": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2694,6 +3037,7 @@
       }
     },
     "原文摘录；简体由维基百科自动转换": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2712,9 +3056,21 @@
     "去确认 %lld 个主体": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Confirm %lld birds"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Confirm %lld bird"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Confirm %lld birds"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -2730,7 +3086,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remove background"
+            "value": "Cutout"
           }
         },
         "zh-Hans": {
@@ -2824,9 +3180,21 @@
     "另有 %lld 个待确认主体（属级、不确定、未识别）不导出。": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld more birds to confirm (genus only, uncertain, not identified) are not exported."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more bird to confirm (genus only, uncertain, not identified) is not exported."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more birds to confirm (genus only, uncertain, not identified) are not exported."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -2840,9 +3208,21 @@
     "另有 %lld 个旧识别版本：同一照片，只统计一次。": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld more old identification versions: the same photo, counted once."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more old identification version: the same photo, counted once."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more old identification versions: the same photo, counted once."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -2872,9 +3252,21 @@
     "另有 %lld 张照片没找到鸟，保留在“照片”里，不算待确认。": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld more photos with no bird found stay in Photos and are not counted as to confirm."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more photo with no bird found stays in Photos and is not counted as to confirm."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more photos with no bird found stay in Photos and are not counted as to confirm."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -3394,6 +3786,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "在照片上画框，或使用整张照片重试。这张照片仍保留在记录里，不计入鸟种。"
+          }
+        }
+      }
+    },
+    "在系统设置里为观羽选择简体中文或 English。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Simplified Chinese or English for GuanYu in the system Settings."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在系统设置里为观羽选择简体中文或 English。"
           }
         }
       }
@@ -4490,9 +4898,21 @@
     "已合并，新增 %lld 条记录。": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Merged; %lld records added."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Merged; %lld record added."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Merged; %lld records added."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -4586,9 +5006,21 @@
     "已用备份替换，共 %lld 条记录。替换前的本机记录已另存为安全备份。": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Replaced with the backup: %lld records. The records from before the replacement were saved as a safety backup."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Replaced with the backup: %lld record. The records from before the replacement were saved as a safety backup."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Replaced with the backup: %lld records. The records from before the replacement were saved as a safety backup."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -4990,7 +5422,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Restore this bird"
+            "value": "Restore"
           }
         },
         "zh-Hans": {
@@ -5164,9 +5596,21 @@
     "找到 %lld 只鸟": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Found %lld birds"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Found %lld bird"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Found %lld birds"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -5310,7 +5754,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Take photo"
+            "value": "Camera"
           }
         },
         "zh-Hans": {
@@ -5374,7 +5818,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Estimated from country-wide data."
+            "value": " Estimated from country-wide data."
           }
         },
         "zh-Hans": {
@@ -5438,7 +5882,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sorted by the place model and GBIF observation records. %@"
+            "value": "Sorted by the place model and GBIF observation records.%@"
           }
         },
         "zh-Hans": {
@@ -5934,7 +6378,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Count %lld (changed)"
+            "value": "Count %lld (set)"
           }
         },
         "zh-Hans": {
@@ -6560,7 +7004,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Correct species"
+            "value": "Correct"
           }
         },
         "zh-Hans": {
@@ -6656,7 +7100,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recently seen"
+            "value": "Last seen"
           }
         },
         "zh-Hans": {
@@ -6688,7 +7132,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recently identified"
+            "value": "Recent"
           }
         },
         "zh-Hans": {
@@ -6926,9 +7370,21 @@
     "本地罕见 / 少见：%lld 条观察记录": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Locally rare / scarce: %lld observations"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Locally rare / scarce: %lld observation"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Locally rare / scarce: %lld observations"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -7006,9 +7462,21 @@
     "本机 %lld 张照片的记录会被备份内容取代。替换前自动在本机保存一份安全备份。": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The records of %lld photos on this device will be replaced by the backup. A safety backup is saved on this device first."
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The records of %lld photo on this device will be replaced by the backup. A safety backup is saved on this device first."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "The records of %lld photos on this device will be replaced by the backup. A safety backup is saved on this device first."
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -7230,9 +7698,21 @@
     "查看全部 %lld 张": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "View all %lld photos"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "View %lld photo"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "View all %lld photos"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -8176,7 +8656,49 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clear %1$lld photos and %2$lld observations on this device?"
+            "value": "Clear %#@arg1@ and %#@arg2@ on this device?"
+          },
+          "substitutions": {
+            "arg1": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            },
+            "arg2": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observation"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg observations"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -8289,7 +8811,49 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld photos · %2$lld to confirm (%3$lld photos) · %4$lld with no bird"
+            "value": "%#@arg1@ · %2$lld to confirm (%#@arg3@) · %4$lld with no bird"
+          },
+          "substitutions": {
+            "arg1": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            },
+            "arg3": {
+              "argNum": 3,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -8497,7 +9061,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Species page: local likelihood, range and references"
+            "value": "Species page: range and more"
           }
         },
         "zh-Hans": {
@@ -8754,7 +9318,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Search %lld species offline (Chinese, English, scientific name, pinyin or initials). No built-in reference images or descriptions."
+            "value": "Search %lld species offline by English or scientific name. No built-in reference images or descriptions."
           }
         },
         "zh-Hans": {
@@ -8898,7 +9462,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "summary"
+            "value": "Summary"
           }
         },
         "zh-Hans": {
@@ -9007,6 +9571,7 @@
       }
     },
     "维基百科贡献者": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9071,6 +9636,7 @@
       }
     },
     "缩放为 640 px 宽": {
+      "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9137,9 +9703,21 @@
     "缺拍摄日期的 %lld 份清单": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld checklists without a shooting date"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld checklist without a shooting date"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld checklists without a shooting date"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -9695,6 +10273,22 @@
         }
       }
     },
+    "语言": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言"
+          }
+        }
+      }
+    },
     "请选择": {
       "localizations": {
         "en": {
@@ -9890,9 +10484,21 @@
     "还有 %lld 只": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld more birds"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more bird"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more birds"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {

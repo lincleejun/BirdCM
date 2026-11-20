@@ -20,6 +20,12 @@ final class LogicTests: XCTestCase {
         XCTAssertEqual(BirdValue.tanhScore(0), 1, accuracy: 1e-12); XCTAssertEqual(BirdValue.tanhScore(1), 10, accuracy: 1e-12)
         XCTAssertEqual(BirdValue.cellID(lat: 37.32, lon: -122.03), 182995)   // value.cell_id(37.32, -122.03)
     }
+    /// The owner's Tropical Kingbird at Cupertino in November (2026-11-20 report): the bundled table values it.
+    func testBirdValueCupertinoKingbird() throws {
+        let v = try Rarity(path: Models.rarityURL).lookup("Tyrannus melancholicus", place: Place(lat: 37.32, lon: -122.03, label: "Cupertino", source: "device"), month: 11)
+        XCTAssertEqual(v.region, "US-CA")
+        let value = try XCTUnwrap(v.value); XCTAssertTrue((1...10).contains(value)); XCTAssertNotNil(v.valueStatus)
+    }
     func testFullDistributionPosteriorAndGenus() {
         let visual=[0.6,0.3,0.1], geo=[0.0,1.0,0.5]
         let p=Confirm.posterior(visual,geo)

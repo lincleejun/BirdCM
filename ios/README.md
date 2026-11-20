@@ -119,14 +119,14 @@ python3 ios/tools/test_model_bundle.py
 
 ## 本地化（简体中文 / 英文）
 
-界面文案在 `BirdCM/Resources/Localizable.xcstrings`（源语言 zh-Hans，键就是中文原文，另有 en），App 名和权限说明在 `InfoPlist.xcstrings`；系统语言为英文时用 en，其余照旧中文（鸟的中文名不翻译）。新文案照常写 `Text("中文")` / `String(localized: "中文")`（存储或比较用的中文内部键，如稀有度档位，显示时过 `loc()`），构建后把新键同步进 catalog 再补 en：
+界面文案在 `BirdCM/Resources/Localizable.xcstrings`（源语言 zh-Hans，键就是中文原文，另有 en），App 名和权限说明在 `InfoPlist.xcstrings`；系统语言为英文（或在系统设置里给观羽选了 English，设置页“语言”一行直达）时用 en，其余照旧中文；英文界面不出现任何中文，鸟名改以英文名为主标题、学名为副标题（`Catalogue.english`）。新文案照常写 `Text("中文")` / `String(localized: "中文")`（存储或比较用的中文内部键，如稀有度档位，显示时过 `loc()`），构建后把新键同步进 catalog 再补 en：
 
 ```sh
 xcrun xcstringstool sync ios/BirdCM/Resources/Localizable.xcstrings $(find ios/DerivedData -path '*/BirdCM.build/*' -name '*.stringsdata' -not -path '*Tests*' | sed 's/^/--stringsdata /')
 python3 ios/tools/check_l10n.py     # 没走本地化的中文字面量；故意保留的写进它的 ALLOWED 并说明原因
 ```
 
-`LocalizationTests` 检查两个 catalog 每个键都有 zh-Hans 和 en、en 不含中文、格式符一致。scheme 的测试语言固定为 zh-Hans（`project.yml`），所以测试和截图仍是中文；看英文可用 `xcrun simctl launch <设备> cc.outman.birdcm -AppleLanguages "(en)" -previewState normal -previewImage …`。
+`LocalizationTests` 检查两个 catalog 每个键都有 zh-Hans 和 en、en 不含中文、格式符一致。scheme 的测试语言固定为 zh-Hans（`project.yml`），所以测试和截图仍是中文；英文截图：把 `.xctestrun` 里的 `(zh-Hans)`/`zh-Hans` 换成 `(en)`/`en` 另存一份，用它跑 `-only-testing:BirdCMTests/AppearanceSnapshots/testEnglishScreens`（加 `TEST_RUNNER_SCREENSHOT_DIR=…`；中文运行时它跳过）。也可用 `xcrun simctl launch <设备> cc.outman.birdcm -AppleLanguages "(en)" -previewState normal -previewImage …`。
 
 ## 安装到所有者 iPhone 15
 

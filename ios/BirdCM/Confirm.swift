@@ -22,9 +22,9 @@ enum Confirm {
             if wide[top[0]].isNaN {
                 priorUnknown = true
             } else if wide[top[0]] < eps {
-                reason = String(localized: "图像最像 \(c[0].chinese.isEmpty ? c[0].english : c[0].chinese)，但此地此季几乎没有它。")
+                reason = String(localized: "图像最像 \(c[0].chinese.isEmpty || Catalogue.english ? c[0].english : c[0].chinese)，但此地此季几乎没有它。")
                 if let j = top.dropFirst().first(where: { rows[$0][3] == rows[top[0]][3] && wide[$0] >= tau }) {
-                    reason! += String(localized: "当地同属候选：\(rows[j][2].isEmpty ? rows[j][1] : rows[j][2])。")
+                    reason! += String(localized: "当地同属候选：\(rows[j][2].isEmpty || Catalogue.english ? rows[j][1] : rows[j][2])。")
                 }
                 if level == "species" { level = genus.value >= genusP ? "genus" : "uncertain" }
             } else if level == "species" && typical[top[0]] < tau { rare = true }

@@ -140,6 +140,34 @@ final class AppearanceSnapshots: SnapshotCase {
                            sheet(m, CorrectionSheet(batch: two).environment(\.locale, locale)).environment(\.locale, locale))
         }
     }
+    /// The English UI (owner 2026-11-20: no Chinese, no wrapped buttons, even 探索 rows, 价值 shown). Only in an English
+    /// test run (`test-without-building -testLanguage en`); the scheme's zh-Hans run skips it.
+    @MainActor func testEnglishScreens() async throws {
+        try XCTSkipUnless(Bundle.main.preferredLocalizations.first == "en", "run with -testLanguage en")
+        let m = model("normal"), light = SnapshotCase.light, t = "testEnglishScreens"
+        await until { !m.items.isEmpty }
+        let seen = ["Tyrannus melancholicus", "Nycticorax nycticorax", "Poecile rufescens", "Melospiza melodia", "Setophaga coronata", "Zonotrichia leucophrys", "Tringa melanoleuca"]
+        try m.library?.seedSynthetic(12, species: seen, photo: fixtures.appendingPathComponent("photo-0.jpg")); m.refresh()
+        await until { m.items.count > 10 }
+        try await shot("result", light, test: t, RootView().environment(m))
+        try await shot("result-facts", light, test: t, RootView().environment(m).frame(height: 1400).offset(y: -330))
+        m.showing = false
+        try await shot("identify", light, test: t, RootView().environment(m))
+        m.tab = .records; m.recordsMode = "species"
+        try await shot("records-species", light, test: t, RootView().environment(m))
+        m.homePlace = Place(lat: 37.32, lon: -122.03, label: "Cupertino", source: "device")
+        m.tab = .explore
+        try await shot("explore-local-rows", light, test: t, wait: 20, NavigationStack { ExploreView() }.environment(m).tint(Palette.accent).frame(height: 2400).offset(y: -560))
+        try await shot("explore-footer", light, test: t, wait: 20, NavigationStack { ExploreView() }.environment(m).tint(Palette.accent).frame(height: 2400).offset(y: -100))
+        UserDefaults.standard.set("ma", forKey: "exploreQuery")
+        try await shot("explore-search", light, test: t, wait: 20, RootView().environment(m))
+        UserDefaults.standard.removeObject(forKey: "exploreQuery")
+        m.paths[.explore] = [.species("Tyrannus melancholicus")]
+        try await shot("species-page", light, test: t, wait: 20, RootView().environment(m))
+        try await shot("species-local", light, test: t, wait: 20, RootView().environment(m).frame(height: 2400).offset(y: -900))
+        m.paths[.explore] = []; m.tab = .settings
+        try await shot("settings", light, test: t, RootView().environment(m))
+    }
     /// Species page (当地可能性 + 分布图) for an unseen species, so the new sections are on screen; 探索 rows at the same
     /// place; the result page's link to the species page. Light and dark. (Its own method: the matrix above takes ~80 s.)
     @MainActor func testSpeciesDetail() async throws {
