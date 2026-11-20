@@ -45,6 +45,50 @@ final class GeoTests: XCTestCase {
         XCTAssertEqual(Likely(sci:"x",median:0.3,share:nil,tier:nil,months:nil,rare:false).label,"不常见")
         XCTAssertEqual(Likely(sci:"x",median:0.3,share:nil,tier:1,months:nil,rare:false).label,"罕见")   // GBIF wins
     }
+    /// `Geo.months(at:)` as first written (per element: max over ids, monthly mean, sorted median): the reference it must match.
+    static func referenceMonths(_ geo: Geo, at p: Place) throws -> [[Double]?] {
+        let pts = p.source == "region" ? geo.cover(p) : [Geo.snap([p.lat, p.lon])]
+        var perPoint = [[[Double]?]]()
+        for pt in pts {
+            let q = try geo.network.predict((1...48).map { [Float(pt[0]), Float(pt[1]), Float($0)] })
+            perPoint.append(geo.indices.map { ids in ids.isEmpty ? nil : Geo.monthly(q.map { row in Double(ids.map { row[$0] }.max()!) }) })
+        }
+        return geo.indices.indices.map { j in geo.indices[j].isEmpty ? nil : (0..<12).map { m in Geo.median(perPoint.map { $0[j]![m] }) } }
+    }
+    /// Bit for bit (NaN included) and nil in the same places as the reference, on places other than the timing fixtures.
+    func testMonthsMatchReference() throws {
+        func bits(_ v: [[Double]?]) -> [[UInt64]?] { v.map { $0?.map(\.bitPattern) } }
+        let geo = try XCTUnwrap(Geo.shared(Catalogue.shared))
+        for p in [Place(lat:39.0,lon:-75.5,label:"美国 · 特拉华州",source:"region"),   // 8 points: even
+                  Place(lat:41.7,lon:-71.5,label:"美国 · 罗得岛州",source:"region"),   // 5 points: odd
+                  Place(lat:1.35,lon:103.8,label:"新加坡",source:"region"),            // 2 points
+                  Place(lat:-33.9,lon:18.4,label:"Cape Town",source:"map"),           // one point
+                  Place(lat:10,lon:10,label:"no such region",source:"region")] {     // unknown label: nine points
+            XCTAssertEqual(bits(try geo.months(at:p)), bits(try Self.referenceMonths(geo, at:p)), p.label)
+        }
+        // A species with two model ids (none in the bundled mapping) and regions with a repeated point, from test resources.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("geo-e002-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at:dir, withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:dir) }
+        try FileManager.default.copyItem(at:try XCTUnwrap(Bundle.main.url(forResource:"geo-graph",withExtension:"json")), to:dir.appendingPathComponent("geo-graph.json"))
+        let mapping = [["scientific":"two","geo3_index":"4165|8384"], ["scientific":"three","geo3_index":"9642|8021|4165"],
+                       ["scientific":"one","geo3_index":"8021"], ["scientific":"none","geo3_index":""]]
+        let grid = [("even",58.3,-134.4),("even",58.3,-134.4),("even",-27.5,153.0),("even",51.5,-0.1),
+                    ("odd",-27.5,153.0),("odd",-27.5,153.0),("odd",58.3,-134.4)].map { ["place":$0.0,"lat":"\($0.1)","lon":"\($0.2)"] }
+        try JSONEncoder().encode(mapping).write(to:dir.appendingPathComponent("avilist-birdnet-geo3.json"))
+        try JSONEncoder().encode(grid).write(to:dir.appendingPathComponent("region-grid.json"))
+        // Only while Geo reads its resources: `resource(_:)` anywhere else in the host would look in `dir` too.
+        UserDefaults.standard.set(dir.path, forKey:"resourceDir")
+        let test = try { defer { UserDefaults.standard.removeObject(forKey:"resourceDir") }
+                         return try Geo(weights:Models.geoURL, scientific:["two","three","one","none","not in mapping"]) }()
+        XCTAssertEqual(test.indices, [[4165,8384],[9642,8021,4165],[8021],[],[]])
+        for p in [Place(lat:0,lon:0,label:"even",source:"region"), Place(lat:0,lon:0,label:"odd",source:"region"),
+                  Place(lat:-27.5,lon:153.0,label:"Brisbane",source:"map")] {
+            let months = try test.months(at:p)
+            XCTAssertEqual(bits(months), bits(try Self.referenceMonths(test, at:p)), p.label)
+            XCTAssertNil(months[3]); XCTAssertNil(months[4])
+        }
+    }
     /// The real model: a place's year and the global range for the Bald Eagle; a species without a model id has neither.
     func testPlaceYearAndRangeMap() throws {
         let catalogue=Catalogue.shared,geo=try XCTUnwrap(Geo.shared(catalogue))
