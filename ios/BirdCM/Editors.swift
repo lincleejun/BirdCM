@@ -25,7 +25,7 @@ struct CorrectionSheet: View {
         NavigationStack {
             List {
                 Section("当前") {
-                    LabeledContent("模型判断", value: effective.model.map { m in title(m) + (m.level == "species" ? " · " + (m.top5.first?.p ?? 0).formatted(.percent.precision(.fractionLength(1))) : "") } ?? "未识别")
+                    LabeledContent("模型判断", value: effective.model.map { m in title(m) + (m.level == "species" ? " · " + (m.top5.first?.p ?? 0).formatted(.percent.precision(.fractionLength(1))) : "") } ?? String(localized: "未识别"))
                     if effective.state != "none" { LabeledContent("你的更正", value: effective.name).accessibilityIdentifier("correction.current") }
                 }
                 if let picked {

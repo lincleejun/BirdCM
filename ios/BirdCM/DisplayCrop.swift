@@ -205,7 +205,7 @@ enum BirdMask {
 #if os(iOS)
 func saveBirdPhoto(_ url:URL,shooting:Shooting) async throws {
     let status=await PHPhotoLibrary.requestAuthorization(for:.addOnly)
-    guard status == .authorized || status == .limited else {throw NSError(domain:"BirdCM",code:5,userInfo:[NSLocalizedDescriptionKey:"未获准添加照片。可在设置中允许观羽添加照片。"])}
+    guard status == .authorized || status == .limited else {throw NSError(domain:"BirdCM",code:5,userInfo:[NSLocalizedDescriptionKey:String(localized:"未获准添加照片。可在设置中允许观羽添加照片。")])}
     try await PHPhotoLibrary.shared().performChanges {
         let request=PHAssetCreationRequest.forAsset()
         request.addResource(with:.photo,fileURL:url,options:nil)

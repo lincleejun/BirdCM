@@ -241,7 +241,7 @@ struct SpeciesPage: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("地点").font(.subheadline.bold())
             if !points.isEmpty { PlaceSnapshot(points: points, label: String(localized: "\(points.count) 个拍摄位置"), height: 150) }
-            ForEach(rows, id: \.0) { r in LabeledContent(r.0, value: "\(r.1) 次").font(.subheadline) }
+            ForEach(rows, id: \.0) { r in LabeledContent(r.0, value: String(localized: "\(r.1) 次")).font(.subheadline) }
         }
     }
 }
@@ -264,7 +264,7 @@ struct SpeciesLocal: View {
                 case .loading: ProgressView().frame(maxWidth: .infinity, minHeight: 44)
                 case .unknown: Text("地点模型没有这个物种，无法估计在 \(name) 的可能性。").font(.subheadline).foregroundStyle(Palette.secondary)
                 case let .months(values, word, gbif):
-                    Text("在 \(name) 本月：\(word)").font(.subheadline.weight(.semibold)).accessibilityIdentifier("species.localWord")
+                    Text("在 \(name) 本月：\(loc(word))").font(.subheadline.weight(.semibold)).accessibilityIdentifier("species.localWord")
                     Text(gbif ? "按 GBIF 观测记录的本地频次（与结果页同一套分级）。" : "这里本月没有观测数据，按地点模型估计。").font(.caption).foregroundStyle(Palette.secondary)
                     Chart(0..<12, id: \.self) { i in
                         BarMark(x: .value("月份", "\(i + 1)"), y: .value("可能性", values[i]))
@@ -274,7 +274,7 @@ struct SpeciesLocal: View {
                     .chartYScale(domain: 0...max(0.05, (values.max() ?? 0) * 1.1))
                     .chartYAxis { AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { v in AxisGridLine(); AxisValueLabel { if let d = v.as(Double.self) { Text(d.formatted(.percent.precision(.fractionLength(0)))) } } } }
                     .frame(height: 140).accessibilityIdentifier("species.monthChart")
-                    Text("柱高是地点模型（BirdNET）估计的各月出现可能（每月取 4 个模型周的平均\(place.source == "region" ? "，地区内取中位数" : "")），不是观测数量；深色是本月。").font(.caption).foregroundStyle(Palette.secondary)
+                    Text("柱高是地点模型（BirdNET）估计的各月出现可能（每月取 4 个模型周的平均\(place.source == "region" ? String(localized: "，地区内取中位数") : "")），不是观测数量；深色是本月。").font(.caption).foregroundStyle(Palette.secondary)
                 }
             } else {
                 Text("还没有地点：设置后显示这种鸟在那里各月的可能性。").font(.subheadline).foregroundStyle(Palette.secondary)
@@ -325,14 +325,14 @@ struct SpeciesRangeMap: View {
             if unknown {
                 Text("地点模型没有这个物种，无法画分布。").font(.subheadline).foregroundStyle(Palette.secondary)
             } else {
-                Picker("季节", selection: $season) { ForEach(Geo.Season.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).accessibilityIdentifier("species.season")
+                Picker("季节", selection: $season) { ForEach(Geo.Season.allCases, id: \.self) { Text(LocalizedStringKey($0.rawValue)).tag($0) } }.pickerStyle(.segmented).accessibilityIdentifier("species.season")
                 let span = Geo.rangeLat.1 - Geo.rangeLat.0
                 ZStack {
                     if let values { map(Geo.seasonMap(values, grid: Self.grid, season: season)) }
                     else { RoundedRectangle(cornerRadius: 12).fill(Palette.surface); ProgressView(value: progress) { Text("正在计算分布…").font(.caption) }.padding(.horizontal, 40) }
                 }.aspectRatio(360 / span, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 12))
-                    .accessibilityElement(children: .ignore).accessibilityLabel("\(season.rawValue)分布图，地点模型估计").accessibilityIdentifier("species.rangeMap")
-                Text("地点模型（BirdNET）在 \(Int(Geo.rangeStep))° 网格上的估计，颜色越浓越可能出现，不是观测记录。全年取 12 个月中最高；繁殖季 = 北半球 5–7 月、南半球 11–1 月，非繁殖季 = 北半球 12–2 月、南半球 6–8 月（按格点所在半球，热带只是近似）。\(model.homePlace == nil ? "" : "圆圈是你的地点。")")
+                    .accessibilityElement(children: .ignore).accessibilityLabel("\(loc(season.rawValue))分布图，地点模型估计").accessibilityIdentifier("species.rangeMap")
+                Text("地点模型（BirdNET）在 \(Int(Geo.rangeStep))° 网格上的估计，颜色越浓越可能出现，不是观测记录。全年取 12 个月中最高；繁殖季 = 北半球 5–7 月、南半球 11–1 月，非繁殖季 = 北半球 12–2 月、南半球 6–8 月（按格点所在半球，热带只是近似）。\(model.homePlace == nil ? "" : String(localized: "圆圈是你的地点。"))")
                     .font(.caption).foregroundStyle(Palette.secondary)
             }
         }

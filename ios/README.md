@@ -117,6 +117,17 @@ python3 ios/tools/test_model_bundle.py
 
 `Screens_Previews` 及 `tools/screenshots.sh` 提供各状态预览；Debug 启动参数 `-previewState normal|home|multiple|uncertain|genus|rare|unknown-prior|no-location|no-bird|loading -previewImage /absolute/CC0.jpg` 可直接进入固定状态。`-darkMode YES` / `-largestType YES` 控制 UI 验收组合。
 
+## 本地化（简体中文 / 英文）
+
+界面文案在 `BirdCM/Resources/Localizable.xcstrings`（源语言 zh-Hans，键就是中文原文，另有 en），App 名和权限说明在 `InfoPlist.xcstrings`；系统语言为英文时用 en，其余照旧中文（鸟的中文名不翻译）。新文案照常写 `Text("中文")` / `String(localized: "中文")`（存储或比较用的中文内部键，如稀有度档位，显示时过 `loc()`），构建后把新键同步进 catalog 再补 en：
+
+```sh
+xcrun xcstringstool sync ios/BirdCM/Resources/Localizable.xcstrings $(find ios/DerivedData -path '*/BirdCM.build/*' -name '*.stringsdata' -not -path '*Tests*' | sed 's/^/--stringsdata /')
+python3 ios/tools/check_l10n.py     # 没走本地化的中文字面量；故意保留的写进它的 ALLOWED 并说明原因
+```
+
+`LocalizationTests` 检查两个 catalog 每个键都有 zh-Hans 和 en、en 不含中文、格式符一致。scheme 的测试语言固定为 zh-Hans（`project.yml`），所以测试和截图仍是中文；看英文可用 `xcrun simctl launch <设备> cc.outman.birdcm -AppleLanguages "(en)" -previewState normal -previewImage …`。
+
 ## 安装到所有者 iPhone 15
 
 先在 Xcode > Settings > Accounts 登录该 Personal Team 的 Apple ID，连接、解锁并信任设备，启用 Developer Mode；用 `xcrun devicectl list devices` 找 UDID。沿用上面的 MODEL_SOURCE/GEO_SOURCE/RARITY_SOURCE 环境变量：

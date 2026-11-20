@@ -1,0 +1,9 @@
+"CFBundleName" = "GuanYu";
+"CFBundleDisplayName" = "GuanYu";
+"NSHumanReadableCopyright" = "GuanYu BirdCM · MIT License";
+"NSAppleEventsUsageDescription" = "GuanYu uses a system dialog to let you choose the photo folder to scan.";
+"NSRemovableVolumesUsageDescription" = "GuanYu reads the photos you choose on external disks (read-only; photos are never changed).";
+"NSNetworkVolumesUsageDescription" = "GuanYu reads the photos you choose on network disks (read-only; photos are never changed).";
+"NSDesktopFolderUsageDescription" = "GuanYu reads the photos you choose in Desktop (read-only; photos are never changed).";
+"NSDocumentsFolderUsageDescription" = "GuanYu reads the photos you choose in Documents (read-only; photos are never changed).";
+"NSDownloadsFolderUsageDescription" = "GuanYu reads the photos you choose in Downloads (read-only; photos are never changed).";

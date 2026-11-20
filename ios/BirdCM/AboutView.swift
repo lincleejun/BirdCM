@@ -18,7 +18,7 @@ struct AboutView: View {
 struct ResourceText: View {
     @Environment(\.dismiss) var dismiss
     let name:String,ext:String
-    var body:some View {ScrollView{Text((Bundle.main.url(forResource:name,withExtension:ext).flatMap{try? String(contentsOf:$0,encoding:.utf8)}) ?? "资源未找到").font(.caption).textSelection(.enabled).padding()}.navigationTitle(name).navigationBarBackButtonHidden().toolbar{ToolbarItem(placement:.topBarLeading){Button("返回"){dismiss()}.accessibilityIdentifier("resource.back")}}}
+    var body:some View {ScrollView{Text((Bundle.main.url(forResource:name,withExtension:ext).flatMap{try? String(contentsOf:$0,encoding:.utf8)}) ?? String(localized: "资源未找到")).font(.caption).textSelection(.enabled).padding()}.navigationTitle(name).navigationBarBackButtonHidden().toolbar{ToolbarItem(placement:.topBarLeading){Button("返回"){dismiss()}.accessibilityIdentifier("resource.back")}}}
 }
 struct DiagnosticsView: View {
     @Environment(AppModel.self) var model
@@ -42,7 +42,7 @@ struct DiagnosticsView: View {
             LabeledContent("全部模型就绪", value: seconds("models.ready"))
             LabeledContent("预热完成", value: seconds("models.warm"))
             LabeledContent("预热用时", value: seconds("models.warmup"))
-            ForEach([("完整性 · SHA-256", "models.integrity.sha256"), ("完整性 · 只查大小", "models.integrity.sizes"), ("名录", "load.names"), ("检测模型", "load.detector"), ("BioCLIP", "load.bioclip"), ("眼嘴与飞行", "load.heads"), ("地点模型", "load.geo"), ("稀有度表", "load.rarity"), ("等待模型（选片早于就绪）", "identify.waitedForModels")], id: \.1) { title, key in
+            ForEach([("完整性 · SHA-256", "models.integrity.sha256"), ("完整性 · 只查大小", "models.integrity.sizes"), ("名录", "load.names"), ("检测模型", "load.detector"), ("BioCLIP", "load.bioclip"), ("眼嘴与飞行", "load.heads"), ("地点模型", "load.geo"), ("稀有度表", "load.rarity"), ("等待模型（选片早于就绪）", "identify.waitedForModels")] as [(LocalizedStringKey, String)], id: \.1) { title, key in
                 if marks[key] != nil { LabeledContent(title, value: seconds(key)) }
             }
             let freed = UserDefaults.standard.object(forKey: "legacyModelsFreed") as? Int64 ?? 0
@@ -53,7 +53,7 @@ struct DiagnosticsView: View {
                 Task {
                     let t = Date()
                     let r = try? await Task.detached { try Models.check(full: true) }.value
-                    verified = r.map { $0.invalid.isEmpty ? String(format: "全部文件完好（%.1f s）", Date().timeIntervalSince(t)) : "损坏：" + $0.invalid.joined(separator: "、") } ?? "无法读取模型文件"
+                    verified = r.map { $0.invalid.isEmpty ? String(format: String(localized: "全部文件完好（%.1f s）"), Date().timeIntervalSince(t)) : String(localized: "损坏：\($0.invalid.joined(separator: String(localized: "、")))") } ?? String(localized: "无法读取模型文件")
                     verifying = false
                 }
             }.disabled(verifying).accessibilityIdentifier("diagnostics.verify")
@@ -66,7 +66,7 @@ struct DiagnosticsView: View {
             LabeledContent("加载采样峰值",value:String(format:"%.1f MB",Double(model.engine?.loadPeakBytes ?? 0)/1e6))
             LabeledContent("选片到结果（含定位与等待模型）",value:String(format:"%.3f s",model.sessionSeconds))
             if let d=model.current?.result?.diagnostics {
-                ForEach(d.stages.keys.sorted(),id:\.self){key in LabeledContent(key,value:String(format:"%.3f s",d.stages[key]!))}
+                ForEach(d.stages.keys.sorted(),id:\.self){key in LabeledContent(loc(key),value:String(format:"%.3f s",d.stages[key]!))}
                 LabeledContent("采样峰值内存",value:String(format:"%.1f MB",Double(d.peakBytes)/1e6))
                 Text("每 20 ms 采样 phys_footprint；可能漏掉瞬时峰值。已有历史里的指标来自识别当时。") .font(.caption)
             }

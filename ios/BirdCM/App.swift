@@ -65,7 +65,7 @@ struct SpeciesName: View {
         let sp=Catalogue.shared.species(key)
         self.init(title:sp?.name ?? key,alt:sp?.alt ?? "",sci:sp?.sci ?? "",size:size)
     }
-    var label:String {[title,alt,sci].filter{!$0.isEmpty}.joined(separator:"，")}
+    var label:String {[title,alt,sci].filter{!$0.isEmpty}.joined(separator:String(localized:"，"))}
     var body: some View {
         VStack(alignment:.leading,spacing:2) {
             Text(title).font(.system(size:primary,weight:.semibold)).foregroundStyle(uncertain ? Palette.warning:Palette.ink).lineLimit(1)
@@ -93,10 +93,12 @@ struct SpeciesName: View {
     }
 }
 /// Names are read-time derivations from the bundled catalogue, never the cached label in an old result.
+/// A Chinese internal key (rarity tier, IUCN word, season, stage, stored place label) in the UI language; other text unchanged.
+func loc(_ key: String) -> String { String(localized: String.LocalizationValue(key)) }
 func title(_ r: Identification) -> String {
     if r.level == "species", let k=r.name ?? r.top5.first?.scientific { return Catalogue.shared.name(k) }
-    if r.level == "genus" { return "\(r.name ?? "") · 只到属" }
-    return "不确定"
+    if r.level == "genus" { return String(localized: "\(r.name ?? "") · 只到属") }
+    return String(localized: "不确定")
 }
 
 @MainActor @Observable final class AppModel {
@@ -186,7 +188,7 @@ func title(_ r: Identification) -> String {
     /// What a person reads for a place: a region by its name; a searched or typed name as given; a bare point (photo GPS,
     /// 当前位置, 地图选点) by its English place name — never raw coordinates (those stay in a caption or the map).
     func placeName(_ label:String?,lat:Double?,lon:Double?,source:String) -> String? {
-        guard source != "region",let lat,let lon else {return label}
+        guard source != "region",let lat,let lon else {return label.map(Place.display)}
         let own=label.map(Place.withoutCoordinates) ?? ""
         if !own.isEmpty && !["地图选点","照片拍摄位置","当前位置"].contains(own) {return own}
         return placeNames.name(lat:lat,lon:lon) ?? label.map{Place(lat:lat,lon:lon,label:$0,source:source).name}
@@ -240,7 +242,7 @@ func title(_ r: Identification) -> String {
         if let state=UserDefaults.standard.string(forKey:"fixtureState") {
             if state=="no-location",homePlace == nil {pendingFixtureState=state;needsPlace=true;return}
             begin();preview=UIImage(contentsOfFile:path)
-            busy=true;status="找鸟 → 认种"
+            busy=true;status=String(localized:"找鸟 → 认种")
             try? await Task.sleep(for:.milliseconds(UserDefaults.standard.bool(forKey:"uiTesting") ? 200:1000))
             preparePreview(state,path:path)
             if let r=current,let data=try? Data(contentsOf:URL(fileURLWithPath:path)) {
@@ -347,7 +349,7 @@ func title(_ r: Identification) -> String {
         guard let s=item.subjects.first else {return String(localized:"没找到鸟")}
         if s.excluded {return String(localized:"已排除")}
         if let k=s.key,catalogue.contains(k) {return catalogue.name(k)}
-        return s.level=="genus" && s.state=="none" ? "\(s.modelKey ?? "") · 只到属":String(localized:"待确认")
+        return s.level=="genus" && s.state=="none" ? String(localized:"\(s.modelKey ?? "") · 只到属"):String(localized:"待确认")
     }
     func matches(_ item:PhotoItem,_ query:String) -> Bool {
         let q=query.trimmingCharacters(in:.whitespacesAndNewlines)
@@ -373,7 +375,7 @@ func title(_ r: Identification) -> String {
                 let t0=Date()
                 let check=try await Task.detached(priority:.userInitiated) {try Models.check()}.value
                 Perf.mark(check.hashed ? "models.integrity.sha256":"models.integrity.sizes",Date().timeIntervalSince(t0))
-                guard check.invalid.isEmpty else {throw StoreError(message:String(localized:"安装包损坏，请重新安装：")+check.invalid.joined(separator:"、"))}
+                guard check.invalid.isEmpty else {throw StoreError(message:String(localized:"安装包损坏，请重新安装：")+check.invalid.joined(separator:String(localized:"、")))}
                 // The bundled models verified: an early build's downloaded copies (~700 MB) can go.
                 Task.detached(priority:.utility) {let freed=Models.removeLegacyDownloads();if freed>0 {Perf.log("LEGACY models removed \(freed) bytes")}}
                 let e=try await Task.detached(priority:.userInitiated) {try Engine(dir:Models.dir)}.value
@@ -433,7 +435,7 @@ func title(_ r: Identification) -> String {
             place=Place.resolve(photo:shooting.photoPlace,device:nil,manual:homePlace)
             status=String(localized:"找鸟")
             let made = try await Task.detached { () async throws -> (Record,Photo) in
-                guard let photo=Photo(data:data) else { throw NSError(domain:"BirdCM",code:4,userInfo:[NSLocalizedDescriptionKey:"无法读取这张图。支持 JPEG、HEIC、PNG（含截图）；ProRAW/DNG 请先在照片中导出为 JPEG 或 HEIC。请换一张重试。"]) }
+                guard let photo=Photo(data:data) else { throw NSError(domain:"BirdCM",code:4,userInfo:[NSLocalizedDescriptionKey:String(localized:"无法读取这张图。支持 JPEG、HEIC、PNG（含截图）；ProRAW/DNG 请先在照片中导出为 JPEG 或 HEIC。请换一张重试。")]) }
                 let tick=Date(), boxes=try engine.detect(photo), detection=Date().timeIntervalSince(tick)
                 let rel=boxes.map { [$0[0]/Double(photo.frame.w),$0[1]/Double(photo.frame.h),$0[2]/Double(photo.frame.w),$0[3]/Double(photo.frame.h)] }
                 let stage=engine.hasSpeciesModel ? String(localized:"认种"):String(localized:"认种（认种模型还在载入）")
@@ -522,7 +524,7 @@ func title(_ r: Identification) -> String {
         let engine=previewing ? nil:await waitForEngine(job)
         guard job == run else {return}
         if !previewing && engine == nil {if let e=modelError {self.error=e};return}
-        status="按地点更新候选…"
+        status=String(localized:"按地点更新候选…")
         do {
             if let engine {
                 let saved=r
@@ -858,7 +860,7 @@ struct HistoryRow: View {
             VStack(alignment:.leading,spacing:6) {
                 if let s=item.subjects.first,!s.excluded,let k=s.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.row)}
                 else {SpeciesName(title:model.label(item),size:.row)}
-                Text(item.dateSource=="photo" || item.dateSource=="user" ? item.wall.replacingOccurrences(of:"T",with:" "):item.day+" · 按识别日期").font(.caption).monospacedDigit()
+                Text(item.dateSource=="photo" || item.dateSource=="user" ? item.wall.replacingOccurrences(of:"T",with:" "):item.day+String(localized:" · 按识别日期")).font(.caption).monospacedDigit()
                 Text(model.placeName(item) ?? String(localized:"没有地点")).font(.caption).foregroundStyle(Palette.secondary)
                 if item.missing {Text("原图不可用").font(.caption).foregroundStyle(Palette.warning)}
                 if item.subjects.contains(where:{$0.state != "none"}) {Text("已人工更正").font(.caption).foregroundStyle(Palette.secondary)}

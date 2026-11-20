@@ -40,6 +40,14 @@ then downloads ~265 MB of wheels plus a Python at first launch (1.0 GB installed
 that, and fails in more ways (proxy, PyPI outage, half-built environment). The bundled one works offline once installed,
 and it has no venv, so nothing embeds an absolute path: the app can be moved or renamed (tested).
 
+## Languages
+
+The menu, windows and dialogs follow the system language: Chinese when the first preferred language is Chinese,
+English otherwise. Each text is written once in `Sources/main.swift` as `L("中文", "English")`; add both when adding one.
+The app name (观羽 / GuanYu) and the permission texts are in `en.lproj` and `zh-Hans.lproj/InfoPlist.strings`, copied
+into the bundle by `build.sh`; change them together with `Info.plist`. Engine messages shown in the menu come from
+`birdcm admin` and are in the engine's language.
+
 ## How it works
 
 Everything the menu does is a `birdcm admin …` command (`engine/birdcm/admin.py`, tests in `engine/tests/test_admin.py`)

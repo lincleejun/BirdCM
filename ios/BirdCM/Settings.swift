@@ -283,7 +283,7 @@ struct FolderBackupSection: View {
                 Text("关闭。选好文件夹（“我的 iPhone”或 iCloud 云盘等）后，App 回到前台时如果记录有变化、且距上次成功备份满 24 小时，会自动写一份新备份；只保留本应用在那里写的最近 3 份。").font(.footnote)
                 Button("选择备份文件夹…", systemImage: "folder") { choosing = true }.accessibilityIdentifier("backup.chooseFolder").frame(minHeight: 44)
             } else {
-                LabeledContent("文件夹", value: backup.folderName ?? "测试文件夹")
+                LabeledContent("文件夹", value: backup.folderName ?? String(localized: "测试文件夹"))
                 LabeledContent("上次成功", value: backup.lastSuccess.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? String(localized: "还没有"))
                 LabeledContent("预计大小", value: storage.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "…")
                 if let e = backup.lastError { Text(e).font(.footnote).foregroundStyle(Palette.warning).accessibilityIdentifier("backup.folderError") }
