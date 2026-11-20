@@ -34,13 +34,15 @@ final class Rarity {
     private var areaCache = [Int64: Double]()
     private let areaLock = NSLock()
     /// Summed bounding-box area of one region's shapes, the same SQLite expression the lookup used inline; once per region per instance.
-    private func area(_ id: Int64) -> Double {
+    /// nil when the query fails (not cached), as the old inline subquery failing gave no region at all.
+    private func area(_ id: Int64) -> Double? {
         areaLock.lock(); if let hit = areaCache[id] { areaLock.unlock(); return hit }; areaLock.unlock()
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT sum((maxx-minx)*(maxy-miny)) FROM shapes WHERE region_id=?", -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        guard sqlite3_prepare_v2(db, "SELECT sum((maxx-minx)*(maxy-miny)) FROM shapes WHERE region_id=?", -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         sqlite3_bind_int64(stmt, 1, id)
-        let value = sqlite3_step(stmt) == SQLITE_ROW ? sqlite3_column_double(stmt, 0) : 0
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        let value = sqlite3_column_double(stmt, 0)
         areaLock.lock(); areaCache[id] = value; areaLock.unlock()
         return value
     }
@@ -57,7 +59,8 @@ final class Rarity {
             guard let blob=sqlite3_column_blob(stmt,2) else {continue}
             let data=Data(bytes:blob,count:n*4)
             let ring=data.withUnsafeBytes {raw in (0..<n).map {Double(Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:$0*4,as:UInt32.self))))}}
-            rings[code,default:[]].append(ring);areas[code]=area(sqlite3_column_int64(stmt,3));levels[code]=Int(sqlite3_column_int(stmt,1))
+            guard let area=area(sqlite3_column_int64(stmt,3)) else {return (nil,nil)}
+            rings[code,default:[]].append(ring);areas[code]=area;levels[code]=Int(sqlite3_column_int(stmt,1))
         }
         var hit=[Int:String](), nearest:(Double,String)?
         for code in rings.keys.sorted(by:{areas[$0]! > areas[$1]!}) {
