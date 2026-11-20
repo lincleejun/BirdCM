@@ -85,6 +85,8 @@ extension Geo {
         var values = [Double](repeating: 0, count: indices.count * 12 * n), sums = [Double](repeating: 0, count: indices.count * 12)
         for (k, pt) in pts.enumerated() {
             let q = try network.predict((1...48).map { [Float(pt[0]), Float(pt[1]), Float($0)] })
+            // As `monthly`'s precondition did: 48 weeks whenever some species has a model id.
+            precondition(q.count == 48 || indices.allSatisfy(\.isEmpty))
             for i in sums.indices { sums[i] = 0 }
             for (w, row) in q.enumerated() {
                 for (j, ids) in indices.enumerated() where !ids.isEmpty {
