@@ -46,7 +46,7 @@ class Config:
     w_eye: float = 0.10               # P(eye visible)
     w_size: float = 0.10              # bird size in frame (box area share, saturating at size_full)
     w_focus: float = 0.05             # camera focus on the head 1, on the bird 0.6, off the bird 0 (forgiven when sharp)
-    w_aes: float = 0.15               # aesthetic percentile over the scan
+    w_aes_select: float = 0.15        # aesthetic percentile over the scan (quota's own is w_aes below)
     w_det: float = 0.05               # detection score
     fly_boost: float = 0.15           # added to Q for a flying bird
     rare_boost: float = 0.05          # 少见 (and 0.1 for 罕见 / 无记录) locally this month
@@ -606,7 +606,7 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         det = x["boxes"][x["subject"]]["score"] if x.get("subject") is not None else None
         sig = {"sharp_burst": (pbq.get(i), c.w_sharp_burst), "sharp_species": (psp.get(i), c.w_sharp_species),
                "eye": (x.get("eye_p"), c.w_eye), "size": (None if a is None else min(1.0, math.sqrt(a / c.size_full)), c.w_size),
-               "focus": (focus, c.w_focus), "aesthetic": (pa.get(i), c.w_aes),
+               "focus": (focus, c.w_focus), "aesthetic": (pa.get(i), c.w_aes_select),
                "detection": (None if det is None else min(1.0, max(0.0, (det - 0.1) / 0.6)), c.w_det),
                "burst_length": (bl_pct[burst_of[i]], c.w_burst)}
         tw = sum(w for _, w in sig.values()) or 1.0
