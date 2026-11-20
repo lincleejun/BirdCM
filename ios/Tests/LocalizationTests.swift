@@ -60,6 +60,11 @@ final class LocalizationTests: XCTestCase {
             let bundle = try XCTUnwrap(Bundle.main.path(forResource: lang, ofType: "lproj").flatMap(Bundle.init(path:)), lang)
             XCTAssertEqual(bundle.localizedString(forKey: "罕见", value: nil, table: nil), rare)
             XCTAssertEqual(bundle.localizedString(forKey: "时间未知", value: nil, table: nil), unknown)  // a manual key (shown through loc)
+            // Reference cards store these keys and show them through loc().
+            for key in ["维基百科贡献者", "原文摘录", "原文摘录；简体由维基百科自动转换", "缩放为 640 px 宽"] {
+                XCTAssertNotEqual(bundle.localizedString(forKey: key, value: "?", table: nil), "?", key)
+                XCTAssertEqual(bundle.localizedString(forKey: key, value: nil, table: nil) == key, lang == "zh-Hans", key)
+            }
             XCTAssertEqual(bundle.localizedString(forKey: "CFBundleDisplayName", value: nil, table: "InfoPlist"), app)
         }
         // The scheme runs tests in zh-Hans: Chinese stays exactly as before.

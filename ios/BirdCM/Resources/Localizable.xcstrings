@@ -1736,7 +1736,29 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Estimate %1$lld%2$@ · %3$lld photos"
+            "value": "Estimate %1$lld%2$@ · %#@arg3@"
+          },
+          "substitutions": {
+            "arg3": {
+              "argNum": 3,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -7348,9 +7370,21 @@
     "本地罕见 / 少见：%lld 条观察记录": {
       "localizations": {
         "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Locally rare / scarce: %lld observations"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Locally rare / scarce: %lld observation"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Locally rare / scarce: %lld observations"
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -8777,7 +8811,49 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld photos · %2$lld to confirm (%3$lld photos) · %4$lld with no bird"
+            "value": "%#@arg1@ · %2$lld to confirm (%#@arg3@) · %4$lld with no bird"
+          },
+          "substitutions": {
+            "arg1": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            },
+            "arg3": {
+              "argNum": 3,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photo"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg photos"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "zh-Hans": {
@@ -8985,7 +9061,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Species page: local likelihood, range and references"
+            "value": "Species page: range and more"
           }
         },
         "zh-Hans": {
@@ -9242,7 +9318,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Search %lld species offline (Chinese, English, scientific name, pinyin or initials). No built-in reference images or descriptions."
+            "value": "Search %lld species offline by English or scientific name. No built-in reference images or descriptions."
           }
         },
         "zh-Hans": {

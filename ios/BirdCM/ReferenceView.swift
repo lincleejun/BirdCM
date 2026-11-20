@@ -99,7 +99,7 @@ struct SpeciesReferenceSection: View {
                     Text([s.revision.map { String(localized: "修订 \($0)") }, s.cachedAt.map { String(localized: "缓存于 \($0)") + (s.state == "stale" ? String(localized: "（离线显示缓存）") : "") }].compactMap { $0 }.joined(separator: " · "))
                 }.font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("reference.summaryCredit")
             } else if let s = summary {
-                problem(s, what: String(localized: "简介")) { await refresh("summary", force: true) }.accessibilityIdentifier("reference.summaryState")
+                problem(s, what: String(localized: "简介").localizedLowercase) { await refresh("summary", force: true) }.accessibilityIdentifier("reference.summaryState")
             } else {
                 Text("正在读取…").font(.footnote).foregroundStyle(Palette.secondary)
             }

@@ -158,6 +158,10 @@ final class AppearanceSnapshots: SnapshotCase {
         m.homePlace = Place(lat: 37.32, lon: -122.03, label: "Cupertino", source: "device")
         m.tab = .explore
         try await shot("explore-local-rows", light, test: t, wait: 20, NavigationStack { ExploreView() }.environment(m).tint(Palette.accent).frame(height: 2400).offset(y: -560))
+        try await shot("explore-footer", light, test: t, wait: 20, NavigationStack { ExploreView() }.environment(m).tint(Palette.accent).frame(height: 2400).offset(y: -100))
+        UserDefaults.standard.set("ma", forKey: "exploreQuery")
+        try await shot("explore-search", light, test: t, wait: 20, RootView().environment(m))
+        UserDefaults.standard.removeObject(forKey: "exploreQuery")
         m.paths[.explore] = [.species("Tyrannus melancholicus")]
         try await shot("species-page", light, test: t, wait: 20, RootView().environment(m))
         try await shot("species-local", light, test: t, wait: 20, RootView().environment(m).frame(height: 2400).offset(y: -900))

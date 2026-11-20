@@ -52,7 +52,8 @@ final class Catalogue {
     func search(_ query: String) -> [Species] {
         let q = Self.fold(query)
         guard !q.isEmpty else { return all.sorted { $0.sci < $1.sci } }
-        let latin = pinyin != nil && q.allSatisfy { $0.isASCII && $0.isLetter }
+        // An English UI shows no Chinese, so a pinyin hit would look unrelated to the query.
+        let latin = pinyin != nil && !Catalogue.english && q.allSatisfy { $0.isASCII && $0.isLetter }
         var hits = [(Int, Int)]()
         for (i, names) in folded.enumerated() {
             var best = 3
