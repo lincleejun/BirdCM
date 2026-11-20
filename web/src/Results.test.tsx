@@ -22,7 +22,7 @@ const snapshot = (): Snapshot => ({
 });
 
 let calls: { method: string; url: string; body: unknown }[] = [];
-const writes = (path: string) => calls.filter((c) => c.method !== "GET" && c.url === `/api/scans/${SID}/${path}`);
+const writes = (path: string) => calls.filter((c) => c.method === "POST" && c.url === `/api/scans/${SID}/${path}`);
 const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { "Content-Type": "application/json" } });
 
 let root: Root, box: HTMLDivElement;
