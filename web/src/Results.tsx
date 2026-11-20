@@ -447,7 +447,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   // counts come from the rows on screen: scan events only arrive on state changes, photo events on every result
   const c = { total: photos.length, done: photos.filter((p) => p.state === "done").length, failed: photos.filter((p) => p.state === "failed").length };
   const finished = c.done + c.failed;
-  const rejected = photos.filter((p) => p.result?.rejected).length;
+  const rejected = photos.filter((p) => (starsReady ? p.stars === -1 : p.result?.rejected)).length;   // hand 淘汰 counts
   const eligibleN = photos.filter((p) => p.result && !p.result.rejected).length;
   const starredPct = eligibleN ? Math.round((100 * photos.filter((p) => (p.stars ?? 0) > 0).length) / eligibleN) : 0;
   const keepSet = keepOf(scan.ratio as { preset?: string; keep?: number });
