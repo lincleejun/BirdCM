@@ -29,7 +29,18 @@ enum EBird {
     /// One checklist per (local day, place bucket). Coordinates / names from the first evidence by (capture wall or "", hash, subject id).
     static func checklists(_ ledger: Ledger, _ range: (String, String)?, rarity: Rarity?) -> [Checklist] {
         let groups = Dictionary(grouping: ledger.observations.filter { Ledger.inRange($0.day, range) }) { $0.day + "|" + $0.place }
-        return groups.keys.sorted { a, b in let x = a.split(separator: "|", maxSplits: 1), y = b.split(separator: "|", maxSplits: 1); return (x[0], x[1]) < (y[0], y[1]) }.map { key in
+        // Each key split once, same split and tuple order as comparing split keys; with two or more keys every key is split
+        // (a key without "|" still traps), with one key none is, as the comparator was never called.
+        let keys = groups.count < 2 ? Array(groups.keys) : groups.keys.map { k in let x = k.split(separator: "|", maxSplits: 1); return (x[0], x[1], k) }.sorted { ($0.0, $0.1) < ($1.0, $1.1) }.map(\.2)
+        // Region code → English name, this call only; a miss (no row or a failed query) is not kept, so it falls back and asks again.
+        var names = [String: String]()
+        func regionName(_ code: String) -> String? {
+            if let hit = names[code] { return hit }
+            let en = rarity?.rows("SELECT name_en FROM regions WHERE code=?", [code]).first?.first
+            names[code] = en
+            return en
+        }
+        return keys.map { key in
             let list = groups[key]!, day = list[0].day, pk = list[0].place
             var rows = [(item: PhotoItem, sub: SubjectItem)]()
             for o in list { for item in ledger.evidence(o) { for sub in item.subjects where Ledger.eligible(sub, ledger.known) && sub.key == o.species { rows.append((item, sub)) } } }
@@ -38,10 +49,10 @@ enum EBird {
             var lat: Double?, lon: Double?, name = "", state = "", country = ""
             if let a = first.lat, let o = first.lon {
                 lat = min(89.99999, max(-89.99999, a)); lon = o
-                (name, state, country) = pointCodes(lat!, lon!, rarity, bucket: first.placeKey)
+                (name, state, country) = pointCodes(lat!, lon!, rarity, bucket: first.placeKey, name: regionName)
                 name = "\(name) \(String(format: "%.4f", lat!)) \(String(format: "%.4f", lon!))".trimmingCharacters(in: .whitespaces)
             } else if let code = first.region {
-                let en = rarity?.rows("SELECT name_en FROM regions WHERE code=?", [code]).first?.first ?? code
+                let en = regionName(code) ?? code
                 name = en + (code.contains("-") ? " " + code.prefix(2) : ""); state = code.contains("-") ? String(code.split(separator: "-", maxSplits: 1)[1]) : ""; country = String(code.prefix(2))
             }
             let timed = rows.filter { ["photo", "user"].contains($0.item.dateSource) && ($0.item.capture?.count ?? 0) >= 16 }.map { $0.item.capture! }
@@ -51,15 +62,15 @@ enum EBird {
         }
     }
     /// A point → (English location name, state code, country code) through the one point → region mapping (Rarity.regionAt).
-    static func pointCodes(_ lat: Double, _ lon: Double, _ rarity: Rarity?, bucket: String) -> (String, String, String) {
+    static func pointCodes(_ lat: Double, _ lon: Double, _ rarity: Rarity?, bucket: String, name: (String) -> String?) -> (String, String, String) {
         guard let rarity else { return ("", "", "") }
         let r = rarity.regionAt(lat: lat, lon: lon, bucket: bucket)
         guard let country = r.country else { return ("", "", "") }
         if let div = r.division {
-            let en = rarity.rows("SELECT name_en FROM regions WHERE code=?", [div]).first?.first ?? div
+            let en = name(div) ?? div
             return ("\(en) \(country)", String(div.split(separator: "-", maxSplits: 1).last ?? ""), country)
         }
-        return (Place.countries.first { $0["code"] == country }?["en"] ?? rarity.rows("SELECT name_en FROM regions WHERE code=?", [country]).first?.first ?? country, "", country)
+        return (Place.countries.first { $0["code"] == country }?["en"] ?? name(country) ?? country, "", country)
     }
     enum Fallback { case include, exclude }
     static func csv(_ checklists: [Checklist], fallback: Fallback, estimates: Bool) throws -> String {
