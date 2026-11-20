@@ -30,11 +30,12 @@ const IUCN_ZH: Record<string, string> = { LC: "无危", NT: "近危", VU: "易�
 // rarer first: 罕见 1, 少见 2, 不常见 3, 常见 4; 无记录 (0) counts as rarest, unknown last
 const rank = (p: PhotoRow) => { const t = p.result?.rarity?.tier; return t == null ? 9 : t === 0 ? 0.5 : t; };
 const Q_LABEL: Record<string, string> = { sharp_burst: "组内清晰度", sharp_species: "同种清晰度", eye: "眼睛", size: "鸟的大小",
-  focus: "对焦", aesthetic: "美学", detection: "检测把握", burst_length: "连拍长度", fly: "飞版加分", rare: "稀有加分" };
+  focus: "对焦", aesthetic: "美学", detection: "检测把握", burst_length: "连拍长度", fly: "飞版加分", rare: "稀有加分", exposure: "曝光扣分" };
+const ADDED = ["fly", "rare", "exposure"];      // added to Q as is (signed), shown only when not 0
 function qParts(parts: Record<string, number | null> | null | undefined): string {
   if (!parts) return "";
-  return Object.entries(parts).filter(([k, v]) => !(["fly", "rare"].includes(k) && !v))
-    .map(([k, v]) => `${Q_LABEL[k] ?? k} ${v == null ? "未知" : ["fly", "rare"].includes(k) ? `+${v}` : v.toFixed(2)}`).join(" · ");
+  return Object.entries(parts).filter(([k, v]) => !(ADDED.includes(k) && !v))
+    .map(([k, v]) => `${Q_LABEL[k] ?? k} ${v == null ? "未知" : ADDED.includes(k) ? `${v > 0 ? "+" : ""}${v}` : v.toFixed(2)}`).join(" · ");
 }
 const PRIOR_SRC: Record<string, string> = { photo: "照片 GPS", map: "地图选点", device: "本机定位", region: "地区中心点" };
 const fmtTime = (t: string | null | undefined) => (t ? t.slice(0, 19).replace("T", " ") : "时间未知");

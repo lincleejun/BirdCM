@@ -14,7 +14,7 @@ Rules, in order (the spec design §9 asks for):
    mean rank). A missing value is not zero: a photo without sharpness uses its aesthetic percentile in its place (and
    the other way round); with neither, 0.5. Then + fly_bonus when P(fly) >= 0.5, + head_focus_bonus when the camera
    focused on the head, - outside_focus_malus when it focused off the bird (forgiven when the sharpness percentile >=
-   outside_forgive_pct), - exposure_malus when exposure is known bad (not measured yet: never applied).
+   outside_forgive_pct), - exposure_malus when the bird is blown or crushed (exposure(); both strategies).
 3. Quotas per species group (identified = species level with p >= species_min_p; the rest form one group):
    n3 = round(q3 * n), n2 = round(q2 * n), Python rounding. Order: Q descending, then queue order.
 4. Caps on three stars: eye not visible (< eye_vis_min), focus off the bird, sharpness < min_sharp3 (off), and at most
@@ -81,7 +81,9 @@ class Config:
     head_focus_bonus: float = 0.04
     outside_focus_malus: float = 0.06
     outside_forgive_pct: float = 0.9
-    exposure_malus: float = 0.06
+    exposure_malus: float = 0.06      # off Q (both strategies) when exposure() says the bird is blown or crushed
+    clip_hi_max: float = 0.10         # blown: share of the subject's core at 255 above this (owner's photos: max 0.022; docs/stars.md R5)
+    clip_lo_max: float = 0.25         # crushed: share at 0 above this (black birds: max 0.11; a backlit burst 0.21 is left)
     burst_cap: int = 2
     burst_gap: float = BURST_GAP
     per_species: bool = True
@@ -132,7 +134,7 @@ def validate(ratio: dict) -> dict:
     c = Config.from_ratio(ratio)
     unit = ("keep", "eye3", "burst3", "species3", "aes3", "q3_min", "q2_min", "q_floor", "species_min_p", "eye_vis_min",
             "outside_forgive_pct", "size3", "weak_size", "alike", "margin3", "burst_share", "fly_boost", "rare_boost",
-            "fly_bonus", "head_focus_bonus", "outside_focus_malus", "exposure_malus", "min_det")
+            "fly_bonus", "head_focus_bonus", "outside_focus_malus", "exposure_malus", "min_det", "clip_hi_max", "clip_lo_max")
     for k in unit:
         if not 0 <= getattr(c, k) <= 1:
             raise ValueError(f"{k} 要在 0–1 之间")
@@ -228,6 +230,16 @@ def focus_class(res: dict) -> str | None:
     m = 0.05 * max((x1 - x0) * W, (y1 - y0) * H)
     inside = x0 * W - m <= f[0] * W <= x1 * W + m and y0 * H - m <= f[1] * H <= y1 * H + m
     return "bird" if inside else "outside"
+
+
+def exposure(res: dict, c: "Config") -> str | None:
+    """"高光溢出" / "暗部死黑" when the subject's clipped share is over its limit; None otherwise and for a result
+    without the measurement (scanned before PIPELINE_VERSION 10): no malus."""
+    if (res.get("clip_hi") or 0) > c.clip_hi_max:
+        return "高光溢出"
+    if (res.get("clip_lo") or 0) > c.clip_lo_max:
+        return "暗部死黑"
+    return None
 
 
 def _name(res: dict, fix: dict | None = None) -> str:
@@ -435,6 +447,7 @@ def _quota(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config", 
         q += c.fly_bonus if (x.get("p_fly") or 0) >= 0.5 else 0
         q += c.head_focus_bonus if fc[i] == "head" else 0
         q -= c.outside_focus_malus if fc[i] == "outside" and (ps.get(i) or 0) < c.outside_forgive_pct else 0
+        q -= c.exposure_malus if exposure(x, c) else 0
         out[i]["q"] = round(q, 6)
 
     def species(i: int) -> str | None:
@@ -470,6 +483,9 @@ def _quota(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config", 
                 out[i].update(stars=1, star_reason="排名靠后，" + place)
         if sp is not None and idx and max(out[i]["stars"] for i in idx) < 2:
             out[idx[0]].update(stars=2, star_reason="保底：这个鸟种最好的一张")
+        for i in idx:
+            if (bad := exposure(res[i], c)):
+                out[i]["star_reason"] = f"鸟身上{bad}（扣分）；" + out[i]["star_reason"]
 
 
 def _pctl(ids: list[int], value, alone: float = 1.0) -> dict[int, float]:
@@ -621,8 +637,9 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         fly = c.fly_boost if (x.get("p_fly") or 0) >= 0.5 else 0.0
         tier = ((fixes.get(i) or {}).get("rarity") or x.get("rarity") or {}).get("tier")
         rare = 2 * c.rare_boost if tier in (0, 1) else c.rare_boost if tier == 2 else 0.0
-        q[i] = round(base + fly + rare, 4)
-        parts[i] = {k: (None if v is None else round(v, 3)) for k, (v, _) in sig.items()} | {"fly": fly, "rare": rare}
+        expo = -c.exposure_malus if exposure(x, c) else 0.0
+        q[i] = round(base + fly + rare + expo, 4)
+        parts[i] = {k: (None if v is None else round(v, 3)) for k, (v, _) in sig.items()} | {"fly": fly, "rare": rare, "exposure": expo}
         out[i].update(q=q[i], q_parts=parts[i])
 
     def weak(i: int) -> bool:
@@ -668,9 +685,10 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
                    else f"和同组 {res[other].get('file', '另一张')} 评分接近，选了那张" if other is not None and close_scores(i, other)
                    else f"同组 {res[other].get('file', '另一张')} 更好" if other is not None
                    else "整体质量不够，不为凑比例而给星" if weak(i) else "比例已满，排在后面")
-            out[i].update(stars=0, star_reason=why)
+            bad = exposure(x, c)
+            out[i].update(stars=0, star_reason=f"鸟身上{bad}；{why}" if bad else why)
             continue
-        short = []
+        short = [f"鸟身上{bad}"] if (bad := exposure(x, c)) else []     # named first: the reason shows short[0]
         if (x.get("eye_p") or 0) < c.eye3:
             short.append("眼睛不够清楚")
         if (pb.get(i) or 0) < c.burst3:
