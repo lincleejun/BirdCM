@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { get } from "./api";
 import type { Name } from "./types";
 import { PlainName } from "./names";
+import { t } from "./i18n";
 
 export interface Pick { sci: string; zh: string | null; en: string | null }
 export type Scope = "one" | "burst" | "same";
@@ -27,26 +28,26 @@ export default function CorrectPanel({ own, inScan, current, burst, onApply, onU
   const list = q.trim() ? hits : first;
   const run = async (f: () => Promise<void>) => { setBusy(true); setErr(""); try { await f(); onClose(); } catch (e) { setErr(String((e as Error).message)); } finally { setBusy(false); } };
   return (
-    <div className="correct" role="group" aria-label="改正鸟种">
-      <input className="map-search" placeholder="搜鸟种：中文、英文或学名" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+    <div className="correct" role="group" aria-label={t("correct.label")}>
+      <input className="map-search" placeholder={t("correct.search")} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
       <ul className="correct-list">
         {list.map((x) => (
           <li key={x.sci}><button type="button" aria-pressed={chosen?.sci === x.sci} onClick={() => setChosen(x)}>
             <PlainName zh={x.zh} en={x.en} sci={x.sci} size="row" /></button></li>
         ))}
-        {!list.length && <li className="hint">{q.trim() ? "没有找到" : "输入名字搜索"}</li>}
+        {!list.length && <li className="hint">{q.trim() ? t("correct.none") : t("correct.type")}</li>}
       </ul>
-      <div className="row" role="radiogroup" aria-label="改哪些照片">
-        <label><input type="radio" checked={scope === "one"} onChange={() => setScope("one")} /> {count ? `选中的 ${count} 张` : "这一张"}</label>
-        {burst && <label><input type="radio" checked={scope === "burst"} onChange={() => setScope("burst")} /> 这一连拍组</label>}
-        {current && <label><input type="radio" checked={scope === "same"} onChange={() => setScope("same")} /> 这批里所有被认成 <i>{current}</i> 的照片</label>}
+      <div className="row" role="radiogroup" aria-label={t("correct.which")}>
+        <label><input type="radio" checked={scope === "one"} onChange={() => setScope("one")} /> {count ? t("correct.picked", { n: count }) : t("correct.this")}</label>
+        {burst && <label><input type="radio" checked={scope === "burst"} onChange={() => setScope("burst")} /> {t("correct.burst")}</label>}
+        {current && <label><input type="radio" checked={scope === "same"} onChange={() => setScope("same")} /> {t("correct.same")}<i>{current}</i>{t("correct.same_after")}</label>}
       </div>
       <div className="row">
         <button type="button" className="btn primary slim" disabled={!chosen || busy} onClick={() => run(() => onApply(chosen!.sci, scope))}>
-          {chosen ? `改成 ${chosen.zh ?? chosen.en}` : "先选一个鸟种"}</button>
-        <button type="button" className="btn slim" disabled={busy} onClick={() => run(() => onApply(null, scope))}>标为不确定</button>
-        {manual && onUndo && <button type="button" className="btn slim" disabled={busy} onClick={() => run(() => onUndo(scope))}>撤销改正</button>}
-        <button type="button" className="btn link" onClick={onClose}>取消</button>
+          {chosen ? t("correct.to", { name: chosen.zh ?? chosen.en ?? "" }) : t("correct.choose")}</button>
+        <button type="button" className="btn slim" disabled={busy} onClick={() => run(() => onApply(null, scope))}>{t("correct.uncertain")}</button>
+        {manual && onUndo && <button type="button" className="btn slim" disabled={busy} onClick={() => run(() => onUndo(scope))}>{t("correct.undo")}</button>}
+        <button type="button" className="btn link" onClick={onClose}>{t("correct.cancel")}</button>
       </div>
       {err && <p className="error-text" role="alert">{err}</p>}
     </div>

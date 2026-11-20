@@ -11,6 +11,7 @@ import traceback
 from collections.abc import Callable
 from concurrent.futures import Future
 
+from birdcm.i18n import t
 from birdcm import stars
 from birdcm.store import Store
 
@@ -157,7 +158,7 @@ class Scheduler:
                 rating = self._rate(sid, scan["ratio"])
             except Exception as e:  # noqa: BLE001
                 traceback.print_exc()
-                self.store.set_state(sid, "failed", error=f"标星出错：{type(e).__name__}: {e}"[:500])
+                self.store.set_state(sid, "failed", error=t("queue.rating_failed", e=f"{type(e).__name__}: {e}")[:500])
                 return
             if self.store.write_rating(sid, rating, complete=True, ratio=scan["ratio"]):
                 return

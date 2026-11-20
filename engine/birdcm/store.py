@@ -94,6 +94,8 @@ def photo_row(r: sqlite3.Row, slim_result: bool = False) -> dict:
     d["quality"] = json.loads(d["quality"]) if d.get("quality") else None
     d["variants"] = json.loads(d["variants"]) if d.get("variants") else []
     d["star_auto"] = json.loads(d["star_auto"]) if d.get("star_auto") else None
+    if (d.get("star_reason") or "").startswith("["):                   # a code (i18n.R); older rows: a Chinese sentence
+        d["star_reason"] = json.loads(d["star_reason"])
     d["file"] = Path(d["path"]).name
     return d
 
@@ -484,7 +486,7 @@ class Store:
                 auto = f.get("star_auto")
                 db.execute("UPDATE photo SET stars=?, star_reason=?, burst_group=?, burst_rank=?, burst_size=?, species_fix=?, quality=?, "
                            "star_auto=? WHERE id=? AND scan_id=?",
-                           (f.get("stars"), f.get("star_reason"), f.get("burst_group"), f.get("burst_rank"), f.get("burst_size"),
+                           (f.get("stars"), json.dumps(f["star_reason"], ensure_ascii=False) if isinstance(f.get("star_reason"), list) else f.get("star_reason"), f.get("burst_group"), f.get("burst_rank"), f.get("burst_size"),
                             json.dumps(fix, ensure_ascii=False) if fix else None, json.dumps(qual) if qual else None,
                             json.dumps(auto, ensure_ascii=False) if auto else None, pid, scan_id))
             self._event(db, scan_id, "stars", {})

@@ -1,5 +1,7 @@
 // The pure parts of looking at photos (no React, no DOM): the zoom viewport and the grid's multi-select.
 // Kept apart so they can be tested on their own (look.test.ts). Also the result list's filters and order.
+import { type Key, t } from "./i18n";
+import { M } from "./i18n.text";
 import type { PhotoResult, PhotoRow } from "./types";
 
 /** One viewport for every pane: fit, or s screen (CSS) px per image px around (cx, cy), normalised 0-1 in the
@@ -65,10 +67,10 @@ export function headOf(r: { eye: number[] | null; eye_visible: boolean | null; b
 
 // ---------- the result list: filters and order ----------
 export function nameOf(r: PhotoResult): string {
-  if (r.rejected) return r.reject_reason || "没有找到鸟";
+  if (r.rejected) return r.reject_reason || t("look.no_bird");
   const s = r.species;
-  if (!s || s.level === "uncertain" || !s.label) return "不确定";
-  if (s.level === "genus") return `${s.label.sci.replace(/ sp\.$/, "")} 属`;
+  if (!s || s.level === "uncertain" || !s.label) return t("look.uncertain");
+  if (s.level === "genus") return t("look.genus", { g: s.label.sci.replace(/ sp\.$/, "") });
   return s.label.zh || s.label.en || s.label.sci;
 }
 export const confirmed = (r: PhotoResult | null) => !!r && !r.rejected && r.species?.level === "species" && !!r.species.label;
@@ -153,3 +155,14 @@ export function starOf(e: { key: string; metaKey: boolean; ctrlKey: boolean; alt
   const k = e.key.toLowerCase();
   return k === "x" ? -1 : k === "u" ? null : /^[0-3]$/.test(k) ? +k : undefined;
 }
+
+// ---------- the engine's rarity and IUCN words: wire values (the engine stores and compares them), shown translated ----------
+const RARITY: Record<string, Key> = {
+  "无记录": "rarity.none", "罕见": "rarity.rare", "少见": "rarity.scarce", "不常见": "rarity.uncommon", "常见": "rarity.common",
+  "数据不足": "rarity.no_data", "未知": "rarity.unknown", "时间未知": "rarity.no_time", "不可用": "rarity.unavailable",
+  "按全国数据估计": "rarity.country_note",
+};
+/** A rarity label or note from the engine in the page's language (an unknown word as it came). */
+export const rarityText = (label: string | null | undefined) => (label && RARITY[label] ? t(RARITY[label]) : label ?? "");
+/** IUCN category code -> its name in the page's language. */
+export const iucnText = (code: string) => (`iucn.${code}` in M ? t(`iucn.${code}` as Key) : code);

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageOps
+from birdcm.i18n import MSG, t
 
 RAW_EXT = {".arw", ".dng"}
 SCAN_EXT = RAW_EXT | {".jpg", ".jpeg"}
@@ -97,13 +98,13 @@ def list_photos(folder: str | Path, recursive: bool = False) -> list[Path]:
     Raises ValueError when a photo's path has a line break (it could inject exiftool options)."""
     root = Path(folder).expanduser().resolve()
     if not root.is_dir():
-        raise NotADirectoryError(f"不是文件夹：{root}")
+        raise NotADirectoryError(t("decode.not_dir", p=root))
     it = root.rglob("*") if recursive else root.iterdir()
     out = sorted(p for p in it if p.suffix.lower() in SCAN_EXT and p.is_file()
                  and not any(part.startswith(".") for part in p.relative_to(root).parts))
     bad = [str(p) for p in out if not safe_arg(str(p))]
     if bad:
-        raise ValueError(f"这些照片的文件名里有换行，请先改名再扫描：{bad[:3]!r}")
+        raise ValueError(t("decode.newline", names=repr(bad[:3])))
     return out
 
 
@@ -164,9 +165,9 @@ def decode(job: dict) -> dict:
     try:
         st = path.stat()
     except FileNotFoundError:
-        raise FileChanged("文件已不存在") from None
+        raise FileChanged(MSG["decode.gone"][0]) from None      # stored as the photo's error: Chinese, shown via i18n.text
     if (st.st_size, st.st_mtime_ns) != (job["size"], job["mtime_ns"]):
-        raise FileChanged("文件在列出之后被修改过")
+        raise FileChanged(MSG["decode.changed"][0])
     im, w, h, orientation, source = load_upright(path, job.get("mode", "embedded"))
     t1 = time.perf_counter()
     frame = _fit(im, FRAME)
@@ -200,9 +201,9 @@ def full_jpeg(job: dict) -> bytes:
     try:
         st = path.stat()
     except FileNotFoundError:
-        raise FileChanged("文件已不存在") from None
+        raise FileChanged(MSG["decode.gone"][0]) from None      # stored as the photo's error: Chinese, shown via i18n.text
     if (st.st_size, st.st_mtime_ns) != (job["size"], job["mtime_ns"]):
-        raise FileChanged("文件在列出之后被修改过")
+        raise FileChanged(MSG["decode.changed"][0])
     if path.suffix.lower() not in RAW_EXT:
         with Image.open(path) as im:
             orientation = int(im.getexif().get(0x0112, 1) or 1)
@@ -247,7 +248,7 @@ class ExifTool:
 
     def _start(self) -> None:
         if not self.available():
-            raise RuntimeError("找不到 exiftool。macOS 上运行 `brew install exiftool` 安装后再试。")
+            raise RuntimeError(t("decode.no_exiftool"))
         self.proc = subprocess.Popen(["exiftool", "-stay_open", "True", "-@", "-"], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         # exiftool -stay_open does not exit when its stdin closes: a tiny watcher ends it if this process dies without
@@ -282,11 +283,11 @@ class ExifTool:
             left = end - time.monotonic()
             if left <= 0 or not select.select([fd], [], [], left)[0]:
                 self._stop()
-                raise TimeoutError("exiftool 超时")
+                raise TimeoutError(t("decode.exiftool_timeout"))
             chunk = os.read(fd, 1 << 16)
             if not chunk:
                 self._stop()
-                raise RuntimeError("exiftool 退出了")
+                raise RuntimeError(t("decode.exiftool_exited"))
             out += chunk
         return out[:out.index(mark)]
 
@@ -301,7 +302,7 @@ class ExifTool:
             return {}
         for p in paths:                     # one argument per line on the -@ protocol: a newline would inject options
             if not safe_arg(p):
-                raise ValueError(f"文件名含换行或不是绝对路径，拒绝交给 exiftool：{p!r}")
+                raise ValueError(t("decode.bad_arg", p=repr(p)))
         with self.lock:
             raw = self._ask(["-j", "-charset", "filename=utf8", *TAGS, *paths])
         rows = json.loads(raw or b"[]")

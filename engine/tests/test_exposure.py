@@ -5,6 +5,7 @@ from birdcm.pipeline import clipping
 from birdcm.stars import Config, exposure, rate
 
 from test_select import photo
+from birdcm.i18n import text  # star reasons are codes: rendered in Chinese (conftest)
 
 BOX = [0.25, 0.25, 0.75, 0.75]
 
@@ -39,7 +40,7 @@ def test_large_flat_255_is_blown():
     b[40:160, 40:160] = 255                                                   # the bird's middle burnt out
     hi, lo = clipping(frame(b), BOX)
     assert hi > 0.5 and lo == 0
-    assert exposure({"clip_hi": hi, "clip_lo": lo}, Config()) == "高光溢出"
+    assert text(exposure({"clip_hi": hi, "clip_lo": lo}, Config())) == "高光溢出"
 
 
 def test_one_channel_clipped_colour_is_not_blown():
@@ -53,7 +54,7 @@ def test_large_dead_black_is_crushed():
     b[30:170, 30:170] = 1
     hi, lo = clipping(frame(b), BOX)
     assert lo > 0.5 and hi == 0
-    assert exposure({"clip_hi": hi, "clip_lo": lo}, Config()) == "暗部死黑"
+    assert text(exposure({"clip_hi": hi, "clip_lo": lo}, Config())) == "暗部死黑"
 
 
 def test_background_in_the_box_corners_counts_little():
@@ -73,11 +74,11 @@ def test_malus_and_reason_in_both_strategies_and_old_results_untouched():
     assert sel[0]["q"] < sel[2]["q"] and sel[1]["q"] < sel[2]["q"]
     assert sel[2]["q"] == sel[3]["q"] and sel[3]["q_parts"]["exposure"] == 0
     assert sel[0]["q_parts"]["exposure"] == -Config().exposure_malus
-    assert "高光溢出" in sel[0]["star_reason"] and "暗部死黑" in sel[1]["star_reason"]
+    assert "高光溢出" in text(sel[0]["star_reason"]) and "暗部死黑" in text(sel[1]["star_reason"])
     assert sel[0]["stars"] < 3 and sel[1]["stars"] < 3
-    assert not any(w in sel[i]["star_reason"] for i in range(2, 8) for w in ("高光溢出", "暗部死黑"))
+    assert not any(w in text(sel[i]["star_reason"]) for i in range(2, 8) for w in ("高光溢出", "暗部死黑"))
     quo = rate(rows, {"strategy": "quota"})
     assert quo[0]["q"] < quo[2]["q"] and quo[2]["q"] == quo[3]["q"]
-    assert "高光溢出" in quo[0]["star_reason"] and "暗部死黑" in quo[1]["star_reason"]
+    assert "高光溢出" in text(quo[0]["star_reason"]) and "暗部死黑" in text(quo[1]["star_reason"])
     off = rate(rows, {"keep": 100, "exposure_malus": 0})
     assert off[0]["q"] == off[2]["q"]

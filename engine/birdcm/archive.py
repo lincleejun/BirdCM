@@ -21,6 +21,7 @@ import uuid
 from pathlib import Path
 
 from birdcm import library, places
+from birdcm import i18n
 
 APPLICATION_ID = 1112101441
 MIME = "application/vnd.birdcm.archive"
@@ -248,36 +249,36 @@ def validate(path: Path) -> dict:
         con = open_ro(path)
         con.execute("SELECT count(*) FROM sqlite_master").fetchone()
     except sqlite3.DatabaseError:
-        raise ValueError("不是观羽的备份文件（打不开）") from None
+        raise ValueError(i18n.t("archive.unreadable")) from None
     try:
         if con.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID:
-            raise ValueError("不是观羽的备份文件")
+            raise ValueError(i18n.t("archive.not_backup"))
         if con.execute("PRAGMA user_version").fetchone()[0] != 1:
-            raise ValueError("备份文件的格式版本不认识（可能是更新版本的观羽写的）")
+            raise ValueError(i18n.t("archive.version"))
         objs = [(r[0], r[1]) for r in con.execute("SELECT type, name FROM sqlite_master")]
         tables = {n for t, n in objs if t == "table"}
         if tables != set(SHAPE):
-            raise ValueError("备份文件的表不对")
+            raise ValueError(i18n.t("archive.tables"))
         for t, n in objs:
             if t not in ("table", "index") or (t == "index" and n not in INDEXES and not n.startswith("sqlite_autoindex_")):
-                raise ValueError(f"备份文件里有不认识的对象：{t} {n}")
+                raise ValueError(i18n.t("archive.object", t=t, n=n))
         for n, cols in SHAPE.items():
             if [c[1] for c in con.execute(f"PRAGMA table_info({n})")] != cols:
-                raise ValueError(f"备份文件的 {n} 列不对")
+                raise ValueError(i18n.t("archive.columns", n=n))
         if con.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or con.execute("PRAGMA foreign_key_check").fetchone():
-            raise ValueError("备份文件已损坏")
+            raise ValueError(i18n.t("archive.corrupt"))
         meta = {r[0]: r[1] for r in con.execute("SELECT key, value FROM archive_meta")}
         if any(k not in meta for k in META_KEYS) or meta["format"] != "birdcm-archive" or meta["version"] != "1":
-            raise ValueError("备份文件缺少必要信息或版本不对")
+            raise ValueError(i18n.t("archive.meta"))
         assets = {r["hash"]: dict(r) for r in con.execute("SELECT * FROM ll_asset")}
         blobs = {r[0]: r[1] for r in con.execute("SELECT hash, length(original) FROM archive_blob")}
         for h, a in assets.items():
             if not HEX64.match(h) or a["missing"] not in (0, 1):
-                raise ValueError("备份文件里的照片编号不对")
+                raise ValueError(i18n.t("archive.photo_ids"))
             if a["missing"] == 1 and h in blobs:
-                raise ValueError("标为缺失的照片不能带原图")
+                raise ValueError(i18n.t("archive.missing_blob"))
             if a["missing"] == 0 and (h not in blobs or blobs[h] != a["byte_count"]):
-                raise ValueError("备份文件里的原图和记录不一致")
+                raise ValueError(i18n.t("archive.blob_mismatch"))
             if a["missing"] == 0:
                 rowid = con.execute("SELECT rowid FROM archive_blob WHERE hash = ?", (h,)).fetchone()[0]
                 d = hashlib.sha256()
@@ -285,23 +286,23 @@ def validate(path: Path) -> dict:
                     while chunk := b.read(CHUNK):
                         d.update(chunk)
                 if d.hexdigest() != h:
-                    raise ValueError("备份文件里有原图和它的校验值对不上")
+                    raise ValueError(i18n.t("archive.blob_hash"))
             json.loads(a["shooting_json"])
         canon = set()
         rec_ids = set()
         for r in con.execute("SELECT * FROM ll_record"):
             if not UUID_RE.match(r["id"]) or r["asset_hash"] not in assets:
-                raise ValueError("备份文件里的记录编号不对")
+                raise ValueError(i18n.t("archive.record_ids"))
             if r["date_source"] not in ("photo", "identified", "identified_legacy_zone", "user") or r["canonical"] not in (0, 1):
-                raise ValueError("备份文件里的日期来源不对")
+                raise ValueError(i18n.t("archive.date_source"))
             p = library.parse_wall(r["local_day"])
             if not p or p[3] != "day" or (r["lat"] is None) != (r["lon"] is None):
-                raise ValueError("备份文件里的日期或坐标不对")
+                raise ValueError(i18n.t("archive.date_point"))
             if r["place_source"] not in ("photo", "map", "device", "region", "none"):
-                raise ValueError("备份文件里的地点来源不对")
+                raise ValueError(i18n.t("archive.place_source"))
             if r["canonical"] == 1:
                 if r["asset_hash"] in canon:
-                    raise ValueError("同一张照片有两条当前记录")
+                    raise ValueError(i18n.t("archive.two_current"))
                 canon.add(r["asset_hash"])
             json.loads(r["payload_json"])
             rec_ids.add(r["id"])
@@ -309,19 +310,19 @@ def validate(path: Path) -> dict:
         for s in con.execute("SELECT * FROM ll_subject"):
             n_sub += 1
             if s["record_id"] not in rec_ids or not library.valid_box([s["x0"], s["y0"], s["x1"], s["y1"]]):
-                raise ValueError("备份文件里的框不对")
+                raise ValueError(i18n.t("archive.boxes"))
             if s["model_level"] not in ("unclassified", "species", "genus", "uncertain", "unresolved") \
                     or s["correction_state"] not in ("none", "species", "uncertain") \
                     or (s["correction_state"] == "species") != (s["corrected_key"] is not None):
-                raise ValueError("备份文件里的鸟种状态不对")
+                raise ValueError(i18n.t("archive.species_state"))
             if s["count_edit"] is not None and not 1 <= s["count_edit"] <= library.MAX_COUNT:
-                raise ValueError("备份文件里的数量不对")
+                raise ValueError(i18n.t("archive.count"))
         for g in con.execute("SELECT group_key, count_edit FROM ll_group_edit"):
             k = json.loads(g[0])
             if not (isinstance(k, list) and len(k) == 4 and k[0] == "obs-v1") or not 1 <= g[1] <= library.MAX_COUNT:
-                raise ValueError("备份文件里的观察数量更正不对")
+                raise ValueError(i18n.t("archive.count_fix"))
         if int(meta["record_count"]) != len(rec_ids) or int(meta["asset_count"]) != len(assets) or int(meta["subject_count"]) != n_sub:
-            raise ValueError("备份文件的计数和内容不一致")
+            raise ValueError(i18n.t("archive.totals"))
         return {"meta": meta, "records": len(rec_ids), "assets": len(assets), "subjects": n_sub,
                 "blob_bytes": sum(blobs.values()), "missing_originals": sum(1 for a in assets.values() if a["missing"])}
     finally:
@@ -433,7 +434,7 @@ def apply(lib: "library.Library", path: Path, choices: dict[str, str], restore: 
                 os.fsync(f.fileno())
             if d.hexdigest() != h:
                 part.unlink()
-                raise ValueError("原图校验没通过，没有导入")
+                raise ValueError(i18n.t("archive.blob_check"))
             part.rename(dest)
             made.append(dest)
     finally:

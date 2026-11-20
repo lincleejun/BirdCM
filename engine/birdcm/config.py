@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from birdcm.i18n import t
 
 HOME = Path.home()
 
@@ -40,4 +41,4 @@ def check_own_dirs(folder: str | Path) -> None:
     f = Path(folder).expanduser().resolve()
     for d in (data_dir(), cache_dir()):
         if inside(d, f):
-            raise ValueError(f"数据或缓存目录 {d} 在照片文件夹 {f} 里面；请用 BIRDCM_DATA_DIR / BIRDCM_CACHE_DIR 换到别处")
+            raise ValueError(t("config.inside", d=d, f=f))

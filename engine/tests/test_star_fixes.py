@@ -6,6 +6,7 @@ from birdcm.app import create_app
 from birdcm.store import Store
 from test_corrections import CAT, H, PORT, res
 from test_queue import FakeEngine
+from birdcm.i18n import text  # star reasons are codes: rendered in Chinese (conftest)
 
 
 def setup(tmp_path, monkeypatch, sched_too=False):
@@ -44,7 +45,7 @@ def test_set_undo_and_no_effect_on_others(tmp_path, monkeypatch):
     after = shown(store, sid)
     assert after[5] == want and after[:5] == base[:5]                  # no budget taken, nobody else moved
     p = store.snapshot(sid)["photos"][5]
-    assert p["star_auto"]["stars"] == base[5] and p["star_reason"] == "主人手动设定"
+    assert p["star_auto"]["stars"] == base[5] and text(p["star_reason"]) == "主人手动设定"
     c.post(f"/api/scans/{sid}/stars", json={"photo_ids": [ids[5]], "stars": None}, headers=H)
     assert shown(store, sid) == base and store.snapshot(sid)["photos"][5]["star_auto"] is None
     assert c.post(f"/api/scans/{sid}/stars", json={"photo_ids": [ids[0]], "stars": 4}, headers=H).status_code == 400

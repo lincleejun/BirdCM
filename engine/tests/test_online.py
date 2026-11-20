@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from birdcm import online
+from birdcm.i18n import t
 
 FX = Path(__file__).parent / "fixtures" / "online"
 SPARROW = {"sci": "Passer domesticus", "wd_state": "exact-reviewed", "wd_qid": "Q14683", "inat_state": "exact-reviewed", "inat_id": 13858,
@@ -266,7 +267,7 @@ def test_attribution_licence_with_authority_as_artist_is_refused(net):
 
 
 def test_disclosure_names_only_what_is_built():
-    assert "地区包" not in online.DISCLOSURE and "不会发送你的照片" in online.DISCLOSURE
+    assert "地区包" not in t(online.DISCLOSURE) and "不会发送你的照片" in t(online.DISCLOSURE)
 
 
 def test_image_rendition_404_is_absent(net):

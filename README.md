@@ -24,6 +24,8 @@ A local, private assistant for bird photographers. Your photos never leave your 
 
 名称统一两行显示：中文名在上，英文名 · *学名* 在下。
 
+**界面语言 / Language**：简体中文或英文，默认跟随浏览器语言，可点顶部栏的「English / 中文」切换（记在本浏览器里）；星级理由和引擎的提示跟着界面语言。命令行（`birdcm …`）按 `LANG` 或 `BIRDCM_LANG=en|zh`。The web UI is in Simplified Chinese or English: it follows the browser's language, and the “English / 中文” button in the top bar switches it; the CLI follows `LANG` or `BIRDCM_LANG`.
+
 ## 下载
 
 [GitHub Releases](https://github.com/lincleejun/BirdCM/releases)：

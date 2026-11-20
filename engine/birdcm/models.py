@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 
 from birdcm import config
+from birdcm.i18n import t
 
 # ponytail: manifest found next to the source checkout; ship it as package data when there is a wheel release.
 MANIFEST = Path(os.environ.get("BIRDCM_MANIFEST") or Path(__file__).resolve().parents[2] / "models.toml")
@@ -65,13 +66,15 @@ def locate(entry: dict) -> Path | None:
 
 
 # How to get the model files, for both ways of running (Codex note: "uv run" means nothing to the packaged app's users)
-FETCH_HINT = "Mac 应用：在菜单栏的观羽图标里下载模型；从源码运行：在 engine/ 里执行 `uv run birdcm models fetch`。"
+FETCH_HINT = "models.fetch_hint"           # i18n key
 
 # What the app does without an optional file (models.toml optional = true).
-OPTIONAL_EFFECT = {"clear": "没有“清楚的鸟”判断：每个检测框都当作鸟来认",
-                   "aesthetic": "没有美学分：星级只用其余的信号",
-                   "rarity": "没有本地稀有度：显示“数据不足”",
-                   "rarity-global": "没有全球稀有度表：本地稀有度只覆盖美国、加拿大、中国，其他地方显示“数据不足”"}
+OPTIONAL_EFFECT = {"clear": "models.effect_clear", "aesthetic": "models.effect_aesthetic",     # i18n keys: effect(role)
+                   "rarity": "models.effect_rarity", "rarity-global": "models.effect_rarity_global"}
+
+
+def effect(role: str) -> str:
+    return t(OPTIONAL_EFFECT[role]) if role in OPTIONAL_EFFECT else ""
 
 
 def status() -> dict:
@@ -81,11 +84,11 @@ def status() -> dict:
               "optional": bool(e.get("optional")), "released": e.get("released", True)} for e in manifest()["file"]]
     missing = [f["name"] for f in files if not f["path"] and not f["optional"]]
     have = {f["role"] for f in files if f["path"]}
-    opt = [{"name": f["name"], "role": f["role"], "released": f["released"], "effect": OPTIONAL_EFFECT.get(f["role"], "")}
+    opt = [{"name": f["name"], "role": f["role"], "released": f["released"], "effect": effect(f["role"])}
            for f in files if not f["path"] and f["optional"]
            and not (f["role"] == "rarity" and "rarity-global" in have)]      # the global table replaces the older one
     return {"ready": not missing, "files": files, "missing": missing, "optional_missing": opt, "fetch": "birdcm models fetch",
-            "fetch_hint": FETCH_HINT}
+            "fetch_hint": t(FETCH_HINT)}
 
 
 def paths() -> dict[str, Path]:
@@ -100,7 +103,7 @@ def paths() -> dict[str, Path]:
         else:
             out[e["role"]] = p
     if missing:
-        raise FileNotFoundError(f"缺模型文件：{', '.join(missing)}。{FETCH_HINT}")
+        raise FileNotFoundError(t("models.missing", names=", ".join(missing), hint=t(FETCH_HINT)))
     return out
 
 
@@ -120,7 +123,7 @@ def fetch(log=print) -> int:
     failed = 0
     for e in manifest()["file"]:
         if not e.get("released", True) and not locate(e):
-            log(f"skip {e['name']}: 还没有发布（{OPTIONAL_EFFECT.get(e['role'], '')}）")
+            log(f"skip {e['name']}: {t('models.skip_unreleased', effect=effect(e['role']))}")
             continue
         if locate(e):
             log(f"ok       {e['name']}")

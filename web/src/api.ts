@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
+import { acceptLanguage } from "./i18n";
 
 let token: Promise<string> | null = null;
+
+// Every request names the page's language: the engine answers its messages (errors, star reasons) in it.
+const lang = (h: Record<string, string> = {}) => ({ ...h, "Accept-Language": acceptLanguage() });
 
 function session(fresh = false): Promise<string> {
   if (fresh) token = null;
@@ -21,21 +25,21 @@ async function fail(r: Response): Promise<never> {
   const t = await r.text().catch(() => r.statusText);
   let msg = t;
   try { msg = JSON.parse(t)?.detail ?? t; } catch { /* plain text */ }
-  throw new Error(msg || r.statusText);
+  throw Object.assign(new Error(msg || r.statusText), { status: r.status });       // status: e.g. 409 = reload first
 }
 
 async function send<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await withToken((tok) => {
     const headers: Record<string, string> = { "X-BirdCM-Token": tok };
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    return fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    return fetch(url, { method, headers: lang(headers), body: body === undefined ? undefined : JSON.stringify(body) });
   });
   if (!r.ok) return fail(r);
   return r.json();
 }
 
 export async function get<T>(url: string): Promise<T> {
-  const r = await fetch(url);
+  const r = await fetch(url, { headers: lang() });
   if (!r.ok) return fail(r);
   return r.json();
 }
@@ -44,7 +48,7 @@ export const put = <T,>(url: string, body?: unknown) => send<T>("PUT", url, body
 export const del = <T,>(url: string) => send<T>("DELETE", url);
 
 export async function upload<T>(url: string, form: FormData): Promise<T> {
-  const r = await withToken((tok) => fetch(url, { method: "POST", headers: { "X-BirdCM-Token": tok }, body: form }));
+  const r = await withToken((tok) => fetch(url, { method: "POST", headers: lang({ "X-BirdCM-Token": tok }), body: form }));
   if (!r.ok) return fail(r);
   return r.json();
 }
@@ -70,7 +74,7 @@ export function useEngine(): EngineState | null {
 
 /** A POST whose answer is text (a file to save), with the same token handling. */
 export async function postText(url: string, body: unknown): Promise<string> {
-  const r = await withToken((tok) => fetch(url, { method: "POST", headers: { "X-BirdCM-Token": tok, "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+  const r = await withToken((tok) => fetch(url, { method: "POST", headers: lang({ "X-BirdCM-Token": tok, "Content-Type": "application/json" }), body: JSON.stringify(body) }));
   if (!r.ok) return fail(r);
   return r.text();
 }

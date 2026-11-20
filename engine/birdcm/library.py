@@ -27,6 +27,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from birdcm import config
+from birdcm.i18n import t
 
 DERIVATION_VERSION = "1"
 PENDING = ("genus", "uncertain", "unclassified", "unresolved", "needs_match")
@@ -280,47 +281,47 @@ def unresolved_key(path: str, size: int, mtime_ns: int) -> str:
 def check_edit(edit: dict, catalogue: dict) -> dict:
     """Validate one operation; returns it normalised. ValueError with a message for the person."""
     if not isinstance(edit, dict) or edit.get("op") not in ("species", "count", "exclude", "date", "place"):
-        raise ValueError("edit.op 只能是 species / count / exclude / date / place")
+        raise ValueError(t("library.edit_op"))
     op = edit["op"]
     if op == "species":
         st, key = edit.get("state"), edit.get("key")
         if st not in ("species", "uncertain", "none"):
-            raise ValueError("state 只能是 species / uncertain / none")
+            raise ValueError(t("library.edit_state"))
         if st == "species" and (not isinstance(key, str) or (catalogue and key not in catalogue)):
-            raise ValueError(f"名录里没有这个学名：{key}")
+            raise ValueError(t("library.edit_unknown", key=key))
         if st != "species" and key is not None:
-            raise ValueError("不确定 / 恢复自动识别时 key 要是 null")
+            raise ValueError(t("library.edit_null_key"))
         return {"op": op, "state": st, "key": key}
     v = edit.get("value")
     if op == "count":
         if v is not None and not (isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= MAX_COUNT):
-            raise ValueError("数量只能是 1–999998 的整数，或 null 恢复自动")
+            raise ValueError(t("library.edit_count"))
     elif op == "exclude":
         if not isinstance(v, bool):
-            raise ValueError("exclude 的 value 要是 true / false")
+            raise ValueError(t("library.edit_exclude"))
     elif op == "date" and v is not None:
         if not isinstance(v, dict) or not isinstance(v.get("wall"), str) or not parse_wall(v["wall"]) \
                 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?", v["wall"]):
-            raise ValueError("日期要是 YYYY-MM-DD 或 YYYY-MM-DDTHH:mm:ss")
+            raise ValueError(t("library.edit_date"))
         off = v.get("offset_min")
         if off is not None and not (isinstance(off, int) and not isinstance(off, bool) and -840 <= off <= 840):
-            raise ValueError("时区偏移要在 −840 到 +840 分钟之间")
+            raise ValueError(t("library.edit_tz"))
         v = {"wall": v["wall"], "offset_min": off}
     elif op == "place" and v is not None:
         from birdcm import geo
         if not isinstance(v, dict) or v.get("source") not in ("photo", "map", "device", "region", "none"):
-            raise ValueError("地点来源只能是 photo / map / device / region / none")
+            raise ValueError(t("library.edit_source"))
         lat, lon, code, label = v.get("lat"), v.get("lon"), v.get("region_code"), v.get("label", "")
         if not isinstance(label, str) or len(label) > 200:
-            raise ValueError("地点名称要是文字")
+            raise ValueError(t("library.edit_label"))
         if v["source"] in ("map", "device"):
             if not geo.valid(lat, lon) or code is not None:
-                raise ValueError("地图 / 定位的地点要有合法经纬度")
+                raise ValueError(t("library.edit_point"))
         elif v["source"] == "region":
             if lat is not None or lon is not None or not (isinstance(code, str) and re.fullmatch(r"[A-Z]{2}(-[A-Z0-9]{1,3})?", code)):
-                raise ValueError("地区要有 ISO 3166 代码，且不带坐标")
+                raise ValueError(t("library.edit_region"))
         elif lat is not None or lon is not None or code is not None:
-            raise ValueError("照片位置 / 无地点不带坐标和代码")
+            raise ValueError(t("library.edit_none"))
         v = {"source": v["source"], "lat": lat, "lon": lon, "label": label, "region_code": code}
     return {"op": op, "value": v}
 
@@ -927,8 +928,8 @@ class Index:
                 "no_place_observations": len(none)}
 
 
-REASON = {"genus": "只认到属", "uncertain": "不确定", "unclassified": "还没识别的框", "unresolved": "名录里没有这个学名",
-          "needs_match": "需核对主体对应"}
+REASON = {"genus": "library.reason_genus", "uncertain": "library.reason_uncertain", "unclassified": "library.reason_unclassified",
+          "unresolved": "library.reason_unresolved", "needs_match": "library.reason_needs_match"}      # i18n keys
 
 
 def _fold(s: str | None) -> str:
@@ -1009,7 +1010,7 @@ def photo_list(ix: Index, sci=None, day=None, status="all", frm=None, to=None, o
             continue
         subs = [r for r in rows if r["level"] != "photo"]
         if status == "pending":
-            out += [{**ref(r), "day": r["local_day"], "level": r["level"], "reason": REASON.get(r["level"], r["level"]),
+            out += [{**ref(r), "day": r["local_day"], "level": r["level"], "reason": t(REASON[r["level"]]) if r["level"] in REASON else r["level"],
                      "species_key": r["species_key"], "_k": (r["local_day"], r["capture_wall"] or "", h, r["subject_id"])}
                     for r in subs if r["level"] in PENDING and (sci is None or r["species_key"] == sci)]
             continue

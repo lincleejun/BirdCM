@@ -15,18 +15,19 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from birdcm.decode import safe_arg
+from birdcm import i18n
 
 SIDECAR_EXT = {".arw"}          # RAW only: Lightroom keeps JPEG / DNG metadata inside the file (that it reads no sidecar for
                                 # them is our reading of Adobe's help, not tested: docs/deviations.md 80)
 RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
 KEYWORD_TAGS = ("{http://purl.org/dc/elements/1.1/}subject", "{http://ns.adobe.com/lightroom/1.0/}hierarchicalSubject")
 
-SKIP_FORMAT = "JPEG / DNG：Lightroom 把它们的元数据写在文件里面，观羽不改原片"
-SKIP_PENDING = "还没识别完"
-SKIP_MISSING = "原片不在了"
-SKIP_ODD = "旁边的 .xmp 不是普通文件（链接或文件夹），没动它"
-SKIP_BAD = "旁边的 .xmp 读不了（不是有效的 XML），没动它"
-SKIP_EMPTY = "没有星级也没有鸟种，不用写"
+SKIP_FORMAT = "xmp.skip_format"           # i18n keys: the counts are keyed by t(reason)
+SKIP_PENDING = "xmp.skip_pending"
+SKIP_MISSING = "xmp.skip_missing"
+SKIP_ODD = "xmp.skip_odd"
+SKIP_BAD = "xmp.skip_bad"
+SKIP_EMPTY = "xmp.skip_empty"
 
 
 def sha(b: bytes) -> str:
@@ -92,6 +93,7 @@ def plan(photos: list[dict]) -> tuple[list[dict], dict[str, int]]:
             if why is None and stars is None and not kws:
                 why = SKIP_EMPTY
         if why:
+            why = i18n.t(why)
             skipped[why] = skipped.get(why, 0) + 1
         else:
             todo.append({"photo": p["id"], "path": path, "side": side, "before": before, "stars": stars, "keywords": kws})
@@ -116,7 +118,7 @@ def args(t: dict, prev: dict | None, work: Path) -> list[str]:
         a += [f"-XMP-dc:Subject-={k}", f"-XMP-dc:Subject+={k}", f"-XMP-lr:HierarchicalSubject-={k}", f"-XMP-lr:HierarchicalSubject+={k}"]
     for x in a:
         if any(c in x for c in "\r\n\0"):
-            raise ValueError(f"字段含换行，拒绝交给 exiftool：{x!r}")
+            raise ValueError(i18n.t("xmp.newline", x=repr(x)))
     return [*a, str(work)]
 
 
@@ -149,7 +151,7 @@ def write(store, exif, scan_id: int, photos: list[dict]) -> dict:
             prev = store.xmp_last(str(t["side"]))
             out = exif.run(args(t, prev, work)).decode(errors="replace")
             if not work.is_file() or not any(f"1 image files {w}" in out for w in ("updated", "created", "unchanged")):
-                failed["exiftool 没写成"] = failed.get("exiftool 没写成", 0) + 1
+                failed[i18n.t("xmp.exiftool_failed")] = failed.get(i18n.t("xmp.exiftool_failed"), 0) + 1
                 continue
             after = work.read_bytes()
             if after == t["before"]:
@@ -167,7 +169,8 @@ def write(store, exif, scan_id: int, photos: list[dict]) -> dict:
             place(t["side"], t["after"])
         except OSError as e:
             store.xmp_forget(batch, str(t["side"]))
-            failed[f"写不进去：{e.strerror or e}"] = failed.get(f"写不进去：{e.strerror or e}", 0) + 1
+            why = i18n.t("xmp.cannot_write", e=e.strerror or e)
+            failed[why] = failed.get(why, 0) + 1
             continue
         if t["before"] is None:
             created += 1
@@ -198,7 +201,7 @@ def undo(store, scan_id: int) -> dict:
                 place(side, f["before"])
                 restored += 1
         elif now != f["before"]:
-            kept.append({"file": side.name, "reason": "我们写入后又被改过（Lightroom 或你自己），没动它" if now is not None
-                         else "已经被删了"})
+            kept.append({"file": side.name, "reason": i18n.t("xmp.kept_changed") if now is not None
+                         else i18n.t("xmp.kept_deleted")})
     store.xmp_drop(b["id"])
     return {"batch": b["id"], "deleted": deleted, "restored": restored, "kept": kept}

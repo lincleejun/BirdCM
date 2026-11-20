@@ -28,6 +28,8 @@ from birdcm import config, confirm, decode, geo, geometry, models
 from birdcm import rarity as rarity_mod
 from birdcm.result import PhotoResult
 from birdcm.sharpness import head_sharpness
+from birdcm import i18n
+from birdcm.i18n import MSG
 
 SMALL_BOX = 128                 # a subject box shorter than this (2048-frame px) is cropped from the decode resolution
 PIPELINE_VERSION = 10           # bump when any step's output changes: old results stop being reused
@@ -228,9 +230,9 @@ class Engine:
                     pool = self._new_pool()
                     for it in victims:
                         if id(it) in stuck:
-                            yield it, None, "解码超时（文件可能已损坏）"
+                            yield it, None, MSG["pipeline.decode_timeout"][0]       # stored: Chinese, shown via i18n.text
                         elif isolating:
-                            yield it, None, "解码进程崩溃（文件可能已损坏）"
+                            yield it, None, MSG["pipeline.decode_crash"][0]
                         else:
                             suspects.append(it)
                 if ready and (len(ready) >= self.det_batch or not (todo or suspects or inflight)
@@ -254,7 +256,7 @@ class Engine:
             d = (self._pool or self._new_pool()).submit(self.decode_fn, job).result(timeout=DECODE_TIMEOUT)
         except (BrokenProcessPool, TimeoutError):
             self._new_pool()
-            raise RuntimeError("解码失败：解码进程崩溃或超时（文件可能已损坏）") from None
+            raise RuntimeError(i18n.t("pipeline.decode_failed")) from None
         done: Future = Future()
         done.set_result(self._read_exif([path]))
         it = {"id": None, "path": path, "size": st.st_size, "mtime_ns": st.st_mtime_ns, "boxes": boxes}
@@ -448,7 +450,7 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         look = list(cut.convert("L").resize((8, 8), Image.Resampling.BOX).tobytes())
     clip = clipping(d["frame"], s["box"]) if s else None
     ex = {k: exif.get(k) for k in ("camera", "camera_id", "lens", "focal_mm", "aperture", "shutter", "iso", "ev", "focus_mode", "taken_at", "gps")}
-    reason = None if s else ("没有清楚的鸟" if dets else "没有找到鸟")
+    reason = None if s else MSG["stars.no_clear_bird" if dets else "stars.no_bird"][0]     # stored: Chinese, shown via i18n.text
     return {
         "file": os.path.basename(it["path"]), "width": W, "height": H, "orientation": d["orientation"],
         "source": d["source"], "exif": ex,

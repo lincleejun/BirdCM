@@ -39,6 +39,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from birdcm import geo
+from birdcm.i18n import t
 
 DATA = Path(__file__).with_name("data")
 NAMES = DATA / "ebird-names.csv"
@@ -197,7 +198,7 @@ def record_csv(photos: list[dict], location, species: list[str], counts: dict[st
                comments: dict[str, str] | None = None, protocol: str = "Incidental", with_files: bool = False) -> str:
     """The Record Format file (no header): one row per species per checklist."""
     if protocol not in PROTOCOLS:
-        raise ValueError(f"protocol 只能是 {' / '.join(PROTOCOLS)}")
+        raise ValueError(t("ebird.protocol", names=" / ".join(PROTOCOLS)))
     keep = set(species)
     names = clements()
     lines = []
@@ -211,7 +212,7 @@ def record_csv(photos: list[dict], location, species: list[str], counts: dict[st
             common = "" if genus_only else names.get(sci, ("", ""))[0] or (_effective(per[sci][0])["label"].get("en") or "")
             n = (counts or {}).get(sci) or "X"
             if n.upper() != "X" and not (n.isdigit() and 0 < int(n) < 999999):
-                raise ValueError(f"{sci} 的数量要是 1–999998 的整数或 X")
+                raise ValueError(t("ebird.count", sci=sci))
             note = (comments or {}).get(sci) or ""
             if with_files:
                 note = (note + " " if note else "") + "photos: " + " ".join(Path(p["path"]).name for p in per[sci])
@@ -233,7 +234,7 @@ def finish(lines: list[str]) -> str:
     """LF after every row; refused (never cut) above eBird's 1 MB."""
     text = "\n".join(lines) + ("\n" if lines else "")
     if len(text.encode("utf-8")) > MAX_BYTES:
-        raise ValueError("文件超过 eBird 的 1 MB 上限：请少选几种或分几次导出")
+        raise ValueError(t("ebird.too_big"))
     return text
 
 
@@ -286,7 +287,7 @@ def lifelist_csv(ix, frm=None, to=None, species: list[str] | None = None, counts
     lines = []
     cls = lifelist_checklists(ix, frm, to, keep)
     if fallback == "refuse" and any(c["fallback"] for c in cls):
-        raise ValueError("有照片没有拍摄日期（按首次识别日期统计）：请先核对，选择包含或排除这些记录")
+        raise ValueError(t("ebird.no_date"))
     for cl in cls:
         if cl["fallback"] and fallback == "exclude":
             continue
@@ -295,7 +296,7 @@ def lifelist_csv(ix, frm=None, to=None, species: list[str] | None = None, counts
             genus, _, epithet = sci.partition(" ")
             n = (counts or {}).get(sci) or (str(g["estimate"]) if use_estimates else "X")
             if n.upper() != "X" and not (n.isdigit() and 0 < int(n) < 999999):
-                raise ValueError(f"{sci} 的数量要是 1–999998 的整数或 X")
+                raise ValueError(t("ebird.count", sci=sci))
             note = LIFELIST_NOTE + ("; capture date missing (identification date used)" if cl["fallback"] else "")
             lines.append(line([names.get(sci, ("", ""))[0], genus, epithet, "X" if n.upper() == "X" else n, "", cl["name"],
                                "" if cl["lat"] is None else f"{cl['lat']:.5f}", "" if cl["lon"] is None else f"{cl['lon']:.5f}",
