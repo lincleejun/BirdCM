@@ -10,8 +10,19 @@ final class GeoNetwork {
     struct Graph: Decodable { var initial: [String:Initial]; var nodes: [Node] }
     let graph: Graph
     let constants: [String:Tensor]
+    /// drop[i]: activations no node after i reads (never constants or `probabilities`), released once node i is done.
+    let drop: [[String]]
     init(weights: URL, graphURL: URL) throws {
         graph = try JSONDecoder().decode(Graph.self, from: Data(contentsOf:graphURL))
+        // Liveness by name holds only if each activation is written once and none shadows a constant (or `input`).
+        var written = Set(graph.initial.keys).union(["input"]), last: [String:Int] = [:]
+        for (i,n) in graph.nodes.enumerated() {
+            for o in n.outputs { guard written.insert(o).inserted else { throw CocoaError(.fileReadCorruptFile) } }
+            for name in n.inputs + n.outputs { last[name] = i }
+        }
+        var d = [[String]](repeating:[],count:graph.nodes.count)
+        for (name,i) in last where graph.initial[name] == nil && name != "probabilities" { d[i].append(name) }
+        drop = d
         let data = try Data(contentsOf:weights,options:.mappedIfSafe)
         var c: [String:Tensor] = [:]
         for (key,v) in graph.initial {
@@ -34,10 +45,13 @@ final class GeoNetwork {
             env["model.species_head.head.3.bias"] = Tensor(values: columns.map { b.values[$0] }, rows: 1, cols: columns.count)
         }
         env["input"] = Tensor(values:points.flatMap{$0},rows:points.count,cols:3)
-        for n in graph.nodes {
+        for (i,n) in graph.nodes.enumerated() {
             let args = try n.inputs.map { name -> Tensor in
                 guard let t = env[name] else { throw CocoaError(.fileReadCorruptFile) }; return t
             }
+            // After the outputs are stored, on every exit (Split and the vDSP path `continue`); `args` dies with this
+            // iteration, so a dropped activation is freed before the next node unless an output aliases it (Unsqueeze).
+            defer { for name in drop[i] { env[name] = nil } }
             let a = args[0]
             var result: Tensor
             switch n.op {
@@ -99,7 +113,6 @@ final class GeoNetwork {
             default: throw CocoaError(.fileReadCorruptFile)
             }
             env[n.outputs[0]] = result
-            // Keep only constants and still-needed activations (the graph is small, release at call end).
         }
         guard let out = env["probabilities"] else { throw CocoaError(.fileReadCorruptFile) }
         return (0..<out.rows).map { Array(out.values[$0*out.cols..<($0+1)*out.cols]) }

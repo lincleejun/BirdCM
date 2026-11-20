@@ -31,20 +31,85 @@ final class Rarity {
         Self.regionLock.lock(); Self.regionCache[bucket] = value; Self.regionLock.unlock()
         return value
     }
+    private var areaCache = [Int64: Double]()
+    private let areaLock = NSLock()
+    /// Summed bounding-box area of one region's shapes, the same SQLite expression the lookup used inline; once per region per instance.
+    /// nil when the query fails (not cached), as the old inline subquery failing gave no region at all.
+    private func area(_ id: Int64) -> Double? {
+        areaLock.lock(); if let hit = areaCache[id] { areaLock.unlock(); return hit }; areaLock.unlock()
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT sum((maxx-minx)*(maxy-miny)) FROM shapes WHERE region_id=?", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, id)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        let value = sqlite3_column_double(stmt, 0)
+        areaLock.lock(); areaCache[id] = value; areaLock.unlock()
+        return value
+    }
+    private var boxCache: [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]?
+    private let boxLock = NSLock()
+    /// Every shape's rowid and bounding box, read once per instance (NULL boxes never match in SQL, so they are left out;
+    /// TEXT/BLOB values compare above every number in SQL, so they are read as +Inf). nil when the read fails part way; nothing is kept and the next call reads again.
+    private func boxes() -> [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]? {
+        boxLock.lock(); if let hit = boxCache { boxLock.unlock(); return hit }; boxLock.unlock()
+        var stmt: OpaquePointer?
+        let col = { (c: String) in "CASE WHEN typeof(\(c)) IN ('text','blob') THEN 9e999 ELSE \(c) END" }
+        guard sqlite3_prepare_v2(db, "SELECT rowid,\(["minx", "maxx", "miny", "maxy"].map(col).joined(separator: ",")) FROM shapes WHERE minx IS NOT NULL AND maxx IS NOT NULL AND miny IS NOT NULL AND maxy IS NOT NULL", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        var out = [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]()
+        var rc = sqlite3_step(stmt)
+        while rc == SQLITE_ROW {
+            out.append((sqlite3_column_int64(stmt, 0), sqlite3_column_double(stmt, 1), sqlite3_column_double(stmt, 2), sqlite3_column_double(stmt, 3), sqlite3_column_double(stmt, 4)))
+            rc = sqlite3_step(stmt)
+        }
+        guard rc == SQLITE_DONE else { return nil }
+        boxLock.lock(); if boxCache == nil { boxCache = out }; let value = boxCache!; boxLock.unlock()
+        return value
+    }
+    private typealias ShapeRow = (code: String, level: Int, region: Int64, ring: [Double])
+    private var shapeCache = [Int64: [ShapeRow]]()
+    private let shapeLock = NSLock()
     /// Port of rarity_global.region_at: ISO codes, even/odd rings, smallest area wins, 0.25° coastal tolerance.
+    /// Each shape row is read and decoded once per instance (shapeCache, by rowid: its one joined row, or none when the blob is NULL
+    /// or its region_id is not in regions); area() is still asked row by row on every call, as before.
     func regionAt(lat:Double,lon:Double) -> (division:String?,country:String?) {
-        var stmt:OpaquePointer?
-        let sql="SELECT r.code,r.level,s.pts,(SELECT sum((maxx-minx)*(maxy-miny)) FROM shapes t WHERE t.region_id=s.region_id) FROM shapes s JOIN regions r ON r.id=s.region_id WHERE minx<=? AND maxx>=? AND miny<=? AND maxy>=?"
-        guard sqlite3_prepare_v2(db,sql,-1,&stmt,nil)==SQLITE_OK else {return (nil,nil)}
-        defer{sqlite3_finalize(stmt)}
-        for (i,v) in [lon+0.25,lon-0.25,lat+0.25,lat-0.25].enumerated() {sqlite3_bind_double(stmt,Int32(i+1),v)}
+        // Same box test as the former SQL (minx<=lon+0.25 AND maxx>=lon-0.25 AND miny<=lat+0.25 AND maxy>=lat-0.25), done in memory; only the hits are read.
+        guard let boxes=boxes() else {return (nil,nil)}
+        let x1=lon+0.25, x0=lon-0.25, y1=lat+0.25, y0=lat-0.25
+        let ids=boxes.filter {$0.minx<=x1 && $0.maxx>=x0 && $0.miny<=y1 && $0.maxy>=y0}.map(\.id)
+        guard !ids.isEmpty else {return (nil,nil)}
+        shapeLock.lock(); let cached=shapeCache; shapeLock.unlock()
+        let missing=ids.filter {cached.index(forKey:$0)==nil}
+        var fetched=[Int64:[ShapeRow]]()
+        if !missing.isEmpty {
+            var stmt:OpaquePointer?
+            let sql="SELECT r.code,r.level,s.pts,s.region_id,s.rowid FROM shapes s JOIN regions r ON r.id=s.region_id WHERE s.rowid IN (\(missing.map {String($0)}.joined(separator:",")))"
+            guard sqlite3_prepare_v2(db,sql,-1,&stmt,nil)==SQLITE_OK else {return (nil,nil)}
+            defer{sqlite3_finalize(stmt)}
+            var rc=sqlite3_step(stmt)
+            while rc==SQLITE_ROW {
+                let code=String(cString:sqlite3_column_text(stmt,0)), n=Int(sqlite3_column_bytes(stmt,2))/4, id=sqlite3_column_int64(stmt,4)
+                var row=[ShapeRow]()   // NULL (or empty) blob: no row, skipped as before
+                if let blob=sqlite3_column_blob(stmt,2) {
+                    let data=Data(bytes:blob,count:n*4)
+                    let ring=data.withUnsafeBytes {raw in (0..<n).map {Double(Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:$0*4,as:UInt32.self))))}}
+                    // area() when the row is read, as the old loop did: a failure stops here, before any later row (none kept or marked).
+                    guard area(sqlite3_column_int64(stmt,3)) != nil else {return (nil,nil)}
+                    row=[(code,Int(sqlite3_column_int(stmt,1)),sqlite3_column_int64(stmt,3),ring)]
+                }
+                fetched[id]=row
+                rc=sqlite3_step(stmt)
+            }
+            // Only a complete read proves a missing rowid has no row (region_id not in regions); after a step error it is read again next time.
+            if rc==SQLITE_DONE {for id in missing where fetched.index(forKey:id)==nil {fetched[id]=[]}}
+            shapeLock.lock(); shapeCache.merge(fetched) {old,_ in old}; shapeLock.unlock()
+        }
         var rings=[String:[[Double]]](), areas=[String:Double](), levels=[String:Int]()
-        while sqlite3_step(stmt)==SQLITE_ROW {
-            let code=String(cString:sqlite3_column_text(stmt,0)), n=Int(sqlite3_column_bytes(stmt,2))/4
-            guard let blob=sqlite3_column_blob(stmt,2) else {continue}
-            let data=Data(bytes:blob,count:n*4)
-            let ring=data.withUnsafeBytes {raw in (0..<n).map {Double(Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:$0*4,as:UInt32.self))))}}
-            rings[code,default:[]].append(ring);areas[code]=sqlite3_column_double(stmt,3);levels[code]=Int(sqlite3_column_int(stmt,1))
+        for id in ids {
+            for shape in cached[id] ?? fetched[id] ?? [] {   // not read (step error part way): left out this time, as the old loop did
+                guard let area=area(shape.region) else {return (nil,nil)}
+                rings[shape.code,default:[]].append(shape.ring);areas[shape.code]=area;levels[shape.code]=shape.level
+            }
         }
         var hit=[Int:String](), nearest:(Double,String)?
         for code in rings.keys.sorted(by:{areas[$0]! > areas[$1]!}) {
@@ -90,6 +155,41 @@ final class Rarity {
             let n = Int(r[1]) ?? 0; out[r[0]] = (n, Int(r[2]) ?? 0); total += n
         }
         return (out, total, s.coverage)
+    }
+    /// RarityBook.compute's read of the monthCounts table: the same source() and rows (text-bound, joined to species), tiers only, by species id.
+    /// A tier stored as an integer is read as one, anything else as Int(text) ?? 0 like monthCounts. nil when the month has no data;
+    /// a failed prepare gives an empty table and a step error part way keeps the rows read so far, as rows() does.
+    func monthTiers(_ code: String, month: Int) -> [Int64: Int]? {
+        guard let src = source(Place(lat: 0, lon: 0, label: "", source: "region", regionCode: code), month: month).source else { return nil }
+        var out = [Int64: Int]()
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT sp.id,c.tier FROM counts c JOIN species sp ON sp.id=c.species_id WHERE c.region_id=? AND c.month=?", -1, &stmt, nil) == SQLITE_OK else { return out }
+        defer { sqlite3_finalize(stmt) }
+        for (i, v) in [src, String(month)].enumerated() { _ = v.withCString { sqlite3_bind_text(stmt, Int32(i + 1), $0, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self)) } }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            out[sqlite3_column_int64(stmt, 0)] = sqlite3_column_type(stmt, 1) == SQLITE_INTEGER ? Int(sqlite3_column_int64(stmt, 1)) : Int(sqlite3_column_text(stmt, 1).map { String(cString: $0) } ?? "") ?? 0
+        }
+        return out
+    }
+    /// RarityBook.compute's one read of the species table. ids: name → id, the name as rows() reads it (NULL as ""), keyed by Swift String like the
+    /// old Set and month dictionary. iucn: keyed by the name's bytes, as `scientific=?` compares (NULL and BLOB names never match; NULL or empty = none).
+    /// nil when the query can't be prepared, an id isn't an integer, or two rows share a name by Swift equality: the caller then takes the old path.
+    /// Also nil on a step error part way: the old scientific-only read and per-species lookups may not fail where this three-column scan does.
+    func speciesIndex() -> (ids: [String: Int64], iucn: [[UInt8]: String])? {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT id,scientific,iucn FROM species", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        var ids = [String: Int64](), iucn = [[UInt8]: String]()
+        var rc = sqlite3_step(stmt)
+        while rc == SQLITE_ROW {
+            guard sqlite3_column_type(stmt, 0) == SQLITE_INTEGER else { return nil }
+            let text = sqlite3_column_type(stmt, 1) == SQLITE_TEXT   // before column_text, which converts
+            let p = sqlite3_column_text(stmt, 1)
+            guard ids.updateValue(sqlite3_column_int64(stmt, 0), forKey: p.map { String(cString: $0) } ?? "") == nil else { return nil }
+            if text, let p, let c = sqlite3_column_text(stmt, 2).map({ String(cString: $0) }), !c.isEmpty { iucn[Array(UnsafeBufferPointer(start: p, count: Int(sqlite3_column_bytes(stmt, 1))))] = c }
+            rc = sqlite3_step(stmt)
+        }
+        return rc == SQLITE_DONE ? (ids, iucn) : nil
     }
     /// The one IUCN read for display: the current table's category for a species (nil when hidden or unknown).
     /// Never the value stored inside an old Identification.
