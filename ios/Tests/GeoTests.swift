@@ -4,6 +4,18 @@ import CryptoKit
 final class GeoTests: XCTestCase {
     static func sha(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
     static func sha(rows v: [[Float]]) -> String { sha(Data(v.flatMap { $0.flatMap { x in withUnsafeBytes(of: x.bitPattern.littleEndian, Array.init) } })) }
+    /// Sampled (20 ms) peak phys_footprint of one uncached range map. Named to sort first in the class: only the first
+    /// range in a process shows it; later ones reuse pages malloc already holds (0 MB, ~0 faults). Run alone to compare.
+    func testColdRangePeakMemory() throws {
+        let catalogue = Catalogue.shared, geo = try XCTUnwrap(Geo.shared(catalogue))
+        let j = try XCTUnwrap(catalogue.all.firstIndex { $0.sci == "Erithacus rubecula" })
+        var u = rusage(); getrusage(RUSAGE_SELF, &u); let faults = u.ru_minflt
+        let (v, mb, _) = try PerformanceTests.measure { try XCTUnwrap(geo.range(j, sci: "Erithacus rubecula", cache: false)) }
+        getrusage(RUSAGE_SELF, &u)
+        XCTAssertEqual(v.count, 69_120)
+        print(String(format: "BENCH range peak %.0f MB", mb)); print("BENCH range faults \(u.ru_minflt - faults)")
+        XCTAssertLessThanOrEqual(mb, 6)   // 1.5 x the 4 MB measured after E007 (476 MB before)
+    }
     /// Bit patterns of the real model's outputs, recorded before activations were released early (E007): the global range
     /// of a species other than the timing fixture's, 48 full-head weeks at one point, and a few columns at scattered points.
     func testForwardDigests() throws {
@@ -38,6 +50,12 @@ final class GeoTests: XCTestCase {
         let out = try g.predict(xs.map { [$0, 1, 2] })
         XCTAssertEqual(out.map { $0.map(\.bitPattern) }, xs.map { [($0 + $0 * $0).bitPattern] })
         XCTAssertThrowsError(try net([("Gather", ["input", "zero"], ["a"]), ("Sin", ["nope"], ["probabilities"])]).predict([[1, 2, 3]]))
+        // Each activation released right after its last reader (or its producer when unread); constants and `probabilities` never.
+        XCTAssertEqual(g.drop.map(Set.init), [["input"], [], ["unused"], ["u"], ["a"], ["cat", "s1"], ["s0", "sq"], ["after"]])
+        // Liveness by name needs single writes: a second write of a name, or a write over a constant or `input`, is refused.
+        for bad in [[("Gather", ["input", "zero"], ["a"]), ("Sin", ["a"], ["a"])], [("Sin", ["input"], ["zero"])], [("Sin", ["input"], ["input"])]] {
+            XCTAssertThrowsError(try net(bad))
+        }
     }
     func testNativeGeoAgainstONNX() throws {
         let path=ProcessInfo.processInfo.environment["GEOMODEL"] ?? Models.geoURL.path
