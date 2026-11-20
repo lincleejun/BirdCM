@@ -111,16 +111,24 @@ class Previews:
         self.lock, self.pool, self.busy = threading.Lock(), None, {}
 
     def make(self, job: dict) -> None:
+        self.run(decode.decode, job)
+
+    def full(self, job: dict) -> bytes:
+        """The photo at full size, upright, as JPEG bytes (the 100 % view), made in the same pool."""
+        return self.run(decode.full_jpeg, job)
+
+    def run(self, fn, job: dict):
         from concurrent.futures.process import BrokenProcessPool
+        key = (fn.__name__, job["path"])                     # a full-size request never waits on a preview's future
         with self.lock:
-            fut = self.busy.get(job["path"])
+            fut = self.busy.get(key)
             if fut is None:
                 if self.pool is None:
                     self.pool = ProcessPoolExecutor(2, mp_context=mp.get_context("spawn"), initializer=decode.worker_init)
-                fut = self.busy[job["path"]] = self.pool.submit(decode.decode, job)
-                fut.add_done_callback(lambda _f, k=job["path"]: self.busy.pop(k, None))
+                fut = self.busy[key] = self.pool.submit(fn, job)
+                fut.add_done_callback(lambda _f, k=key: self.busy.pop(k, None))
         try:
-            fut.result(timeout=self.TIMEOUT)
+            return fut.result(timeout=self.TIMEOUT)
         except (TimeoutError, BrokenProcessPool):
             self._reset()
             raise
@@ -166,7 +174,8 @@ class EbirdBody(BaseModel):
 
 
 class Correction(BaseModel):
-    photo_id: int
+    photo_id: int | None = None
+    photo_ids: list[int] | None = None        # instead of photo_id + scope: exactly these photos (the grid's selection)
     scope: str = "one"                        # one | burst | same (every photo of the scan named like this one)
     sci: str | None = None                    # the right species; None = 不确定
     undo: bool = False                        # remove the corrections of this scope instead
@@ -503,6 +512,25 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
     def preview(pid: int, request: Request):
         return photo_file(pid, 1, request)
 
+    @api.get("/api/scans/{sid}/photos/{pid}/full")
+    def full(sid: int, pid: int, request: Request):
+        """The photo at full size for the 100 % view, upright like the preview (RAW: its embedded full-size JPEG),
+        made on demand and not cached on disk; the ETag names the file version, so the browser revalidates for free."""
+        from fastapi.responses import Response
+        p = store.photo(pid)
+        if not p or p["scan_id"] != sid:
+            raise HTTPException(404, "这次扫描里没有这张照片")
+        import hashlib
+        tag = '"' + hashlib.sha1(f"{store.path}|{pid}|{p['path']}|{p['size']}|{p['mtime_ns']}|full".encode()).hexdigest()[:20] + '"'
+        headers = {"Cache-Control": "private, no-cache", "ETag": tag}
+        if tag in [t.strip() for t in request.headers.get("if-none-match", "").split(",")]:
+            return Response(status_code=304, headers=headers)
+        try:
+            data = previews.full({"path": p["path"], "size": p["size"], "mtime_ns": p["mtime_ns"]})
+        except Exception as e:  # noqa: BLE001 - gone, changed, unreadable or a crashed worker
+            raise HTTPException(404, f"无法读取原图：{e}") from None
+        return Response(data, media_type="image/jpeg", headers=headers)
+
     @api.get("/api/species")
     def species_search(q: str = ""):
         """Species by Chinese, English or Latin name (for correcting a photo's species)."""
@@ -520,14 +548,19 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         if not body.undo and body.sci is not None and body.sci not in names.catalogue():
             raise HTTPException(400, f"名录里没有这个学名：{body.sci}")
         photos = store.snapshot(sid, slim_results=True)["photos"]        # ids, bursts and the shown species only
-        me = next((p for p in photos if p["id"] == body.photo_id), None)
-        if not me:
-            raise HTTPException(404, "这次扫描里没有这张照片")
 
         def named(p):
             sp = p.get("species_fix") or (p.get("result") or {}).get("species") or {}
             return (sp.get("label") or {}).get("sci") if sp.get("level") in ("species", "genus") else None
-        if body.scope == "one":
+        if body.photo_ids is not None:                                  # exactly these, stored like one-by-one
+            ids, body.scope = sorted(set(body.photo_ids)), "one"
+            if not ids:
+                raise HTTPException(400, "没有选照片")
+            if not set(ids) <= {p["id"] for p in photos}:
+                raise HTTPException(404, "这次扫描里没有这张照片")
+        elif not (me := next((p for p in photos if p["id"] == body.photo_id), None)):
+            raise HTTPException(404, "这次扫描里没有这张照片")
+        elif body.scope == "one":
             ids = [me["id"]]
         elif body.scope == "burst":
             ids = [p["id"] for p in photos if me["burst_group"] is not None and p["burst_group"] == me["burst_group"]] or [me["id"]]

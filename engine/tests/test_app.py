@@ -450,3 +450,66 @@ def test_requests_before_the_models_are_ready_are_queued_and_complete(tmp_path, 
         assert c.get("/api/models", headers=OK).json()["engine"] == "ready"
         rec2 = c.post("/api/singles", files={"file": ("b.png", buf.getvalue())}, headers=h).json()
         assert rec2["result"]["subject"] == 0                               # ready: answered in the same request
+
+
+def test_full_size_image_upright_by_scan_and_id(env, monkeypatch):
+    """The 100 % view's image: full size, upright like the preview (so the normalised marks land on the same pixel);
+    404 for an unknown id, an id of another scan and a file gone since; revalidated by ETag; nothing written."""
+    c, api, tmp = env
+    from io import BytesIO
+
+    from PIL import Image
+
+    from birdcm import app as appmod
+    monkeypatch.setattr(appmod.Previews, "full", lambda self, job: appmod.decode.full_jpeg(job))   # in-process
+    photos, other = tmp / "shoot", tmp / "other"
+    photos.mkdir()
+    other.mkdir()
+    im = Image.new("RGB", (300, 200), (0, 0, 0))
+    im.paste((255, 0, 0), (0, 0, 30, 30))               # stored top-left; orientation 6 shows it top-right
+    ex = Image.Exif()
+    ex[0x0112] = 6
+    im.save(photos / "a.jpg", exif=ex, quality=95)
+    Image.new("RGB", (40, 20)).save(photos / "b.jpg")
+    Image.new("RGB", (40, 20)).save(other / "c.jpg")
+    before = sorted((p.name, p.stat().st_mtime_ns) for p in photos.iterdir())
+    h = {**OK, "x-birdcm-token": "tok"}
+    sid = c.post("/api/scans", json={"folder": str(photos)}, headers=h).json()["id"]
+    sid2 = c.post("/api/scans", json={"folder": str(other)}, headers=h).json()["id"]
+    a, b = (p["id"] for p in c.get(f"/api/scans/{sid}", headers=OK).json()["photos"])
+    elsewhere = c.get(f"/api/scans/{sid2}", headers=OK).json()["photos"][0]["id"]
+
+    r = c.get(f"/api/scans/{sid}/photos/{a}/full", headers=OK)
+    assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg" and "no-cache" in r.headers["cache-control"]
+    full = Image.open(BytesIO(r.content))
+    assert full.size == (200, 300) and full.getexif().get(0x0112, 1) == 1           # upright, nothing left to rotate
+    assert full.getpixel((190, 10))[0] > 200 and full.getpixel((10, 10))[0] < 60
+    assert c.get(f"/api/scans/{sid}/photos/{a}/full", headers={**OK, "if-none-match": r.headers["etag"]}).status_code == 304
+    upright = Image.open(BytesIO(c.get(f"/api/scans/{sid}/photos/{b}/full", headers=OK).content))
+    assert upright.size == (40, 20)
+
+    assert c.get(f"/api/scans/{sid}/photos/999/full", headers=OK).status_code == 404
+    assert c.get(f"/api/scans/{sid}/photos/{elsewhere}/full", headers=OK).status_code == 404      # not this scan's
+    assert c.get(f"/api/scans/{sid2}/photos/{elsewhere}/full", headers=OK).status_code == 200
+    assert sorted((p.name, p.stat().st_mtime_ns) for p in photos.iterdir()) == before   # nothing written there
+    (photos / "b.jpg").unlink()
+    assert c.get(f"/api/scans/{sid}/photos/{b}/full", headers=OK).status_code == 404       # gone since the listing
+
+
+def test_full_size_raw_jpeg_turned_like_the_preview():
+    """A RAW's embedded JPEG is stored unrotated: it is turned by the RAW's orientation, as load_upright does."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    from birdcm import decode
+    im = Image.new("RGB", (300, 200), (0, 0, 0))
+    im.paste((255, 0, 0), (0, 0, 30, 30))
+    buf = BytesIO()
+    im.save(buf, "JPEG", quality=95)
+    assert decode.upright_jpeg(buf.getvalue(), 1) == buf.getvalue()                 # upright: the bytes as they are
+    for o, size, red in ((6, (200, 300), (190, 10)), (8, (200, 300), (10, 290)), (3, (300, 200), (290, 190))):
+        out = Image.open(BytesIO(decode.upright_jpeg(buf.getvalue(), o)))
+        assert out.size == size and out.getpixel(red)[0] > 200, o
+        assert out.transpose(Image.Transpose.ROTATE_90 if o == 6 else Image.Transpose.ROTATE_270 if o == 8
+                             else Image.Transpose.ROTATE_180).getpixel((10, 10))[0] > 200   # same as load_upright's turn
