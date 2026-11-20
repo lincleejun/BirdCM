@@ -1099,9 +1099,15 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
 
     @api.post("/api/online/settings")
     def online_set(body: dict):
-        if any(not isinstance(body.get(k, False), bool) for k in ("enabled", "disclosed", "places")):
-            raise HTTPException(422, "enabled / disclosed / places 要是 true / false")
-        return online.set_settings(body.get("enabled"), body.get("disclosed"), body.get("places"))
+        if any(not isinstance(body.get(k, False), bool) for k in ("enabled", "disclosed", "places", "updates")):
+            raise HTTPException(422, "enabled / disclosed / places / updates 要是 true / false")
+        return online.set_settings(body.get("enabled"), body.get("disclosed"), body.get("places"), body.get("updates"))
+
+    @api.post("/api/update")
+    def update_check():
+        """检查更新 (update.py): nothing asked while off; at most one GET to GitHub a day."""
+        from birdcm import update
+        return update.check()
 
     @api.delete("/api/online/cache")
     def online_clear():

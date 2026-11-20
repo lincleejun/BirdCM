@@ -160,6 +160,18 @@ function EngineBadge() {
   );
 }
 
+// 检查更新 (engine/birdcm/update.py): off by default (物种参考's switches); when on, a quiet link to the Releases page if a
+// newer release exists. Asked once per page load; any failure shows nothing.
+interface Update { latest: string | null; newer: boolean; url: string }
+let updateAsked: Promise<Update | null> | null = null;
+function UpdateNote() {
+  const [u, setU] = useState<Update | null>(null);
+  useEffect(() => { (updateAsked ??= post<Update>("/api/update").catch(() => null)).then(setU); }, []);
+  if (!u?.newer) return null;
+  return <a className="pill update" href="https://github.com/lincleejun/BirdCM/releases" target="_blank" rel="noopener noreferrer"
+    title="在 GitHub Releases 页下载；观羽不会自动下载或安装">有新版本 v{u.latest}</a>;
+}
+
 function App() {
   const q = new URLSearchParams(location.search);
   const [scanId, setScanId] = useState<number | null>(() => Number(q.get("scan")) || null);
@@ -195,6 +207,7 @@ function App() {
       <button aria-current={view === "library"} onClick={() => switchTo("library")}>记录</button>
       <button aria-current={view === "stats"} onClick={() => switchTo("stats")}>统计</button>
       <EngineBadge />
+      <UpdateNote />
     </nav>
   );
   const results = view === "batch" && scanId;

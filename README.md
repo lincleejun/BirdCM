@@ -53,6 +53,7 @@ iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs
 - 用 Nominatim 显示地名，只发送取整到约 1 km 的坐标
 - 物种页的维基百科资料，只发送物种的条目名
 - iOS 列表里的物种缩略图（iNaturalist 默认照片），只发送物种的 iNaturalist 分类编号
+- 检查更新（网页「物种参考」里的「检查更新（GitHub）」）：**默认关闭**。打开后每天最多一次向 GitHub 公开接口 GET 最新正式版的版本号，什么都不发送（不带 cookie、安装编号或当前版本号，GitHub 只看到 IP）；有新版时在顶部给出 Releases 页的链接，不自动下载、不自动安装
 
 照片、路径和你输入的文字从不上传。
 
