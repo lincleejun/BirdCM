@@ -1,5 +1,6 @@
 // The pure parts of looking at photos (no React, no DOM): the zoom viewport and the grid's multi-select.
-// Kept apart so they can be tested on their own.
+// Kept apart so they can be tested on their own (look.test.ts). Also the result list's filters and order.
+import type { PhotoResult, PhotoRow } from "./types";
 
 /** One viewport for every pane: fit, or s screen (CSS) px per image px around (cx, cy), normalised 0-1 in the
  *  upright photo. Two panes driven by the same View show the same part of their photos at the same size. */
@@ -60,6 +61,71 @@ export function headOf(r: { eye: number[] | null; eye_visible: boolean | null; b
   if (r.eye && r.eye_visible) return [r.eye[0], r.eye[1]];
   const b = r.subject != null ? r.boxes[r.subject]?.box : undefined;
   return b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : null;
+}
+
+// ---------- the result list: filters and order ----------
+export function nameOf(r: PhotoResult): string {
+  if (r.rejected) return r.reject_reason || "没有找到鸟";
+  const s = r.species;
+  if (!s || s.level === "uncertain" || !s.label) return "不确定";
+  if (s.level === "genus") return `${s.label.sci.replace(/ sp\.$/, "")} 属`;
+  return s.label.zh || s.label.en || s.label.sci;
+}
+export const confirmed = (r: PhotoResult | null) => !!r && !r.rejected && r.species?.level === "species" && !!r.species.label;
+// the species a photo is about, rejected or not (a rejected photo still names its bird)
+const named_ = (r: PhotoResult | null) => !!r && r.species?.level === "species" && !!r.species.label;
+export const speciesKey = (r: PhotoResult | null) => (named_(r) ? r!.species!.label!.sci : "");
+// rarer first: 罕见 1, 少见 2, 不常见 3, 常见 4; 无记录 (0) counts as rarest, unknown last
+const rank = (p: PhotoRow) => { const t = p.result?.rarity?.tier; return t == null ? 9 : t === 0 ? 0.5 : t; };
+
+/** What the grid's controls say: fs stars ("all", "3".."-1", "drop" = 0 星 and 淘汰), fsp species (sci, "unsure" or ""),
+ *  ffly "all" | "fly" | "still", frar the rarest tier kept ("0" = all), sort a key of SORTS. */
+export interface ListFilter {
+  fs: string; fsp: string; ffly: string; frar: string; sort: string; starsReady: boolean; fold: boolean;
+  groupOnly: number | null; onlyIds: ReadonlySet<number> | null;
+}
+const SORTS: Record<string, (a: PhotoRow, b: PhotoRow) => number> = {
+  queue: (a, b) => a.seq - b.seq,
+  time: (a, b) => (a.result?.exif.taken_at ?? "~").localeCompare(b.result?.exif.taken_at ?? "~") || a.seq - b.seq,
+  star: (a, b) => (b.stars ?? -2) - (a.stars ?? -2) || (b.quality?.q ?? -1) - (a.quality?.q ?? -1) || a.seq - b.seq,
+  species: (a, b) => nameOf(a.result!).localeCompare(nameOf(b.result!), "zh-CN") || a.seq - b.seq,
+  fly: (a, b) => (b.result?.p_fly ?? 0) - (a.result?.p_fly ?? 0),
+  eye: (a, b) => (b.result?.sharpness ?? -1) - (a.result?.sharpness ?? -1),
+  rar: (a, b) => rank(a) - rank(b) || (b.stars ?? -2) - (a.stars ?? -2) || a.seq - b.seq,
+};
+
+/** The photos the grid lists, in its order. */
+export function listView(photos: readonly PhotoRow[], f: ListFilter): PhotoRow[] {
+  const { fs, fsp, ffly, frar, starsReady, groupOnly, onlyIds } = f;
+  const usesResults = fsp || ffly !== "all" || frar !== "0";
+  // filters first, then (folded) one row per burst: its best-ranked frame AMONG the matches (Codex I8)
+  const matches = (p: PhotoRow) => {
+    if (onlyIds) return onlyIds.has(p.id);
+    if (groupOnly !== null) return p.burst_group === groupOnly;
+    const r = p.result;
+    if (starsReady && fs !== "all") {
+      if (fs === "drop" ? !(p.stars != null && p.stars <= 0) : p.stars !== +fs) return false;
+    } else if (usesResults && r?.rejected) return false;     // rejected photos show only with 淘汰 / 不留
+    if (!usesResults) return true;
+    if (!r) return false;
+    const t = r.rarity?.tier;
+    return (!fsp || (fsp === "unsure" ? !confirmed(r) && !r.rejected : speciesKey(r) === fsp)) && (ffly === "all" || (ffly === "fly") === !!r.flying)
+      && (frar === "0" || (t != null && t <= +frar));
+  };
+  let v = photos.filter(matches);
+  if (f.fold && groupOnly === null && !onlyIds) {
+    const best = new Map<number, PhotoRow>();
+    for (const p of v) {
+      const g = p.burst_group ?? -p.id;
+      const cur = best.get(g);
+      if (!cur || (p.burst_rank ?? 99) < (cur.burst_rank ?? 99)) best.set(g, p);
+    }
+    const keep = new Set([...best.values()].map((p) => p.id));
+    v = v.filter((p) => keep.has(p.id));
+  }
+  const ready = (p: PhotoRow) => (p.result ? 1 : 0), cmp = SORTS[f.sort];
+  // finished photos first in the chosen order; the ones still waiting stay behind them in queue order
+  return v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp(a, b) : a.seq - b.seq));
 }
 
 // ---------- multi-select ----------

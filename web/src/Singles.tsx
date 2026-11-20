@@ -3,7 +3,7 @@ import { del, get, post, upload } from "./api";
 import LocationPicker, { type Country, PlaceName, PlaceOf } from "./Location";
 import CorrectPanel from "./Correct";
 import { Verdict, Candidates, named, SpName } from "./names";
-import { nameOf } from "./Results";
+import { nameOf } from "./look";
 import type { Box, Detection, PhotoResult, Place, Species } from "./types";
 
 // Single photo + history, laid out like prototype/mobile.html's result page: photo on top, then reading order.
