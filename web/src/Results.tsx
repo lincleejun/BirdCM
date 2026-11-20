@@ -6,8 +6,10 @@ import CorrectPanel, { type Pick, type Scope } from "./Correct";
 import ExportDialog from "./Export";
 import KeepControl, { KeepButton, keepOf, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, PlaceName, PlaceOf } from "./Location";
+import { select, starOf } from "./look";
 import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks, Verdict } from "./names";
 import type { Exif, PhotoResult, PhotoRow, Place, Scan, Snapshot } from "./types";
+import { Marks, StarSet, Viewer } from "./Viewer";
 
 export const STATE_LABEL: Record<string, string> = { queued: "排队中", running: "扫描中", stopping: "正在停止", paused: "已停止",
   finalizing: "正在汇总", completed: "已完成", failed: "出错已停" };
@@ -59,34 +61,19 @@ function Settings({ e }: { e: Partial<Exif> | null | undefined }) {
   );
 }
 
-function Marks({ r, m }: { r: PhotoResult; m: MarkSet }) {
-  const at = (p: [number, number]) => ({ left: `${p[0] * 100}%`, top: `${p[1] * 100}%` });
-  return (
-    <>
-      {m.box && r.boxes.map((d, i) => (
-        <span key={i} className={`mk box${i === r.subject ? "" : " other"}`} style={{ left: `${d.box[0] * 100}%`, top: `${d.box[1] * 100}%`,
-          width: `${(d.box[2] - d.box[0]) * 100}%`, height: `${(d.box[3] - d.box[1]) * 100}%` }} />
-      ))}
-      {m.eye && r.eye && r.eye_visible && <span className="mk eye" style={at(r.eye)} />}
-      {m.beak && r.beak && (r.beak_p ?? 0) >= 0.5 && <span className="mk beak" style={at(r.beak)} />}
-      {m.focus && r.focus && <span className="mk af" style={at(r.focus)} />}
-    </>
-  );
-}
+interface TileAct { pick: (id: number, mode: "plain" | "toggle" | "range") => void; open: (id: number) => void; group: (p: PhotoRow) => void; ref: (id: number, el: HTMLButtonElement | null) => void }
 
-interface TileAct { pick: (id: number) => void; open: (id: number) => void; group: (p: PhotoRow) => void; ref: (id: number, el: HTMLButtonElement | null) => void }
-
-const Tile = memo(function Tile({ p, st, active, complete, more, marks, exif: e, act }: {
-  p: PhotoRow; st: RowState; active: boolean; complete: boolean; more: boolean; marks: MarkSet | null;
+const Tile = memo(function Tile({ p, st, active, picked, complete, more, marks, exif: e, act }: {
+  p: PhotoRow; st: RowState; active: boolean; picked: boolean; complete: boolean; more: boolean; marks: MarkSet | null;
   exif: Partial<Exif> | null | undefined; act: { current: TileAct };
 }) {
   const r = p.result;
   const name = r ? (r.rejected ? nameOf(r) : named(r.species).title) : ROW_LABEL[st];
   return (
-    <button type="button" className="tile" data-state={st} aria-pressed={active} tabIndex={active ? 0 : -1}
+    <button type="button" className="tile" data-state={st} data-picked={picked || undefined} aria-pressed={active} tabIndex={active ? 0 : -1}
       aria-describedby="photo-keys" aria-label={`${name}，${complete ? starLabel(p.stars) : "待定星级"}，${p.file}`}
       ref={(el) => act.current.ref(p.id, el)}
-      onClick={() => act.current.pick(p.id)} onDoubleClick={() => act.current.open(p.id)}>
+      onClick={(ev) => act.current.pick(p.id, ev.shiftKey ? "range" : ev.metaKey || ev.ctrlKey ? "toggle" : "plain")} onDoubleClick={() => act.current.open(p.id)}>
       <Photo row={p} marks={marks} show={!!r || active} />
       <span className="row-result">{r && r.rejected && r.species?.label ? <span className="name dim">{name} · {named(r.species).title}</span>
         : r && !r.rejected ? <SpName sp={r.species} size="card" /> : <span className={r ? "name" : "scan-name"}>{name}</span>}
@@ -292,9 +279,14 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   // one stable handler for every row (Codex P3: rows are memoised and only re-render when their own data changes)
   const tileAct = useRef<TileAct>(null as unknown as TileAct);
   tileAct.current = {
-    pick: (id) => { setSelected(id); if (matchMedia("(max-width: 720px)").matches) panelRef.current?.scrollIntoView({ block: "start" }); },
-    open: (id) => { setSelected(id); viewerRef.current?.showModal(); },
-    group: (p) => { setSelected(p.id); setGroupOnly(p.burst_group); },
+    pick: (id, mode) => {
+      // Cmd / Ctrl toggles, Shift adds the run from the anchor (look.ts select); a plain click picks one
+      const r = select(picked, anchor.current ?? current?.id ?? null, id, view.map((p) => p.id), mode);
+      setPicked(r.set); anchor.current = r.anchor; setSelected(id);
+      if (mode !== "plain") return;
+      if (matchMedia("(max-width: 720px)").matches) panelRef.current?.scrollIntoView({ block: "start" }); },
+    open: (id) => { setSelected(id); setPicked(new Set()); viewerRef.current?.showModal(); },
+    group: (p) => { setSelected(p.id); anchor.current = null; setGroupOnly(p.burst_group); },
     ref: (id, el) => { if (el) tiles.current.set(id, el); else tiles.current.delete(id); },
   };
   const rowState = (p: PhotoRow): RowState => (p.state === "done" ? "ready" : p.state === "failed" ? "failed"
@@ -315,6 +307,10 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   const [sort, setSort] = useState("queue");
   const [marks, setMarks] = useMarks();
   const [selected, setSelected] = useState<number | null>(null);
+  // multi-select: the grid's picked set (empty = just the current photo); `selected` stays the current / anchor one
+  const [picked, setPicked] = useState<Set<number>>(() => new Set());
+  const anchor = useRef<number | null>(null);
+  const [cmp, setCmp] = useState<number | null>(null);         // compare the current photo with this one
   const sortTouched = useRef(false);
   useEffect(() => { if (starsReady && !sortTouched.current) setSort("star"); }, [starsReady]);
 
@@ -335,21 +331,42 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     await post(`/api/scans/${scanId}/corrections`, sci === undefined ? { photo_id: id, scope, undo: true } : { photo_id: id, scope, sci });
     await load();
   }, [scanId, load]);
+  // the same for exactly these photos (the grid's selection), one request
+  const correctMany = async (ids: number[], sci: string | null | undefined) => {
+    await post(`/api/scans/${scanId}/corrections`, sci === undefined ? { photo_ids: ids, undo: true } : { photo_ids: ids, sci });
+    await load();
+  };
+  const [batchFix, setBatchFix] = useState(false);
 
   // the person's stars for these photos (null: back to the computed ones); one request however many
   const setStars = useCallback(async (ids: number[], s: number | null) => {
     try { await post(`/api/scans/${scanId}/stars`, { photo_ids: ids, stars: s }); await load(); }
     catch (e) { setError(String((e as Error).message)); }
   }, [scanId, load]);
-  // keys on a selected photo: 0-3 stars, X 淘汰, U back to the computed stars (Lightroom's keys)
+  // stars from the grid, the panel or the viewer: the current photo stays picked; when the star filter or sort
+  // takes it out of the list, the photo now at its place is (the next one), so the arrow keys keep working
+  const follow = useRef<{ id: number; at: number } | null>(null);
+  const [followN, setFollowN] = useState(0);
+  const starsFollow = (ids: number[], s: number | null) => {
+    if (current) follow.current = { id: current.id, at: view.findIndex((p) => p.id === current.id) };
+    setStars(ids, s).then(() => setFollowN((n) => n + 1));
+  };
+  useEffect(() => {
+    const f = follow.current;
+    if (!f) return;
+    follow.current = null;
+    const next = view.some((p) => p.id === f.id) ? f.id : f.at >= 0 ? view[Math.min(f.at, view.length - 1)]?.id : undefined;
+    if (next === undefined) return;
+    setSelected(next);
+    anchor.current = null;
+    if (!viewerRef.current?.open) requestAnimationFrame(() => tiles.current.get(next)?.focus({ preventScroll: true }));
+  }, [followN]);                     // once per answered request, on the view it produced
+  // keys on the selected photo (or every picked one): 0-3 stars, X 淘汰, U back to the computed stars (Lightroom's)
   const starKey = (e: KeyboardEvent): boolean => {
-    if (!complete || !current?.result || e.metaKey || e.ctrlKey || e.altKey) return false;
-    const k = e.key.toLowerCase(), s = k === "x" ? -1 : k === "u" ? null : /^[0-3]$/.test(k) ? +k : undefined;
-    if (s === undefined) return false;
+    const s = starOf(e);
+    if (!complete || !current?.result || s === undefined) return false;
     e.preventDefault();
-    const id = current.id, refocus = !viewerRef.current?.open;
-    // the star sort may move the card: keep the keyboard on it
-    setStars([id], s).then(() => { if (refocus) requestAnimationFrame(() => tiles.current.get(id)?.focus({ preventScroll: true })); });
+    starsFollow(many ? pickedIds : [current.id], s);
     return true;
   };
 
@@ -401,14 +418,26 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   // a photo picked from the burst strip may be outside the filtered list: it is still the one shown
   const current = view.find((p) => p.id === selected) ?? (selected !== null ? photos.find((p) => p.id === selected) : undefined) ?? view[0] ?? null;
   const tiles = useRef(new Map<number, HTMLButtonElement>());
+  // the picked photos still in the list (a filter change does not let a batch reach photos out of sight) that have a
+  // result (like the single-photo keys: no stars or species for a failed or unscanned photo)
+  const pickedIds = view.filter((p) => picked.has(p.id) && p.result).map((p) => p.id);
+  const many = pickedIds.length > 1;
   const burst = useMemo(() => {
     if (!current?.burst_group || (current.burst_size ?? 1) < 2) return null;
     const members = photos.filter((p) => p.burst_group === current.burst_group);
     const byTime = [...members].sort((a, b) => (a.result?.exif.taken_at ?? "").localeCompare(b.result?.exif.taken_at ?? "") || a.seq - b.seq);
     return { members: [...members].sort((a, b) => (a.burst_rank ?? 99) - (b.burst_rank ?? 99)), order: new Map(byTime.map((p, i) => [p.id, i + 1])) };
   }, [photos, current?.burst_group, current?.burst_size]);
+  // compare: the other photo, ← → walking it through the burst (in shooting order) or else the list
+  const cmpRow = cmp !== null && cmp !== current?.id ? photos.find((p) => p.id === cmp) ?? null : null;
+  const pool = burst && cmpRow && cmpRow.burst_group === current?.burst_group ? [...burst.members].sort((x, y) => burst.order.get(x.id)! - burst.order.get(y.id)!) : view;
+  const neighbour = burst && current ? (() => {           // the frame shot just after this one, else just before
+    const n = burst.order.get(current.id)!, m = burst.members;
+    return (m.find((x) => burst.order.get(x.id) === n + 1) ?? m.find((x) => burst.order.get(x.id) === n - 1))?.id ?? null;
+  })() : null;
   const pick = (id: number) => {
     setSelected(id);
+    anchor.current = null;
     requestAnimationFrame(() => tiles.current.get(id)?.scrollIntoView({ block: "nearest" }));
   };
 
@@ -430,6 +459,8 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     const p = view[Math.max(0, Math.min(view.length - 1, i + d))];        // down onto a short last row: its last card
     if (!p || p.id === current?.id) return;
     setSelected(p.id);
+    setPicked(new Set());
+    anchor.current = null;
     tiles.current.get(p.id)?.focus({ preventScroll: viewerRef.current?.open });
   };
 
@@ -640,9 +671,21 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
       </div>
 
       <div className="inspection">
-        <section className="list" aria-labelledby="list-title">
+        <section className="list" aria-labelledby="list-title" onKeyDown={(e) => { if (e.key === "Escape" && picked.size) { e.preventDefault(); setPicked(new Set()); setBatchFix(false); } }}>
           <div className="list-head"><h3 id="list-title">照片列表</h3><span aria-live="polite">显示 {view.length} / {c.total} 张</span></div>
-          <p className="sr-only" id="photo-keys">方向键选择照片（上、下换一行），回车看大图；数字键 0 到 3 设星级，X 设为淘汰，U 撤回到算出来的星级。右侧显示这张照片的全部信息。</p>
+          <p className="sr-only" id="photo-keys">方向键选择照片（上、下换一行），回车看大图；Command 或 Ctrl 加点击多选，Shift 加点击选一段，Esc 取消多选；数字键 0 到 3 设星级（多选时设给所有选中的），X 设为淘汰，U 撤回到算出来的星级。右侧显示这张照片的全部信息。</p>
+          {many && (
+            <div className="batch" role="toolbar" aria-label="批量操作">
+              <b>已选 {pickedIds.length} 张</b>
+              {complete && <StarSet on={null} undo onStars={(v) => starsFollow(pickedIds, v)} label="给选中的照片设星级" />}
+              {complete && <button type="button" className="btn slim" aria-expanded={batchFix} onClick={() => setBatchFix(!batchFix)}>改鸟种</button>}
+              {pickedIds.length === 2 && <button type="button" className="btn slim" onClick={() => { setSelected(pickedIds[0]); setCmp(pickedIds[1]); viewerRef.current?.showModal(); }}>并排对比</button>}
+              <button type="button" className="btn slim link" onClick={() => { setPicked(new Set()); setBatchFix(false); }}>取消选择（Esc）</button>
+              {batchFix && <CorrectPanel own={[]} inScan={inScan} current={null} burst={false} count={pickedIds.length}
+                manual={pickedIds.some((id) => manualIds.has(id))} onClose={() => setBatchFix(false)}
+                onApply={(sci) => correctMany(pickedIds, sci)} onUndo={() => correctMany(pickedIds, undefined)} />}
+            </div>
+          )}
           <div id="grid" onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); openViewer(); return; }
             if (starKey(e)) return;
@@ -654,23 +697,19 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
             step(row ? d * getComputedStyle(e.currentTarget).gridTemplateColumns.split(" ").length : d);
           }}>
             {view.length ? view.map((p) => (
-              <Tile key={p.id} p={p} st={rowState(p)} active={p.id === current?.id} complete={complete} more={fold && groupOnly === null}
+              <Tile key={p.id} p={p} st={rowState(p)} active={p.id === current?.id} picked={picked.has(p.id)} complete={complete} more={fold && groupOnly === null}
                 marks={marks} exif={p.result?.exif ?? exifs[p.id]} act={tileAct} />
             )) : <p className="empty">{c.total ? "没有符合条件的照片。" : "这个文件夹里没有 ARW、DNG 或 JPG 照片。"}</p>}
           </div>
         </section>
         {current && <Inspector ref={panelRef} p={current} st={rowState(current)} marks={marks} setMarks={setMarks} complete={complete}
-          inScan={inScan} onCorrect={correct} onStars={setStars}
+          inScan={inScan} onCorrect={correct} onStars={starsFollow}
           exif={current.result?.exif ?? exifs[current.id]} onOpen={openViewer} burst={burst} onPick={pick}
           groupOnly={groupOnly !== null} onGroupOnly={(on) => setGroupOnly(on ? current.burst_group : null)} />}
       </div>
 
-      <dialog ref={viewerRef} className="viewer" aria-label="大图" onClick={(e) => { if (e.target === e.currentTarget) viewerRef.current?.close(); }}
-        onKeyDown={(e) => { if (starKey(e)) return; if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); step(-1); } if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); step(1); } }}>
-        <div className="dlg-head"><h3>{current?.file}</h3><span className="hint">← → 换一张 · 0–3 / X / U 设星 · Esc 关闭</span>
-          <button className="btn" onClick={() => viewerRef.current?.close()}>关闭</button></div>
-        {current && <Photo row={current} marks={current.result ? marks : null} big show alt={current.file} />}
-      </dialog>
+      <Viewer ref={viewerRef} scanId={scanId} a={current} b={cmpRow} pool={pool} marks={marks} complete={complete}
+        onStep={step} onStars={starsFollow} setStars={setStars} onCompare={setCmp} neighbour={neighbour} />
 
       <dialog ref={exportRef} aria-labelledby="e-title" style={{ maxWidth: 760 }} onClose={() => setExportOpen(false)}>
         <div className="dlg-head"><h3 id="e-title">导出</h3><button className="btn" onClick={() => exportRef.current?.close()}>关闭</button></div>
@@ -688,7 +727,7 @@ interface Burst { members: PhotoRow[]; order: Map<number, number> }
 const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: MarkSet; setMarks: (m: MarkSet) => void; complete: boolean;
   exif?: Exif; onOpen: () => void; burst: Burst | null; onPick: (id: number) => void; groupOnly: boolean; onGroupOnly: (on: boolean) => void;
   inScan: Pick[]; onCorrect: (id: number, sci: string | null | undefined, scope: Scope) => Promise<void>;
-  onStars: (ids: number[], s: number | null) => Promise<void> }>(
+  onStars: (ids: number[], s: number | null) => void }>(
   function Inspector({ p, st, marks, setMarks, complete, exif, onOpen, burst, onPick, groupOnly, onGroupOnly, inScan, onCorrect, onStars }, ref) {
   const [correcting, setCorrecting] = useState(false);
   useEffect(() => setCorrecting(false), [p.id]);
@@ -700,12 +739,7 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
   const stars = <div className="panel-stars"><div className="verdict stars">{complete && p.stars !== null ? starTxt(p.stars) : "待定星级"}</div>
     {complete && p.star_reason && <p className="reason">{p.star_reason}</p>}
     {complete && p.star_auto && <p className="reason">算出来是 {starLabel(p.star_auto.stars)}{p.star_auto.reason ? `：${p.star_auto.reason}` : ""}</p>}
-    {complete && r && <div className="star-set" role="group" aria-label="手动设星级">
-      {[-1, 0, 1, 2, 3].map((v) => (
-        <button key={v} type="button" className="btn slim" aria-pressed={!!p.star_auto && p.stars === v} onClick={() => onStars([p.id], v)}>{v === -1 ? "淘汰" : v === 0 ? "0 星" : "★".repeat(v)}</button>
-      ))}
-      {p.star_auto && <button type="button" className="btn slim link" onClick={() => onStars([p.id], null)}>撤回</button>}
-    </div>}</div>;
+    {complete && r && <StarSet on={p.star_auto ? p.stars : null} undo={!!p.star_auto} onStars={(v) => onStars([p.id], v)} />}</div>;
   return (
     <aside className="inspector" aria-label="所选照片的全部信息" ref={ref}>
       {ready && <MarkControls m={marks} set={setMarks} missing={missing} />}

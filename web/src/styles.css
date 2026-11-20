@@ -371,6 +371,27 @@ dialog.viewer .dlg-head .hint { color: var(--on-mat-muted); flex: 1; margin: 0; 
 dialog.viewer .btn { color: var(--on-mat); background: transparent; border-color: #858585; }
 dialog.viewer .btn:hover { background: #292929; }
 dialog.viewer .ph { aspect-ratio: 3 / 2; max-height: calc(96dvh - 70px); margin: auto; background: var(--mat); }
+dialog.viewer.compare { width: 98vw; }
+/* the zoomable panes: one or two side by side, one viewport (Viewer.tsx) */
+.look { display: flex; gap: 8px; height: calc(96dvh - 120px); padding: 0 8px 8px; }
+.look-pane { flex: 1; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.look-pane figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; }
+.look-pane figcaption .star-set { margin: 0; }
+.look-plain { flex: 1; min-height: 0; object-fit: contain; }
+.zoom { position: relative; flex: 1; min-height: 0; overflow: hidden; cursor: zoom-in; touch-action: none; user-select: none; border-radius: var(--r-photo); }
+.zoom.zoomed { cursor: grab; }
+.zoom.zoomed:active { cursor: grabbing; }
+.compare .zoom.active { box-shadow: inset 0 0 0 2px var(--accent); }
+.zf { position: absolute; }
+.zf img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.zoom-tag { position: absolute; left: 8px; bottom: 8px; padding: 2px 6px; border-radius: 4px; background: #000a; color: #fff; font: 12px/1.4 var(--mono); pointer-events: none; }
+/* multi-select */
+.tile[data-picked] { box-shadow: inset 0 0 0 3px var(--accent); background: var(--surface-2); }
+/* floats over the page: appearing on the second click must not move the tiles under the pointer */
+.batch { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20; width: max-content; max-width: calc(100vw - 32px); max-height: 70dvh; overflow: auto;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--r-control); background: var(--surface-1); box-shadow: 0 6px 24px rgb(0 0 0 / .3); }
+.batch .star-set { margin: 0; }
+.batch .correct { flex-basis: 100%; }
 dialog.map-dlg { width: min(860px, 96vw); }
 .map-box { height: min(60vh, 460px); border: 1px solid var(--border); border-radius: var(--r-photo); background: var(--surface-2); }
 .pin { width: 18px; height: 18px; border-radius: 50% 50% 50% 0; background: #c0392b; border: 2px solid #fff; transform: rotate(-45deg); box-shadow: 0 0 0 1px #000a; }

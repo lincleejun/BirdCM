@@ -67,3 +67,26 @@ def test_corrections_survive_a_rescan(tmp_path, monkeypatch):
     new = store.create_scan(str(tmp_path), False, None, {"keep": 50}, "fp2", [(f"/p/{i}.ARW", 1, 1) for i in range(6)])
     cor = store.corrections_for(new)
     assert len(cor) == 1 and list(cor.values())[0]["sci"] == "Thalasseus elegans" and list(cor.values())[0]["app"] == "Thalasseus maximus"
+
+
+def test_selected_ids_in_one_request_equal_one_by_one(tmp_path, monkeypatch):
+    """The grid's multi-select: photo_ids corrects exactly those photos (no burst / same widening), in one request,
+    and ends where correcting each alone ends; an id of another scan fails the whole request."""
+    c, store, sid = setup(tmp_path, monkeypatch)
+    ids = [p["id"] for p in store.snapshot(sid)["photos"]]
+    pick = [ids[0], ids[4]]
+    r = c.post(f"/api/scans/{sid}/corrections", json={"photo_ids": pick, "sci": "Thalasseus elegans"}, headers=H)
+    assert r.json() == {"ok": True, "photos": 2}
+    batch = (eff(store, sid), [p["stars"] for p in store.snapshot(sid)["photos"]])
+    assert batch[0] == ["Thalasseus elegans", "Thalasseus maximus", "Thalasseus maximus", "Thalasseus maximus", "Thalasseus elegans", "Calypte anna"]
+    assert c.post(f"/api/scans/{sid}/corrections", json={"photo_ids": pick, "undo": True}, headers=H).json()["photos"] == 2
+    assert eff(store, sid)[4] == "Calypte anna"
+    for i in pick:
+        c.post(f"/api/scans/{sid}/corrections", json={"photo_id": i, "scope": "one", "sci": "Thalasseus elegans"}, headers=H)
+    assert (eff(store, sid), [p["stars"] for p in store.snapshot(sid)["photos"]]) == batch
+
+    sid2 = store.create_scan(str(tmp_path / "b"), False, None, {"keep": 50}, "fp2", [("/q/x.ARW", 1, 1)])
+    stranger = store.queued(sid2)[0]["id"]
+    assert c.post(f"/api/scans/{sid}/corrections", json={"photo_ids": [ids[1], stranger], "sci": None}, headers=H).status_code == 404
+    assert eff(store, sid) == batch[0]                                       # nothing half-applied
+    assert c.post(f"/api/scans/{sid}/corrections", json={"photo_ids": [], "sci": None}, headers=H).status_code == 400

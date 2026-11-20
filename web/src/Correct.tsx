@@ -8,8 +8,8 @@ import { PlainName } from "./names";
 export interface Pick { sci: string; zh: string | null; en: string | null }
 export type Scope = "one" | "burst" | "same";
 
-export default function CorrectPanel({ own, inScan, current, burst, onApply, onUndo, onClose, manual }: {
-  own: Name[]; inScan: Pick[]; current: string | null; burst: boolean; manual: boolean;
+export default function CorrectPanel({ own, inScan, current, burst, onApply, onUndo, onClose, manual, count }: {
+  own: Name[]; inScan: Pick[]; current: string | null; burst: boolean; manual: boolean; count?: number;   // count: the grid's selection
   onApply: (sci: string | null, scope: Scope) => Promise<void>; onUndo?: (scope: Scope) => Promise<void>; onClose: () => void;
 }) {
   const [q, setQ] = useState("");
@@ -37,7 +37,7 @@ export default function CorrectPanel({ own, inScan, current, burst, onApply, onU
         {!list.length && <li className="hint">{q.trim() ? "没有找到" : "输入名字搜索"}</li>}
       </ul>
       <div className="row" role="radiogroup" aria-label="改哪些照片">
-        <label><input type="radio" checked={scope === "one"} onChange={() => setScope("one")} /> 这一张</label>
+        <label><input type="radio" checked={scope === "one"} onChange={() => setScope("one")} /> {count ? `选中的 ${count} 张` : "这一张"}</label>
         {burst && <label><input type="radio" checked={scope === "burst"} onChange={() => setScope("burst")} /> 这一连拍组</label>}
         {current && <label><input type="radio" checked={scope === "same"} onChange={() => setScope("same")} /> 这批里所有被认成 <i>{current}</i> 的照片</label>}
       </div>

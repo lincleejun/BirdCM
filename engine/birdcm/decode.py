@@ -183,6 +183,49 @@ def decode(job: dict) -> dict:
             "t_decode": t1 - t0, "t_save": t2 - t1, "pid": os.getpid()}
 
 
+def upright_jpeg(data: bytes, orientation: int) -> bytes:
+    """A JPEG turned upright: the same bytes when it already is (orientation 1), else decoded, turned and re-encoded."""
+    if orientation not in TRANSPOSE:
+        return data
+    out = io.BytesIO()
+    Image.open(io.BytesIO(data)).convert("RGB").transpose(TRANSPOSE[orientation]).save(out, "JPEG", quality=92)
+    return out.getvalue()
+
+
+def full_jpeg(job: dict) -> bytes:
+    """Worker entry for the 100 % view: the photo at full size, upright, as JPEG bytes, from the same source
+    load_upright uses (so the normalised marks land on the same pixels). A RAW gives its embedded full-size JPEG
+    (~30 ms, the bytes as they are when upright); a RAW without one is demosaiced at full size. Nothing is cached."""
+    path = Path(job["path"])
+    try:
+        st = path.stat()
+    except FileNotFoundError:
+        raise FileChanged("文件已不存在") from None
+    if (st.st_size, st.st_mtime_ns) != (job["size"], job["mtime_ns"]):
+        raise FileChanged("文件在列出之后被修改过")
+    if path.suffix.lower() not in RAW_EXT:
+        with Image.open(path) as im:
+            orientation = int(im.getexif().get(0x0112, 1) or 1)
+        return upright_jpeg(path.read_bytes(), orientation)
+    import rawpy
+
+    with rawpy.imread(str(path)) as raw:
+        orientation = FLIP_TO_ORIENTATION.get(raw.sizes.flip, 1)
+        try:
+            thumb = raw.extract_thumb()
+        except Exception:  # noqa: BLE001 - no thumbnail: demosaic
+            thumb = None
+        if thumb is not None and thumb.format == rawpy.ThumbFormat.JPEG:
+            with Image.open(io.BytesIO(thumb.data)) as probe:
+                big = max(probe.size) >= EMBEDDED_MIN
+            if big:
+                return upright_jpeg(thumb.data, orientation)
+        px = raw.postprocess(use_camera_wb=True, output_bps=8)     # LibRaw rotates the pixels itself
+    out = io.BytesIO()
+    Image.fromarray(px).save(out, "JPEG", quality=92)
+    return out.getvalue()
+
+
 # ---- shooting info ---------------------------------------------------------------------------------------------
 
 TAGS = ["-Make", "-Model", "-LensModel", "-LensID", "-FocalLength#", "-FNumber#", "-ExposureTime#", "-ISO#",
