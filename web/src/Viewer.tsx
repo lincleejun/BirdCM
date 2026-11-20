@@ -6,6 +6,7 @@ import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { actual, FIT, headOf, layout, panBy, scaleOf, type Size, starOf, toggle, type View, zoomAt } from "./look";
 import type { MarkSet } from "./names";
 import type { PhotoResult, PhotoRow } from "./types";
+import { t } from "./i18n";
 
 export function Marks({ r, m }: { r: PhotoResult; m: MarkSet }) {
   const at = (p: [number, number]) => ({ left: `${p[0] * 100}%`, top: `${p[1] * 100}%` });
@@ -23,13 +24,13 @@ export function Marks({ r, m }: { r: PhotoResult; m: MarkSet }) {
 }
 
 /** 淘汰 / 0-3 / 撤回 for these photos (one request however many); `on` marks the person's own stars. */
-export function StarSet({ on, undo, onStars, label = "手动设星级" }: { on: number | null; undo: boolean; onStars: (s: number | null) => void; label?: string }) {
+export function StarSet({ on, undo, onStars, label = t("viewer.set_stars") }: { on: number | null; undo: boolean; onStars: (s: number | null) => void; label?: string }) {
   return (
     <div className="star-set" role="group" aria-label={label}>
       {[-1, 0, 1, 2, 3].map((v) => (
-        <button key={v} type="button" className="btn slim" aria-pressed={on === v} onClick={() => onStars(v)}>{v === -1 ? "淘汰" : v === 0 ? "0 星" : "★".repeat(v)}</button>
+        <button key={v} type="button" className="btn slim" aria-pressed={on === v} onClick={() => onStars(v)}>{v === -1 ? t("viewer.reject") : v === 0 ? t("viewer.zero") : "★".repeat(v)}</button>
       ))}
-      {undo && <button type="button" className="btn slim link" onClick={() => onStars(null)}>撤回</button>}
+      {undo && <button type="button" className="btn slim link" onClick={() => onStars(null)}>{t("viewer.undo")}</button>}
     </div>
   );
 }
@@ -107,12 +108,12 @@ function Pane({ scanId, row, view, setView, marks, active, onActive }: {
           {marks && <Marks r={r} m={marks} />}
         </div>
       )}
-      <span className="zoom-tag">{l ? `${Math.round((l.s / actual()) * 100)}%` : ""}{want && !full ? " · 正在载入原图…" : full ? ` · 原图 ${(shown! / 1000).toFixed(1)} s` : ""}</span>
+      <span className="zoom-tag">{l ? `${Math.round((l.s / actual()) * 100)}%` : ""}{want && !full ? t("viewer.loading_full") : full ? t("viewer.full", { s: (shown! / 1000).toFixed(1) }) : ""}</span>
     </div>
   );
 }
 
-const starTxt = (s: number | null) => (s === null ? "待定" : s === -1 ? "淘汰" : s === 0 ? "0 星" : "★".repeat(s) + "☆".repeat(3 - s));
+const starTxt = (s: number | null) => (s === null ? t("viewer.pending") : s === -1 ? t("viewer.reject") : s === 0 ? t("viewer.zero") : "★".repeat(s) + "☆".repeat(3 - s));
 
 /** The large-photo dialog. `b` set: compare `a` with `b` (stars per pane, ← → walk `b` through `pool`). */
 export const Viewer = forwardRef<HTMLDialogElement, {
@@ -157,20 +158,20 @@ export const Viewer = forwardRef<HTMLDialogElement, {
     if (next && next.id !== b.id) onCompare(next.id);
   };
   return (
-    <dialog ref={ref} className={`viewer${b ? " compare" : ""}`} aria-label={b ? "并排对比" : "大图"} onKeyDown={key}
+    <dialog ref={ref} className={`viewer${b ? " compare" : ""}`} aria-label={b ? t("viewer.compare_label") : t("viewer.large")} onKeyDown={key}
       onClose={() => { setViewRaw(FIT); setSide(0); onCompare(null); }}
       onClick={(e) => { if (e.target === e.currentTarget) e.currentTarget.close(); }}>
-      <div className="dlg-head"><h3>{b ? `对比 · ${a?.file} | ${b.file}` : a?.file}</h3>
-        <span className="hint">{b ? "← → 换右边一张 · 数字键给指针所在的一张设星" : "← → 换一张"} · 点一下或 Z：适应 ↔ 100% · 滚轮缩放 · 拖动 · E 跳到眼睛 · C {b ? "关掉对比" : "和同组相邻张对比"} · 0–3 / X / U 设星 · Esc 关闭</span>
-        {!b && neighbour !== null && <button className="btn" onClick={() => onCompare(neighbour)}>对比相邻张</button>}
-        {zoomable && a && <button className="btn" onClick={() => paneSet(target!)((_v, p, i) => toggle(FIT, p, i, head()))} disabled={!head()}>跳到眼睛</button>}
-        <button className="btn" onClick={(e) => (e.currentTarget.closest("dialog") as HTMLDialogElement).close()}>关闭</button></div>
+      <div className="dlg-head"><h3>{b ? t("viewer.compare_title", { a: a?.file ?? "", b: b.file }) : a?.file}</h3>
+        <span className="hint">{b ? t("viewer.keys_compare") : t("viewer.keys_one")}{t("viewer.keys_mid")}{b ? t("viewer.keys_close_compare") : t("viewer.keys_open_compare")}{t("viewer.keys_end")}</span>
+        {!b && neighbour !== null && <button className="btn" onClick={() => onCompare(neighbour)}>{t("viewer.compare_neighbour")}</button>}
+        {zoomable && a && <button className="btn" onClick={() => paneSet(target!)((_v, p, i) => toggle(FIT, p, i, head()))} disabled={!head()}>{t("viewer.to_eye")}</button>}
+        <button className="btn" onClick={(e) => (e.currentTarget.closest("dialog") as HTMLDialogElement).close()}>{t("viewer.close")}</button></div>
       {a && (
         <div className="look">
           {rows.map((p, i) => (
             <figure key={p.id} className="look-pane" data-pane={p.id}>
-              {b && <figcaption><b>{p.file}</b> <span className="stars">{complete ? starTxt(p.stars) : "待定星级"}</span>
-                {p.star_auto && <span className="pill">手动星级</span>}
+              {b && <figcaption><b>{p.file}</b> <span className="stars">{complete ? starTxt(p.stars) : t("viewer.pending_stars")}</span>
+                {p.star_auto && <span className="pill">{t("viewer.manual_stars")}</span>}
                 {complete && p.result && <StarSet on={p.star_auto ? p.stars : null} undo={!!p.star_auto} onStars={(s) => setStars([p.id], s)} />}</figcaption>}
               {p.result ? <Pane scanId={scanId} row={p} view={view} setView={setViewRaw} marks={marks} active={!!b && side === i} onActive={() => setSide(i)} />
                 : <img className="look-plain" src={`/api/photos/${p.id}/preview?v=${p.size}-${p.mtime_ns}`} alt={p.file} />}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { get } from "./api";
 import type { Place } from "./types";
+import { getLang, type Key, t as tr } from "./i18n";
 
 // Where the photos were taken: a point (lat, lon) with a label and where it came from. Three ways in, one compact
 // control: the device's location, a pin on a map, or a country / first-level division (its representative point).
@@ -8,7 +9,7 @@ import type { Place } from "./types";
 
 export interface Country { code: string; zh: string; en: string; lat: number; lon: number; regions: { zh: string; en?: string; code?: string; lat: number; lon: number }[] }
 const KEY = "birdcm.place";
-const SOURCE: Record<Place["source"], string> = { map: "地图选点", device: "本机定位", region: "地区中心点" };
+const SOURCE: Record<Place["source"], Key> = { map: "loc.src_map", device: "loc.src_device", region: "loc.src_region" };
 
 export function rememberedPlace(): Place | null {
   try { const p = JSON.parse(localStorage.getItem(KEY) || "null"); return p && typeof p.lat === "number" ? p : null; } catch { return null; }
@@ -42,10 +43,10 @@ export function PlaceName({ lat, lon, code, label, name }: { lat?: number | null
 
 /** A chosen location (a scan's, a single photo's): its name, how it was chosen, the point as a caption. */
 export function PlaceOf({ loc }: { loc: string | Place | null | undefined }) {
-  if (!loc) return <>未选位置</>;
-  if (typeof loc === "string") return <><PlaceName label={loc} /> · 地区中心点</>;
-  return loc.source === "region" ? <><PlaceName code={loc.code} label={loc.label} /> · 地区中心点</>
-    : <><PlaceName lat={loc.lat} lon={loc.lon} /> · {SOURCE[loc.source] ?? "地图选点"}</>;
+  if (!loc) return <>{tr("loc.none")}</>;
+  if (typeof loc === "string") return <><PlaceName label={loc} /> · {tr("loc.src_region")}</>;
+  return loc.source === "region" ? <><PlaceName code={loc.code} label={loc.label} /> · {tr("loc.src_region")}</>
+    : <><PlaceName lat={loc.lat} lon={loc.lon} /> · {tr(SOURCE[loc.source] ?? "loc.src_map")}</>;
 }
 const fmt = (lat: number, lon: number) => `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
@@ -64,14 +65,14 @@ export function nearestName(cat: Country[], lat: number, lon: number): string {
 
 /** Places in our own table matching typed text (Chinese or English, any case); offline. */
 export function localMatches(cat: Country[], text: string): { label: string; lat: number; lon: number; zoom: number; region: boolean }[] {
-  const t = text.trim().toLowerCase();
+  const t = text.trim().toLowerCase(), zh = getLang() === "zh";
   if (!t) return [];
   const out: { label: string; lat: number; lon: number; zoom: number; region: boolean }[] = [];
   for (const c of cat) {
-    if (c.zh.includes(t) || c.en.toLowerCase().includes(t)) out.push({ label: `${c.zh} ${c.en}`, lat: c.lat, lon: c.lon, zoom: 5, region: true });
+    if (c.zh.includes(t) || c.en.toLowerCase().includes(t)) out.push({ label: zh ? `${c.zh} ${c.en}` : c.en, lat: c.lat, lon: c.lon, zoom: 5, region: true });
     for (const r of c.regions) {
       const en = (r as { en?: string }).en ?? "";
-      if (r.zh.includes(t) || en.toLowerCase().includes(t)) out.push({ label: `${c.zh} · ${r.zh} ${en}`, lat: r.lat, lon: r.lon, zoom: 7, region: true });
+      if (r.zh.includes(t) || en.toLowerCase().includes(t)) out.push({ label: zh ? `${c.zh} · ${r.zh} ${en}` : `${en || r.zh} · ${c.en}`, lat: r.lat, lon: r.lon, zoom: 7, region: true });
     }
   }
   return out.slice(0, 8);
@@ -104,11 +105,11 @@ export default function LocationPicker({ value, onChange, catalogue, compact = f
   useEffect(() => { if (value) setCountry(catalogue.find((x) => x.zh === value.label.replace(/ 附近$/, "").split(" · ")[0])?.code ?? ""); }, [value, catalogue]);
 
   const useDevice = () => {
-    if (!navigator.geolocation) { setMsg("这个浏览器不能定位。"); return; }
-    setMsg("正在请求定位权限…");
+    if (!navigator.geolocation) { setMsg(tr("loc.no_geo")); return; }
+    setMsg(tr("loc.asking"));
     navigator.geolocation.getCurrentPosition(
       (pos) => { const { latitude: lat, longitude: lon } = pos.coords; set({ lat, lon, label: nearestName(catalogue, lat, lon), source: "device" }); },
-      (err) => setMsg(err.code === err.PERMISSION_DENIED ? "没有得到定位权限，可以在地图上选，或选国家 / 地区。" : `定位失败：${err.message}`),
+      (err) => setMsg(err.code === err.PERMISSION_DENIED ? tr("loc.denied") : tr("loc.failed", { e: err.message })),
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 });
   };
   const c = catalogue.find((x) => x.code === country);
@@ -127,29 +128,29 @@ export default function LocationPicker({ value, onChange, catalogue, compact = f
       {value && !editing ? (
         <div className="row">
           <div className="folder set" style={{ flex: 1 }}><PlaceOf loc={value} /></div>
-          <button type="button" className="btn" onClick={() => setEditing(true)}>更改</button>
-          <button type="button" className="btn link" onClick={() => set(null)}>清除</button>
+          <button type="button" className="btn" onClick={() => setEditing(true)}>{tr("loc.change")}</button>
+          <button type="button" className="btn link" onClick={() => set(null)}>{tr("loc.clear")}</button>
         </div>
       ) : null}
       {choosing && (
         <div className="row" style={{ marginTop: value ? 8 : 0 }}>
-          <button type="button" className="btn" onClick={useDevice}>用我的位置</button>
-          <button type="button" className="btn" onClick={() => setMapOpen(true)}>在地图上选</button>
-          <select aria-label="国家" value={country} onChange={(e) => { setCountry(e.target.value); pickRegion(e.target.value, ""); }}>
-            <option value="">选国家 / 地区…</option>
-            {catalogue.map((x) => <option key={x.code} value={x.code}>{x.zh} {x.en}</option>)}
+          <button type="button" className="btn" onClick={useDevice}>{tr("loc.device")}</button>
+          <button type="button" className="btn" onClick={() => setMapOpen(true)}>{tr("loc.on_map")}</button>
+          <select aria-label={tr("loc.country")} value={country} onChange={(e) => { setCountry(e.target.value); pickRegion(e.target.value, ""); }}>
+            <option value="">{tr("loc.pick_country")}</option>
+            {catalogue.map((x) => <option key={x.code} value={x.code}>{getLang() === "zh" ? `${x.zh} ${x.en}` : x.en}</option>)}
           </select>
           {c && c.regions.length > 0 && (
-            <select aria-label="州 / 省" value={cur[0] === c.zh ? cur[1] ?? "" : ""} onChange={(e) => pickRegion(c.code, e.target.value)}>
-              <option value="">整个{c.zh}</option>
-              {c.regions.map((r) => <option key={r.zh}>{r.zh}</option>)}
+            <select aria-label={tr("loc.division")} value={cur[0] === c.zh ? cur[1] ?? "" : ""} onChange={(e) => pickRegion(c.code, e.target.value)}>
+              <option value="">{tr("loc.whole", { c: getLang() === "zh" ? c.zh : c.en })}</option>
+              {c.regions.map((r) => <option key={r.zh} value={r.zh}>{getLang() === "zh" ? r.zh : r.en || r.zh}</option>)}
             </select>
           )}
-          {value && <button type="button" className="btn link" onClick={() => setEditing(false)}>取消</button>}
+          {value && <button type="button" className="btn link" onClick={() => setEditing(false)}>{tr("loc.cancel")}</button>}
         </div>
       )}
       {msg && <p className="hint" role="status">{msg}</p>}
-      {!compact && value?.source === "region" && !editing && <p className="hint">地区中心点只是粗略位置（大的州省可能偏几百公里）；在地图上点一下拍摄地点会更准。</p>}
+      {!compact && value?.source === "region" && !editing && <p className="hint">{tr("loc.region_hint")}</p>}
       {mapOpen && <MapDialog start={value ?? rememberedPlace()} catalogue={catalogue} onClose={() => setMapOpen(false)} onPick={(p) => { setMapOpen(false); set(p); }} />}
     </div>
   );
@@ -200,33 +201,33 @@ function MapDialog({ start, catalogue, onClose, onPick }: { start: Place | null;
   const searchOnline = async () => {
     if (coords) { go(coords.lat, coords.lon, 11); return; }
     if (!q.trim()) return;
-    setOnlineMsg("正在搜索…");
-    try { const r = await nominatim(q); setOnline(r); setOnlineMsg(r.length ? "" : "没有找到"); }
-    catch { setOnline(null); setOnlineMsg("在线搜索用不了（可能离线），上面列出的本地地名仍可用。"); }
+    setOnlineMsg(tr("loc.searching"));
+    try { const r = await nominatim(q); setOnline(r); setOnlineMsg(r.length ? "" : tr("loc.not_found")); }
+    catch { setOnline(null); setOnlineMsg(tr("loc.search_offline")); }
   };
   return (
     <dialog ref={ref} className="map-dlg" onClose={onClose} aria-labelledby="map-title">
-      <div className="dlg-head"><h3 id="map-title">在地图上选拍摄地点</h3><button className="btn" onClick={() => ref.current?.close()}>取消</button></div>
+      <div className="dlg-head"><h3 id="map-title">{tr("loc.map_title")}</h3><button className="btn" onClick={() => ref.current?.close()}>{tr("loc.cancel")}</button></div>
       <div className="dlg-body">
         <div className="row">
-          <input className="map-search" placeholder="搜地名（Alaska、阿拉斯加、Bolsa Chica…）或输入坐标 61.2, -149.9" value={q} autoFocus
+          <input className="map-search" placeholder={tr("loc.search_ph")} value={q} autoFocus
             onChange={(e) => { setQ(e.target.value); setOnline(null); setOnlineMsg(""); }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); searchOnline(); } }} />
-          <button className="btn" onClick={searchOnline}>{coords ? "跳到坐标" : "搜索"}</button>
+          <button className="btn" onClick={searchOnline}>{coords ? tr("loc.go_coords") : tr("loc.search")}</button>
         </div>
         {(local.length > 0 || online || onlineMsg) && (
           <ul className="map-hits">
-            {local.map((h) => <li key={h.label}><button type="button" onClick={() => go(h.lat, h.lon, h.zoom)}>{h.label}<small>本地</small></button></li>)}
+            {local.map((h) => <li key={h.label}><button type="button" onClick={() => go(h.lat, h.lon, h.zoom)}>{h.label}<small>{tr("loc.local")}</small></button></li>)}
             {online?.map((h) => <li key={`${h.lat},${h.lon}`}><button type="button" onClick={() => go(h.lat, h.lon, 12)}>{h.label}<small>OpenStreetMap</small></button></li>)}
             {onlineMsg && <li className="hint">{onlineMsg}</li>}
           </ul>
         )}
-        <p className="hint">地图图块和按回车的地名搜索会访问 openstreetmap.org（搜索由本机程序转发，只发送你输入的地名；开着「用网络显示地名」时，图钉的经纬度取到约 1 公里发给 OpenStreetMap Nominatim 换成地名；照片不会离开这台电脑）。搜到地方后点一下或拖动图钉细调。</p>
+        <p className="hint">{tr("loc.map_hint")}</p>
         <div ref={box} className="map-box" />
-        {tilesOk === false && <p className="hint">地图图块加载不了（可能离线）。可以用上面的本地地名或输入坐标。</p>}
+        {tilesOk === false && <p className="hint">{tr("loc.tiles_failed")}</p>}
         <div className="row" style={{ marginTop: 8 }}>
-          <span className="hint">{pt ? <PlaceName lat={pt.lat} lon={pt.lon} /> : "还没选点"}</span>
-          <button className="btn primary" disabled={!pt} onClick={() => pt && onPick({ ...pt, label: nearestName(catalogue, pt.lat, pt.lon), source: "map" })}>用这个点</button>
+          <span className="hint">{pt ? <PlaceName lat={pt.lat} lon={pt.lon} /> : tr("loc.no_point")}</span>
+          <button className="btn primary" disabled={!pt} onClick={() => pt && onPick({ ...pt, label: nearestName(catalogue, pt.lat, pt.lon), source: "map" })}>{tr("loc.use_point")}</button>
         </div>
       </div>
     </dialog>

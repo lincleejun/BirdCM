@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { type Key, t } from "./i18n";
 // 留片比例: one number, the share of eligible photos that get any star (1 + 2 + 3). Which star is decided by quality,
 // not by quotas. Changing it after a scan only re-rates (no re-scan).
 export interface KeepSetting { preset: string; keep: number }
-export const KEEP_PRESETS: [string, string, number][] = [["loose", "宽松", 30], ["std", "标准", 25], ["strict", "严格", 20], ["stricter", "更严", 10]];
+export const KEEP_PRESETS: [string, Key, number][] = [["loose", "keep.loose", 30], ["std", "keep.std", 25], ["strict", "keep.strict", 20], ["stricter", "keep.stricter", 10]];
 export const DEFAULT_KEEP: KeepSetting = { preset: "std", keep: 25 };
 
 export function keepOf(ratio: { preset?: string; keep?: number } | null | undefined): KeepSetting {
@@ -16,16 +17,16 @@ export function keepOf(ratio: { preset?: string; keep?: number } | null | undefi
 export default function KeepControl({ value, onChange, name = "keep" }: { value: KeepSetting; onChange: (v: KeepSetting) => void; name?: string }) {
   return (
     <>
-      <div className="seg" role="radiogroup" aria-label="留片比例（有星的照片占比）">
-        {KEEP_PRESETS.map(([v, t, k]) => (
+      <div className="seg" role="radiogroup" aria-label={t("keep.ratio_label")}>
+        {KEEP_PRESETS.map(([v, l, k]) => (
           <label key={v}><input type="radio" name={name} checked={value.preset === v} onChange={() => onChange({ preset: v, keep: k })} />
-            <span>{t} {k}%</span></label>
+            <span>{t(l)} {k}%</span></label>
         ))}
         <label><input type="radio" name={name} checked={value.preset === "custom"} onChange={() => onChange({ preset: "custom", keep: value.keep })} />
-          <span>自定义</span></label>
+          <span>{t("keep.custom")}</span></label>
       </div>
       {value.preset === "custom" && (
-        <label className="row" style={{ marginTop: 8 }}>有星的照片占 <input type="number" min={1} max={100} value={value.keep}
+        <label className="row" style={{ marginTop: 8 }}>{t("keep.share")}<input type="number" min={1} max={100} value={value.keep}
           onChange={(e) => onChange({ preset: "custom", keep: Math.max(1, Math.min(100, +e.target.value || 1)) })} /> %</label>
       )}
     </>
@@ -47,18 +48,18 @@ export function KeepButton({ value, onChange }: { value: KeepSetting; onChange: 
   const pick = (v: KeepSetting) => { setOpen(false); if (v.keep !== value.keep || v.preset !== value.preset) onChange(v); };
   return (
     <span className="keep-pop" ref={box}>
-      <button type="button" className="keep-btn" aria-expanded={open} onClick={() => { setCustom(value.keep); setOpen(!open); }}>目标 {value.keep}% ▾</button>
+      <button type="button" className="keep-btn" aria-expanded={open} onClick={() => { setCustom(value.keep); setOpen(!open); }}>{t("keep.target", { n: value.keep })}</button>
       {open && (
-        <div className="keep-menu" role="dialog" aria-label="留片比例">
-          {KEEP_PRESETS.map(([v, t, k]) => (
-            <button key={v} type="button" className={value.preset === v ? "on" : ""} onClick={() => pick({ preset: v, keep: k })}>{t} {k}%</button>
+        <div className="keep-menu" role="dialog" aria-label={t("keep.ratio")}>
+          {KEEP_PRESETS.map(([v, l, k]) => (
+            <button key={v} type="button" className={value.preset === v ? "on" : ""} onClick={() => pick({ preset: v, keep: k })}>{t(l)} {k}%</button>
           ))}
-          <label className={value.preset === "custom" ? "on" : ""}>自定义
+          <label className={value.preset === "custom" ? "on" : ""}>{t("keep.custom")}
             <input type="number" min={1} max={100} value={custom} onChange={(e) => setCustom(+e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") pick({ preset: "custom", keep: Math.max(1, Math.min(100, Math.round(custom) || 1)) }); }} /> %
-            <button type="button" className="btn" onClick={() => pick({ preset: "custom", keep: Math.max(1, Math.min(100, Math.round(custom) || 1)) })}>好</button>
+            <button type="button" className="btn" onClick={() => pick({ preset: "custom", keep: Math.max(1, Math.min(100, Math.round(custom) || 1)) })}>{t("keep.ok")}</button>
           </label>
-          <p className="hint">有星的照片占比上限；改了立刻重算，不用重扫</p>
+          <p className="hint">{t("keep.hint")}</p>
         </div>
       )}
     </span>

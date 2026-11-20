@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -5,6 +6,7 @@ import react from "@vitejs/plugin-react";
 // rewrites it (changeOrigin) and drops Origin.
 export default defineConfig({
   plugins: [react()],
+  test: { setupFiles: ["src/test-setup.ts"] },          // the tests read the Chinese page unless they switch
   server: {
     proxy: {
       "/api": {
