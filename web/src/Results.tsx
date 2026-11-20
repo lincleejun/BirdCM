@@ -677,7 +677,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
         {exportOpen && <ExportDialog scanId={scanId} photos={photos} view={view} onClose={() => exportRef.current?.close()}
           saveTable={(rows, kind) => kind === "csv" ? save("选片结果.csv", csv(rows.map(exportRow)), "text/csv")
             : save("选片结果.json", JSON.stringify(rows.map(exportRow), null, 2), "application/json")} />}
-        <p className="hint" style={{ margin: "0 16px 14px" }}>导出的文件存到你选的位置，原片文件夹里不写任何东西。写给 Lightroom 的 XMP 和网页报告以后再做。</p>
+        <p className="hint" style={{ margin: "0 16px 14px" }}>表格和 eBird 文件存到你选的位置；只有「写 XMP 边车」会在照片文件夹里写 .xmp，要你点头，可撤回。网页报告以后再做。</p>
       </dialog>
     </section>
   );

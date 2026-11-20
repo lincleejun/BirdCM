@@ -84,7 +84,7 @@ function Setup({ onOpen, catalogue }: { onOpen: (id: number) => void; catalogue:
         <div className="go">
           <button className="btn primary big" disabled={!folder.trim() || busy} onClick={go}>开始</button>
           {err && <p className="error-text" role="alert">{err}</p>}
-          <p className="note">全部在这台电脑上处理，不上传，也不改动原片。</p>
+          <p className="note">全部在这台电脑上处理，不上传，不改原片；写给 Lightroom 的 .xmp 边车要你点头才写。</p>
         </div>
         {scans.length > 0 && (
           <div className="recent"><span className="label">最近的扫描</span>

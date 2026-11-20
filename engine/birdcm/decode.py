@@ -247,6 +247,11 @@ class ExifTool:
             out += chunk
         return out[:out.index(mark)]
 
+    def run(self, args: list[str]) -> bytes:
+        """One exiftool command (one argument per item); its stdout."""
+        with self.lock:
+            return self._ask(args)
+
     def read(self, paths: list[str]) -> dict[str, dict]:
         """path -> parsed shooting info ({} for a file exiftool could not read)."""
         if not paths:

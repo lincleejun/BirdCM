@@ -1,4 +1,6 @@
 """Where BirdCM keeps its own files, and the one rule about them: never inside a photo folder.
+The one exception is not ours but the person's: the XMP sidecars (<stem>.xmp beside a RAW) that xmp.py writes only when
+asked in the export dialog, recorded in our database so they can be undone; the original photos are never written.
 
 BIRDCM_DATA_DIR  (default ~/Library/Application Support/BirdCM): the SQLite database.
 BIRDCM_CACHE_DIR (default ~/Library/Caches/BirdCM): thumbnails, previews, downloaded models (models/).
