@@ -66,25 +66,48 @@ final class Rarity {
         boxLock.lock(); if boxCache == nil { boxCache = out }; let value = boxCache!; boxLock.unlock()
         return value
     }
+    private typealias ShapeRow = (code: String, level: Int, region: Int64, ring: [Double])
+    private var shapeCache = [Int64: [ShapeRow]]()
+    private let shapeLock = NSLock()
     /// Port of rarity_global.region_at: ISO codes, even/odd rings, smallest area wins, 0.25° coastal tolerance.
+    /// Each shape row is read and decoded once per instance (shapeCache, by rowid: its one joined row, or none when the blob is NULL
+    /// or its region_id is not in regions); area() is still asked row by row on every call, as before.
     func regionAt(lat:Double,lon:Double) -> (division:String?,country:String?) {
         // Same box test as the former SQL (minx<=lon+0.25 AND maxx>=lon-0.25 AND miny<=lat+0.25 AND maxy>=lat-0.25), done in memory; only the hits are read.
         guard let boxes=boxes() else {return (nil,nil)}
         let x1=lon+0.25, x0=lon-0.25, y1=lat+0.25, y0=lat-0.25
-        let ids=boxes.filter {$0.minx<=x1 && $0.maxx>=x0 && $0.miny<=y1 && $0.maxy>=y0}.map {String($0.id)}
+        let ids=boxes.filter {$0.minx<=x1 && $0.maxx>=x0 && $0.miny<=y1 && $0.maxy>=y0}.map(\.id)
         guard !ids.isEmpty else {return (nil,nil)}
-        var stmt:OpaquePointer?
-        let sql="SELECT r.code,r.level,s.pts,s.region_id FROM shapes s JOIN regions r ON r.id=s.region_id WHERE s.rowid IN (\(ids.joined(separator:",")))"
-        guard sqlite3_prepare_v2(db,sql,-1,&stmt,nil)==SQLITE_OK else {return (nil,nil)}
-        defer{sqlite3_finalize(stmt)}
+        shapeLock.lock(); let cached=shapeCache; shapeLock.unlock()
+        let missing=ids.filter {cached.index(forKey:$0)==nil}
+        var fetched=[Int64:[ShapeRow]]()
+        if !missing.isEmpty {
+            var stmt:OpaquePointer?
+            let sql="SELECT r.code,r.level,s.pts,s.region_id,s.rowid FROM shapes s JOIN regions r ON r.id=s.region_id WHERE s.rowid IN (\(missing.map {String($0)}.joined(separator:",")))"
+            guard sqlite3_prepare_v2(db,sql,-1,&stmt,nil)==SQLITE_OK else {return (nil,nil)}
+            defer{sqlite3_finalize(stmt)}
+            var rc=sqlite3_step(stmt)
+            while rc==SQLITE_ROW {
+                let code=String(cString:sqlite3_column_text(stmt,0)), n=Int(sqlite3_column_bytes(stmt,2))/4, id=sqlite3_column_int64(stmt,4)
+                var row=[ShapeRow]()   // NULL (or empty) blob: no row, skipped as before
+                if let blob=sqlite3_column_blob(stmt,2) {
+                    let data=Data(bytes:blob,count:n*4)
+                    let ring=data.withUnsafeBytes {raw in (0..<n).map {Double(Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:$0*4,as:UInt32.self))))}}
+                    row=[(code,Int(sqlite3_column_int(stmt,1)),sqlite3_column_int64(stmt,3),ring)]
+                }
+                fetched[id]=row
+                rc=sqlite3_step(stmt)
+            }
+            // Only a complete read proves a missing rowid has no row (region_id not in regions); after a step error it is read again next time.
+            if rc==SQLITE_DONE {for id in missing where fetched.index(forKey:id)==nil {fetched[id]=[]}}
+            shapeLock.lock(); shapeCache.merge(fetched) {old,_ in old}; shapeLock.unlock()
+        }
         var rings=[String:[[Double]]](), areas=[String:Double](), levels=[String:Int]()
-        while sqlite3_step(stmt)==SQLITE_ROW {
-            let code=String(cString:sqlite3_column_text(stmt,0)), n=Int(sqlite3_column_bytes(stmt,2))/4
-            guard let blob=sqlite3_column_blob(stmt,2) else {continue}
-            let data=Data(bytes:blob,count:n*4)
-            let ring=data.withUnsafeBytes {raw in (0..<n).map {Double(Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:$0*4,as:UInt32.self))))}}
-            guard let area=area(sqlite3_column_int64(stmt,3)) else {return (nil,nil)}
-            rings[code,default:[]].append(ring);areas[code]=area;levels[code]=Int(sqlite3_column_int(stmt,1))
+        for id in ids {
+            for shape in cached[id] ?? fetched[id] ?? [] {   // not read (step error part way): left out this time, as the old loop did
+                guard let area=area(shape.region) else {return (nil,nil)}
+                rings[shape.code,default:[]].append(shape.ring);areas[shape.code]=area;levels[shape.code]=shape.level
+            }
         }
         var hit=[Int:String](), nearest:(Double,String)?
         for code in rings.keys.sorted(by:{areas[$0]! > areas[$1]!}) {
