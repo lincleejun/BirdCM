@@ -133,6 +133,8 @@ input[type=number] { width: 76px; }
 .engine.ok::before { background: var(--success-fg); }
 .engine.busy::before { animation: engine-pulse 1.2s ease-in-out infinite; }
 .engine.bad { color: var(--error-fg); font-weight: 600; }
+.update { margin-left: auto; color: var(--accent); text-decoration: none; }
+.engine + .update { margin-left: 8px; }
 .views .engine button { min-height: 28px; padding: 0 8px; border: 1px solid currentColor; border-radius: 6px; color: inherit; font-size: 13px; }
 @keyframes engine-pulse { 50% { opacity: .3; } }
 main { max-width: 1520px; margin: auto; padding: 32px var(--gutter) 64px; }

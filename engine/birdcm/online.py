@@ -4,8 +4,9 @@ default and only when needed, the first use shows the disclosure, no translation
 
 Only ids and titles from the bundled mapping (data/species-map.sqlite, tools/build_species_map.py) leave the machine:
 a species with no accepted mapping gets nothing, nothing is guessed. Never photos, paths, places or typed text (place
-names are places.py: rounded coordinates to OpenStreetMap Nominatim, its own setting in the same file). The
-browser only talks to the engine; the engine only talks to a fixed set of Wikimedia hosts.
+names are places.py: rounded coordinates to OpenStreetMap Nominatim, its own setting in the same file; the update check
+is update.py: one bare GET to api.github.com, off by default, its own setting in the same file). The browser only
+talks to the engine; this module only talks to a fixed set of Wikimedia hosts.
 """
 from __future__ import annotations
 
@@ -99,18 +100,19 @@ def _settings_path() -> Path:
 
 
 def settings() -> dict:
-    """enabled: online species reference; places: 用网络显示地名 (places.py)."""
+    """enabled: online species reference; places: 用网络显示地名 (places.py); updates: 检查更新 (update.py), off by default."""
     try:
         s = json.loads(_settings_path().read_text())
     except (OSError, ValueError):
         s = {}
     return {"enabled": bool(s.get("enabled", True)), "disclosed": bool(s.get("disclosed", False)),
-            "places": bool(s.get("places", True)), "disclosure": DISCLOSURE}
+            "places": bool(s.get("places", True)), "updates": bool(s.get("updates", False)), "disclosure": DISCLOSURE}
 
 
-def set_settings(enabled: bool | None = None, disclosed: bool | None = None, places: bool | None = None) -> dict:
+def set_settings(enabled: bool | None = None, disclosed: bool | None = None, places: bool | None = None,
+                 updates: bool | None = None) -> dict:
     s = {k: v for k, v in settings().items() if k != "disclosure"}
-    for k, v in (("enabled", enabled), ("disclosed", disclosed), ("places", places)):
+    for k, v in (("enabled", enabled), ("disclosed", disclosed), ("places", places), ("updates", updates)):
         if v is not None:
             s[k] = v
     p = _settings_path()
