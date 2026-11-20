@@ -107,6 +107,7 @@ class PhotoResult(TypedDict):
 class ScanFields(TypedDict):        # per scan, computed by stars.py at finalizing
     stars: int | None               # -1 淘汰, 0-3; None = 待定
     star_reason: str | None
+    star_auto: dict | None          # set when the person chose the stars: the computed {stars, reason}
     burst_group: int | None
     burst_rank: int | None
     burst_size: int | None

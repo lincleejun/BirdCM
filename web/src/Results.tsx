@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post, put, useEngine } from "./api";
 const CHIPS = 3;                                   // species chips shown before "+n", so the bar stays one row at 1440 px
@@ -92,6 +92,7 @@ const Tile = memo(function Tile({ p, st, active, complete, more, marks, exif: e,
         : r && !r.rejected ? <SpName sp={r.species} size="card" /> : <span className={r ? "name" : "scan-name"}>{name}</span>}
         <span className="tile-meta">
           {complete && p.stars !== null ? <span className="stars">{starTxt(p.stars)}</span> : <span className="pending-stars">待定星级</span>}
+          {complete && p.star_auto && <span className="pill" title={`算出来是 ${starLabel(p.star_auto.stars)}`}>手动星级</span>}
           {r && !r.rejected && r.rarity && r.rarity.tier != null && <span className={`pill${r.rarity.tier <= 2 ? " rare" : ""}`}>{r.rarity.label}</span>}
           {r && !r.rejected && r.species_own && <span className="pill">{r.species?.manual ? "主人改正" : "按连拍组修正"}</span>}
           {more && (p.burst_size ?? 1) > 1 && (
@@ -142,7 +143,8 @@ function exportRow(p: PhotoRow) {
   const r = p.result, e = r?.exif, s = r?.species, l = s?.level === "species" ? s.label : null;
   return {
     文件: p.file, 路径: p.path, 状态: p.state === "failed" ? "失败" : p.state === "done" ? "已识别" : "未扫描", 错误: p.error ?? "",
-    星级: starLabel(p.stars), 理由: p.star_reason ?? "",
+    星级: starLabel(p.stars), 理由: p.star_reason ?? "", 星级来源: p.star_auto ? "手动" : p.stars === null ? "" : "应用",
+    算出的星级: p.star_auto ? starLabel(p.star_auto.stars) : "",
     中文名: l?.zh ?? "", 英文名: l?.en ?? "", 学名: l?.sci ?? (s ? named(s).sci : ""),
     按连拍组修正: r?.species_own && !r.species?.manual ? "是" : "", 鸟种来源: !r?.species ? "" : r.species.manual ? "手动改正" : r.species_own ? "连拍组修正" : "应用", 原识别: r?.species_own ? `${named(r.species_own).title} · ${named(r.species_own).sci} · ${pct(r.species_own.top5[0]?.p ?? 0)}` : "",
     识别结果: r ? nameOf(r) : "", 识别层级: s?.level ?? "", 把握: s?.label?.p ?? s?.top5[0]?.p ?? "",
@@ -333,6 +335,23 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     await post(`/api/scans/${scanId}/corrections`, sci === undefined ? { photo_id: id, scope, undo: true } : { photo_id: id, scope, sci });
     await load();
   }, [scanId, load]);
+
+  // the person's stars for these photos (null: back to the computed ones); one request however many
+  const setStars = useCallback(async (ids: number[], s: number | null) => {
+    try { await post(`/api/scans/${scanId}/stars`, { photo_ids: ids, stars: s }); await load(); }
+    catch (e) { setError(String((e as Error).message)); }
+  }, [scanId, load]);
+  // keys on a selected photo: 0-3 stars, X 淘汰, U back to the computed stars (Lightroom's keys)
+  const starKey = (e: KeyboardEvent): boolean => {
+    if (!complete || !current?.result || e.metaKey || e.ctrlKey || e.altKey) return false;
+    const k = e.key.toLowerCase(), s = k === "x" ? -1 : k === "u" ? null : /^[0-3]$/.test(k) ? +k : undefined;
+    if (s === undefined) return false;
+    e.preventDefault();
+    const id = current.id, refocus = !viewerRef.current?.open;
+    // the star sort may move the card: keep the keyboard on it
+    setStars([id], s).then(() => { if (refocus) requestAnimationFrame(() => tiles.current.get(id)?.focus({ preventScroll: true })); });
+    return true;
+  };
 
   // "只看这一组": the list shows one burst, whatever the other filters say (they are kept, and come back on clearing)
   const [groupOnly, setGroupOnly] = useState<number | null>(null);
@@ -623,9 +642,10 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
       <div className="inspection">
         <section className="list" aria-labelledby="list-title">
           <div className="list-head"><h3 id="list-title">照片列表</h3><span aria-live="polite">显示 {view.length} / {c.total} 张</span></div>
-          <p className="sr-only" id="photo-keys">方向键选择照片（上、下换一行），回车看大图。右侧显示这张照片的全部信息。</p>
+          <p className="sr-only" id="photo-keys">方向键选择照片（上、下换一行），回车看大图；数字键 0 到 3 设星级，X 设为淘汰，U 撤回到算出来的星级。右侧显示这张照片的全部信息。</p>
           <div id="grid" onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); openViewer(); return; }
+            if (starKey(e)) return;
             // a grid of cards: left / right one photo, up / down one row (however many columns fit)
             const d = ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -1, ArrowDown: 1 } as Record<string, number>)[e.key];
             if (!d) return;
@@ -640,14 +660,14 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
           </div>
         </section>
         {current && <Inspector ref={panelRef} p={current} st={rowState(current)} marks={marks} setMarks={setMarks} complete={complete}
-          inScan={inScan} onCorrect={correct}
+          inScan={inScan} onCorrect={correct} onStars={setStars}
           exif={current.result?.exif ?? exifs[current.id]} onOpen={openViewer} burst={burst} onPick={pick}
           groupOnly={groupOnly !== null} onGroupOnly={(on) => setGroupOnly(on ? current.burst_group : null)} />}
       </div>
 
       <dialog ref={viewerRef} className="viewer" aria-label="大图" onClick={(e) => { if (e.target === e.currentTarget) viewerRef.current?.close(); }}
-        onKeyDown={(e) => { if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); step(-1); } if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); step(1); } }}>
-        <div className="dlg-head"><h3>{current?.file}</h3><span className="hint">← → 换一张 · Esc 关闭</span>
+        onKeyDown={(e) => { if (starKey(e)) return; if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); step(-1); } if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); step(1); } }}>
+        <div className="dlg-head"><h3>{current?.file}</h3><span className="hint">← → 换一张 · 0–3 / X / U 设星 · Esc 关闭</span>
           <button className="btn" onClick={() => viewerRef.current?.close()}>关闭</button></div>
         {current && <Photo row={current} marks={current.result ? marks : null} big show alt={current.file} />}
       </dialog>
@@ -667,8 +687,9 @@ interface Burst { members: PhotoRow[]; order: Map<number, number> }
 
 const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: MarkSet; setMarks: (m: MarkSet) => void; complete: boolean;
   exif?: Exif; onOpen: () => void; burst: Burst | null; onPick: (id: number) => void; groupOnly: boolean; onGroupOnly: (on: boolean) => void;
-  inScan: Pick[]; onCorrect: (id: number, sci: string | null | undefined, scope: Scope) => Promise<void> }>(
-  function Inspector({ p, st, marks, setMarks, complete, exif, onOpen, burst, onPick, groupOnly, onGroupOnly, inScan, onCorrect }, ref) {
+  inScan: Pick[]; onCorrect: (id: number, sci: string | null | undefined, scope: Scope) => Promise<void>;
+  onStars: (ids: number[], s: number | null) => Promise<void> }>(
+  function Inspector({ p, st, marks, setMarks, complete, exif, onOpen, burst, onPick, groupOnly, onGroupOnly, inScan, onCorrect, onStars }, ref) {
   const [correcting, setCorrecting] = useState(false);
   useEffect(() => setCorrecting(false), [p.id]);
   const r = p.result, ready = st === "ready" && !!r;
@@ -677,7 +698,14 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
     eye: r.eye && r.eye_visible ? undefined : "这张没有", beak: r.beak && (r.beak_p ?? 0) >= 0.5 ? undefined : "这张没有",
     focus: r.focus ? undefined : "不可用", box: r.boxes.length ? undefined : "这张没有" } : {};
   const stars = <div className="panel-stars"><div className="verdict stars">{complete && p.stars !== null ? starTxt(p.stars) : "待定星级"}</div>
-    {complete && p.star_reason && <p className="reason">{p.star_reason}</p>}</div>;
+    {complete && p.star_reason && <p className="reason">{p.star_reason}</p>}
+    {complete && p.star_auto && <p className="reason">算出来是 {starLabel(p.star_auto.stars)}{p.star_auto.reason ? `：${p.star_auto.reason}` : ""}</p>}
+    {complete && r && <div className="star-set" role="group" aria-label="手动设星级">
+      {[-1, 0, 1, 2, 3].map((v) => (
+        <button key={v} type="button" className="btn slim" aria-pressed={!!p.star_auto && p.stars === v} onClick={() => onStars([p.id], v)}>{v === -1 ? "淘汰" : v === 0 ? "0 星" : "★".repeat(v)}</button>
+      ))}
+      {p.star_auto && <button type="button" className="btn slim link" onClick={() => onStars([p.id], null)}>撤回</button>}
+    </div>}</div>;
   return (
     <aside className="inspector" aria-label="所选照片的全部信息" ref={ref}>
       {ready && <MarkControls m={marks} set={setMarks} missing={missing} />}

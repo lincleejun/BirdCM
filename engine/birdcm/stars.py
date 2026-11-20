@@ -353,9 +353,12 @@ def manual_species(own: dict | None, sci: str | None, names: dict | None = None)
     return {"level": "species", "label": label, "top5": top5, "geo": (own or {}).get("geo", False), "manual": True}
 
 
-def rate(rows: list[dict], ratio: dict | None, rarity=None, manual: dict[int, dict] | None = None) -> dict[int, dict]:
-    """rows: {id, result (PhotoResult or None)} -> id: {stars, star_reason, burst_group, burst_rank, burst_size, q}.
-    manual: id -> the person's species block (manual_species); it wins over burst consensus and the photo's own."""
+def rate(rows: list[dict], ratio: dict | None, rarity=None, manual: dict[int, dict] | None = None,
+         fixed: dict[int, int] | None = None) -> dict[int, dict]:
+    """rows: {id, result (PhotoResult or None)} -> id: {stars, star_reason, burst_group, burst_rank, burst_size, q, star_auto}.
+    manual: id -> the person's species block (manual_species); it wins over burst consensus and the photo's own.
+    fixed: id -> the person's stars. Laid over the finished rating, so they take no budget and move no other photo
+    (bursts keep the computed ranks); star_auto keeps what was computed (what an undo returns to)."""
     c = Config.from_ratio(ratio)
     res = {r["id"]: r.get("result") for r in rows}
     bursts = group_bursts([{"id": i, "camera": (x or {}).get("exif", {}).get("camera_id") or (x or {}).get("exif", {}).get("camera"),
@@ -388,6 +391,10 @@ def rate(rows: list[dict], ratio: dict | None, rarity=None, manual: dict[int, di
         idx.sort(key=lambda i: (-(out[i]["stars"] if out[i]["stars"] is not None else -2), -(out[i]["q"] or -1), seq[i]))
         for rank, i in enumerate(idx, 1):
             out[i].update(burst_group=g, burst_rank=rank, burst_size=len(idx))
+    for i, n in (fixed or {}).items():
+        if i in res and res[i] is not None:                        # a failed photo has no stars to change
+            out[i]["star_auto"] = {"stars": out[i]["stars"], "reason": out[i]["star_reason"]}
+            out[i].update(stars=n, star_reason="主人手动设定")
     return out
 
 

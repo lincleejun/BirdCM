@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS photo (
   id INTEGER PRIMARY KEY, scan_id INTEGER NOT NULL REFERENCES scan(id), seq INTEGER NOT NULL, path TEXT NOT NULL,
   size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, state TEXT NOT NULL, fp TEXT, result TEXT, error TEXT, reused INTEGER DEFAULT 0,
   stars INTEGER, star_reason TEXT, burst_group INTEGER, burst_rank INTEGER, burst_size INTEGER, species_fix TEXT, quality TEXT,
-  variants TEXT, UNIQUE (scan_id, path));
+  variants TEXT, star_auto TEXT, UNIQUE (scan_id, path));
 CREATE INDEX IF NOT EXISTS photo_reuse ON photo(path, size, mtime_ns, fp) WHERE state = 'done';
 CREATE INDEX IF NOT EXISTS photo_scan_state ON photo(scan_id, state);
 CREATE TABLE IF NOT EXISTS event (
@@ -32,6 +32,9 @@ CREATE INDEX IF NOT EXISTS event_scan ON event(scan_id, n);
 CREATE TABLE IF NOT EXISTS correction (
   path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, species TEXT, scope TEXT NOT NULL,
   app TEXT, created_at REAL NOT NULL, PRIMARY KEY (path, size, mtime_ns));
+CREATE TABLE IF NOT EXISTS star_fix (
+  path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, stars INTEGER NOT NULL, created_at REAL NOT NULL,
+  PRIMARY KEY (path, size, mtime_ns));
 CREATE TABLE IF NOT EXISTS single (
   id INTEGER PRIMARY KEY, stored TEXT NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, region TEXT,
   boxes TEXT, subject INTEGER, result TEXT, error TEXT, fp TEXT, correction TEXT);
@@ -39,7 +42,7 @@ CREATE TABLE IF NOT EXISTS place_name (key TEXT PRIMARY KEY, label TEXT, fetched
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
 TERMINAL = ("done", "failed")
-PHOTO_COLS = "id, seq, path, size, mtime_ns, state, result, error, reused, stars, star_reason, burst_group, burst_rank, burst_size, species_fix, quality, variants"
+PHOTO_COLS = "id, seq, path, size, mtime_ns, state, result, error, reused, stars, star_reason, burst_group, burst_rank, burst_size, species_fix, quality, variants, star_auto"
 
 
 def location(v):
@@ -86,6 +89,7 @@ def photo_row(r: sqlite3.Row, slim_result: bool = False) -> dict:
     d["species_fix"] = present(json.loads(d["species_fix"])) if d.get("species_fix") else None
     d["quality"] = json.loads(d["quality"]) if d.get("quality") else None
     d["variants"] = json.loads(d["variants"]) if d.get("variants") else []
+    d["star_auto"] = json.loads(d["star_auto"]) if d.get("star_auto") else None
     d["file"] = Path(d["path"]).name
     return d
 
@@ -100,7 +104,7 @@ class Store:
             db = self._db()
             db.executescript(SCHEMA)
             have = {r[1] for r in db.execute("PRAGMA table_info(photo)")}
-            for col in ("species_fix", "quality", "variants"):                 # databases from before these columns
+            for col in ("species_fix", "quality", "variants", "star_auto"):                 # databases from before these columns
                 if col not in have:
                     db.execute(f"ALTER TABLE photo ADD COLUMN {col} TEXT")
             have_s = {r[1] for r in db.execute("PRAGMA table_info(single)")}
@@ -367,6 +371,25 @@ class Store:
             "SELECT p.id, c.species, c.scope, c.app FROM photo p JOIN correction c ON c.path = p.path AND c.size = p.size "
             "AND c.mtime_ns = p.mtime_ns WHERE p.scan_id = ?", (scan_id,))}
 
+    # ---- the person's stars: keyed like the corrections; stars.rate puts them over the computed ones -----------------
+
+    def set_star_fixes(self, photo_ids: list[int], stars: int | None) -> None:
+        """stars None = back to the computed stars."""
+        def go(db):
+            for pid in photo_ids:
+                if stars is None:
+                    db.execute("DELETE FROM star_fix WHERE (path, size, mtime_ns) = (SELECT path, size, mtime_ns FROM photo WHERE id = ?)", (pid,))
+                else:
+                    db.execute("INSERT OR REPLACE INTO star_fix (path, size, mtime_ns, stars, created_at) "
+                               "SELECT path, size, mtime_ns, ?, ? FROM photo WHERE id = ?", (stars, time.time(), pid))
+        self._write(go)
+
+    def star_fixes_for(self, scan_id: int) -> dict[int, int]:
+        """photo id -> the person's stars, for the photos of a scan that have them."""
+        return {r[0]: r[1] for r in self._db().execute(
+            "SELECT p.id, f.stars FROM photo p JOIN star_fix f ON f.path = p.path AND f.size = p.size "
+            "AND f.mtime_ns = p.mtime_ns WHERE p.scan_id = ?", (scan_id,))}
+
     def all_corrections(self) -> list[dict]:
         return [dict(r) for r in self._db().execute("SELECT path, species, scope, app, created_at FROM correction ORDER BY created_at")]
 
@@ -382,7 +405,7 @@ class Store:
         def go(db):
             db.execute("UPDATE scan SET fp = ? WHERE id = ?", (fp, scan_id))
             db.execute("UPDATE photo SET state='queued', result=NULL, error=NULL, reused=0, fp=?, stars=NULL, star_reason=NULL, "
-                       "burst_group=NULL, burst_rank=NULL, burst_size=NULL, species_fix=NULL, quality=NULL WHERE scan_id = ?", (fp, scan_id))
+                       "burst_group=NULL, burst_rank=NULL, burst_size=NULL, species_fix=NULL, quality=NULL, star_auto=NULL WHERE scan_id = ?", (fp, scan_id))
             self._event(db, scan_id, "stars", {})                 # clients refetch the snapshot
             self._scan_event(db, scan_id)
             self._touch(db)
@@ -422,10 +445,12 @@ class Store:
             for pid, f in fields.items():
                 fix = f.get("species_fix")
                 qual = {"q": f["q"], "parts": f.get("q_parts")} if f.get("q") is not None else None
-                db.execute("UPDATE photo SET stars=?, star_reason=?, burst_group=?, burst_rank=?, burst_size=?, species_fix=?, quality=? "
-                           "WHERE id=? AND scan_id=?",
+                auto = f.get("star_auto")
+                db.execute("UPDATE photo SET stars=?, star_reason=?, burst_group=?, burst_rank=?, burst_size=?, species_fix=?, quality=?, "
+                           "star_auto=? WHERE id=? AND scan_id=?",
                            (f.get("stars"), f.get("star_reason"), f.get("burst_group"), f.get("burst_rank"), f.get("burst_size"),
-                            json.dumps(fix, ensure_ascii=False) if fix else None, json.dumps(qual) if qual else None, pid, scan_id))
+                            json.dumps(fix, ensure_ascii=False) if fix else None, json.dumps(qual) if qual else None,
+                            json.dumps(auto, ensure_ascii=False) if auto else None, pid, scan_id))
             self._event(db, scan_id, "stars", {})
             self._touch(db)                                        # burst species / corrections changed
             if complete and db.execute("UPDATE scan SET state='completed', error=NULL WHERE id=? AND state='finalizing'", (scan_id,)).rowcount:
