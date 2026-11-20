@@ -35,6 +35,7 @@ func decode<T: Decodable>(_ t: T.Type, _ line: String) -> T? {
 /// The menu, windows and dialogs follow the system language: Chinese when it is Chinese, English otherwise.
 let chinese = Locale.preferredLanguages.first?.hasPrefix("zh") ?? true
 func L(_ zh: String, _ en: String) -> String { chinese ? zh : en }
+setenv("BIRDCM_LANG", chinese ? "zh" : "en", 0)   // the engine we start (birdcm admin) answers in the same language; an explicit BIRDCM_LANG wins
 func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, countStyle: .file) }
 
 // ---- the engine ------------------------------------------------------------------------------------------------------
