@@ -48,12 +48,13 @@ final class Rarity {
     }
     private var boxCache: [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]?
     private let boxLock = NSLock()
-    /// Every shape's rowid and bounding box, read once per instance (NULL boxes never match in SQL, so they are left out).
-    /// nil when the read fails part way; nothing is kept and the next call reads again.
+    /// Every shape's rowid and bounding box, read once per instance (NULL boxes never match in SQL, so they are left out;
+    /// TEXT/BLOB values compare above every number in SQL, so they are read as +Inf). nil when the read fails part way; nothing is kept and the next call reads again.
     private func boxes() -> [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]? {
         boxLock.lock(); if let hit = boxCache { boxLock.unlock(); return hit }; boxLock.unlock()
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT rowid,minx,maxx,miny,maxy FROM shapes WHERE minx IS NOT NULL AND maxx IS NOT NULL AND miny IS NOT NULL AND maxy IS NOT NULL", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        let col = { (c: String) in "CASE WHEN typeof(\(c)) IN ('text','blob') THEN 9e999 ELSE \(c) END" }
+        guard sqlite3_prepare_v2(db, "SELECT rowid,\(["minx", "maxx", "miny", "maxy"].map(col).joined(separator: ",")) FROM shapes WHERE minx IS NOT NULL AND maxx IS NOT NULL AND miny IS NOT NULL AND maxy IS NOT NULL", -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         var out = [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]()
         var rc = sqlite3_step(stmt)
