@@ -340,7 +340,7 @@ enum Reference {
                 return Card(state: "ok", fetched: now(), lang: lang, title: shownTitle.isEmpty ? (s["title"] as? String ?? title) : shownTitle, text: text,
                             sourceURL: page["page"] as? String ?? Reference.articleURL(lang, title), historyURL: page["revisions"] as? String,
                             revision: s["revision"].map { "\($0)" }, licence: "CC BY-SA 4.0", licenceURL: Reference.bySA,
-                            credit: String(localized: "维基百科贡献者"), changes: lang == "zh" ? String(localized: "原文摘录；简体由维基百科自动转换") : String(localized: "原文摘录"))
+                            credit: "维基百科贡献者", changes: lang == "zh" ? "原文摘录；简体由维基百科自动转换" : "原文摘录")
             }
             return Card(state: "none", why: why, fetched: now())
         }
@@ -374,7 +374,7 @@ enum Reference {
             let (blob, headers) = try await net.get(thumb, limit: Reference.maxImage, accept: "image/*")
             guard (headers["content-type"] ?? "").hasPrefix("image/") else { throw NetError.offline("not an image") }
             return (Card(state: "ok", fetched: now(), meta: meta, sourceURL: source, licence: lic.licence, licenceURL: lic.url,
-                         credit: Reference.plain(meta["Credit"]), changes: String(localized: "缩放为 640 px 宽"), author: lic.author, nc: lic.nc,
+                         credit: Reference.plain(meta["Credit"]), changes: "缩放为 640 px 宽", author: lic.author, nc: lic.nc,
                          attribution: Reference.plain(meta["Attribution"]), file: f, mime: headers["content-type"],
                          width: info["thumbwidth"] as? Int, height: info["thumbheight"] as? Int), blob)
         }

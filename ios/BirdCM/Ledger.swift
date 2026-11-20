@@ -5,11 +5,14 @@ final class Catalogue {
     struct Species: Hashable, Identifiable {
         let sci: String, en: String, zh: String, genus: String, family: String
         var id: String { sci }
-        /// The name block's first line (polish.md): Chinese, else English, else the scientific name.
-        var name: String { zh.isEmpty ? (en.isEmpty ? sci : en) : zh }
+        /// The name block's first line (polish.md): Chinese, else English, else the scientific name. An English UI never
+        /// shows Chinese (owner 2026-11-20): English, else the scientific name.
+        var name: String { zh.isEmpty || Catalogue.english ? (en.isEmpty ? sci : en) : zh }
         /// The other common name on the second line: English under a Chinese title; nothing when English is the title.
-        var alt: String { zh.isEmpty ? "" : en }
+        var alt: String { zh.isEmpty || Catalogue.english ? "" : en }
     }
+    /// The UI runs in English (the app's other localization, chosen per app in the system Settings); tests may flip it.
+    static var english = Bundle.main.preferredLocalizations.first == "en"
     static let shared = Catalogue()
     let all: [Species]
     private let index: [String: Int]

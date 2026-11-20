@@ -137,9 +137,7 @@ struct ResultView: View {
             // GBIF reporting tier at this photo's place and month (read now, not stored). Neutral text; 罕见 / 少见 on their pair.
             StateTag(text:String(localized:"本地：\(loc(value.label))"),state:ThemeContrast.rarity[value.label] ?? ThemeContrast.unavailable,strong:["罕见","少见"].contains(value.label))
                 .accessibilityIdentifier("result.localRarity").accessibilityValue(loc(value.label))
-            // Bird Value 1–10 (docs/bird-value.md): 6+ good, 9+ a mega; 待核实 while no local record backs it.
-            if let v=value.value {StateTag(text:String(localized:"价值 \(v.formatted(.number.precision(.fractionLength(2))))")+(value.valueStatus=="pending" ? String(localized:" · 待核实"):""),state:v >= 9 ? ThemeContrast.rarity["罕见"] ?? ThemeContrast.unavailable:v >= 6 ? ThemeContrast.rarity["少见"] ?? ThemeContrast.unavailable:ThemeContrast.unavailable,strong:v >= 6)
-                .accessibilityIdentifier("result.birdValue").accessibilityValue(String(format:"%.2f",v))}
+            ValueTag(value:value)
             if let code=model.iucn(key) {IUCNChip(code:code)}
         }
         if e.state=="none",let m=e.model,m.level != "species" || m.reason != nil {Text("近似种请核对").font(.subheadline).foregroundStyle(Palette.warning)}
@@ -152,6 +150,9 @@ struct ResultView: View {
                 if let k=e.key,model.catalogue.contains(k) {SpeciesName(key:k,size:.hero)}
                 else {SpeciesName(title:e.name,size:.hero,uncertain:e.key == nil)}
             }.accessibilityIdentifier("result.name").accessibilityValue(e.state=="none" ? e.model?.level ?? "unclassified":e.state).accessibilityAddTraits(.isHeader)
+            if e.state=="species" {Label("已人工更正",systemImage:"person.crop.circle.badge.checkmark").font(.subheadline).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.corrected")}
+            // 本地 / 价值 / IUCN right under the name (owner 2026-11-20: 价值 was below the fold under the species link).
+            ViewThatFits(in:.horizontal) {HStack(spacing:16) {factChips(e,r)};VStack(alignment:.leading) {factChips(e,r)}}.padding(.top,4)
             // The same species page as 探索 and 记录 (当地可能性, 分布图, 物种参考).
             if let k=e.key,model.catalogue.contains(k) {
                 NavigationLink(value:AppModel.Route.species(k)) {
@@ -159,12 +160,10 @@ struct ResultView: View {
                         .font(.subheadline).foregroundStyle(Palette.accent).frame(minHeight:44).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityIdentifier("result.speciesPage")
             }
-            if e.state=="species" {Label("已人工更正",systemImage:"person.crop.circle.badge.checkmark").font(.subheadline).foregroundStyle(Palette.secondary).accessibilityIdentifier("result.corrected")}
-            ViewThatFits(in:.horizontal) {HStack(spacing:16) {factChips(e,r)};VStack(alignment:.leading) {factChips(e,r)}}.padding(.top,4)
             if let result=e.model {
                 // Geo-prior warning from the model; separate from the GBIF tier above.
                 if result.rare {Label("地点模型：此地此季少见，请核对",systemImage:"exclamationmark.triangle").foregroundStyle(Palette.warning).font(.subheadline).accessibilityIdentifier("result.priorWarning")}
-                if let reason=result.reason {Text(reason).font(.subheadline).foregroundStyle(Palette.warning).accessibilityIdentifier(reason.contains("此地此季") ? "result.priorWarning":"result.reason")}
+                if let reason=result.reason {Text(loc(reason)).font(.subheadline).foregroundStyle(Palette.warning).accessibilityIdentifier(reason.contains("此地此季") ? "result.priorWarning":"result.reason")}
             }
             if e.state=="none",let result=e.model {
                 if result.level=="species",let c=result.top5.first {
@@ -222,6 +221,15 @@ struct ResultView: View {
     }
 }
 struct CandidateSheet: Identifiable {let id=UUID();let value:Candidate}
+/// Bird Value 1–10 (docs/bird-value.md): 6+ good, 9+ a mega; 待核实 while no local record backs it. Nothing without a value.
+struct ValueTag: View {
+    let value:RarityValue
+    var small=false
+    var body:some View {
+        if let v=value.value {StateTag(text:String(localized:"价值 \(v.formatted(.number.precision(.fractionLength(2))))")+(value.valueStatus=="pending" ? String(localized:" · 待核实"):""),state:v >= 9 ? ThemeContrast.rarity["罕见"] ?? ThemeContrast.unavailable:v >= 6 ? ThemeContrast.rarity["少见"] ?? ThemeContrast.unavailable:ThemeContrast.unavailable,strong:v >= 6,small:small)
+            .accessibilityIdentifier("result.birdValue").accessibilityValue(String(format:"%.2f",v))}
+    }
+}
 /// A state written as text (polish.md: neutral secondary text by default); `strong` sets it on its semantic fg/bg pair
 /// when the state needs attention. Never colour alone: the words and code are always there.
 struct StateTag: View {

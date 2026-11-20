@@ -27,6 +27,7 @@ ALLOWED = {
     'Place.swift': {w: EXIF for w in ['相机', '镜头', '焦距', '光圈', '快门', '曝光补偿']},
     'Preview.swift': {**{w: BIRD for w in ['乌鸫', '红翅黑鹂', '大尾拟八哥', '白头海雕', '白尾海雕', '棕榈鬼鸮', '褐鹈鹕', '美洲白鹈鹕']},
                       '美国 · 加利福尼亚州': PLACE, '不常见': TIER, '常见': TIER, **{w: EXIF for w in ['相机', '焦距', '光圈', '快门', '曝光补偿']}},
+    'Reference.swift': {w: 'cached reference card credit / changes, shown through loc()' for w in ['维基百科贡献者', '原文摘录；简体由维基百科自动转换', '原文摘录', '缩放为 640 px 宽']},
     'Rarity.swift': {w: TIER for w in ['数据不足', '未知', '时间未知', '无记录', '罕见', '少见', '不常见', '常见']},
     'ResultView.swift': {**{w: EXIF for w in ['相机', '镜头', '焦距', '光圈', '快门', '曝光补偿']}, '罕见': TIER, '少见': TIER,
                          '此地此季': 'picks an accessibility identifier for UI tests (run in zh-Hans)', '地图选点': PLACE},

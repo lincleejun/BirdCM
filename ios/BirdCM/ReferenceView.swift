@@ -76,7 +76,7 @@ struct SpeciesReferenceSection: View {
             }
             if let credit = c.credit, !credit.isEmpty, credit != c.author, credit.lowercased() != "own work" { Text("出处 \(credit)") }
             HStack(spacing: 4) { Text("来源"); link(String(localized: "Wikimedia Commons 文件页"), c.sourceURL) }
-            Text([c.changes, c.cachedAt.map { String(localized: "缓存于 \($0)") + (c.state == "stale" ? String(localized: "（离线显示缓存）") : "") }].compactMap { $0 }.joined(separator: " · "))
+            Text([c.changes.map(loc), c.cachedAt.map { String(localized: "缓存于 \($0)") + (c.state == "stale" ? String(localized: "（离线显示缓存）") : "") }].compactMap { $0 }.joined(separator: " · "))
         }
     }
 
@@ -90,7 +90,7 @@ struct SpeciesReferenceSection: View {
                 Text(text).font(.callout).lineLimit(expanded ? nil : 6).environment(\.locale, Locale(identifier: s.lang == "zh" ? "zh-Hans" : "en")).accessibilityIdentifier("reference.summary")
                 if text.count > 160 { Button(expanded ? "收起" : "展开") { expanded.toggle() }.font(.footnote) }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text([s.credit, s.changes].compactMap { $0 }.joined(separator: " · "))
+                    Text([s.credit, s.changes].compactMap { $0 }.map(loc).joined(separator: " · "))
                     HStack(spacing: 4) {
                         link(s.licence ?? "", s.licenceURL); Text("·")
                         link(String(localized: "原文「\(s.title ?? "")」"), s.sourceURL)
