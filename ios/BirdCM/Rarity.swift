@@ -93,6 +93,8 @@ final class Rarity {
                 if let blob=sqlite3_column_blob(stmt,2) {
                     let data=Data(bytes:blob,count:n*4)
                     let ring=data.withUnsafeBytes {raw in (0..<n).map {Double(Float(bitPattern:UInt32(littleEndian:raw.loadUnaligned(fromByteOffset:$0*4,as:UInt32.self))))}}
+                    // area() when the row is read, as the old loop did: a failure stops here, before any later row (none kept or marked).
+                    guard area(sqlite3_column_int64(stmt,3)) != nil else {return (nil,nil)}
                     row=[(code,Int(sqlite3_column_int(stmt,1)),sqlite3_column_int64(stmt,3),ring)]
                 }
                 fetched[id]=row

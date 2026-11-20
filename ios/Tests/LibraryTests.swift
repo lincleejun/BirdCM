@@ -558,6 +558,28 @@ extension CrossPlatformTests {
     }
 }
 
+extension CrossPlatformTests {
+    /// area() failing on a row stops the read there, as the old loop did: a later row with a NULL code is never read (String(cString:) would trap).
+    /// Untyped box columns keep integers, so the area sum overflows (an SQLite error) while the lookup query itself succeeds.
+    func testRegionAtAreaFailureStopsBeforeLaterRows() throws {
+        let square = "X'00000000000000000000803F000000000000803F0000803F000000000000803F'"   // float32 ring (0,0) (1,0) (1,1) (0,1)
+        let path = tmp().appendingPathExtension("sqlite"); try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(path.path, &db), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(db, """
+            CREATE TABLE regions(id INTEGER PRIMARY KEY, code TEXT UNIQUE, country TEXT, level INTEGER, name_en TEXT, name_zh TEXT); CREATE TABLE shapes(region_id INTEGER, minx, miny, maxx, maxy, pts BLOB);
+            INSERT INTO regions VALUES(1,'XX','XX',0,'X','X'),(2,NULL,'XX',1,'N','N');
+            INSERT INTO shapes VALUES(1,-1500000000,-1000000000,1500000000,1000000000,\(square)),(1,-1500000000,-1000000000,1500000000,1000000000,\(square)),(2,0,0,1,1,\(square));
+            """, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(db)
+        let rarity = try Rarity(path: path)
+        for _ in 0..<2 {
+            let a = rarity.regionAt(lat: 0.5, lon: 0.5), b = referenceRegionAt(rarity, lat: 0.5, lon: 0.5)
+            XCTAssertNil(a.division); XCTAssertNil(a.country); XCTAssertNil(b.division); XCTAssertNil(b.country)
+        }
+    }
+}
+
 /// Reference copy of Rarity.regionAt as of 45f524e (original SQL with the correlated area subquery), for equivalence checks.
 func referenceRegionAt(_ db: Rarity, lat: Double, lon: Double) -> (division: String?, country: String?) {
     let sql = "SELECT r.code,r.level,s.pts,(SELECT sum((maxx-minx)*(maxy-miny)) FROM shapes t WHERE t.region_id=s.region_id) FROM shapes s JOIN regions r ON r.id=s.region_id WHERE minx<=? AND maxx>=? AND miny<=? AND maxy>=?"
