@@ -140,6 +140,7 @@ export const Viewer = forwardRef<HTMLDialogElement, {
       if (b) setStars([target.id], s); else onStars([a.id], s);
       return;
     }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;                 // Cmd+C copies, it does not compare
     const k = e.key.toLowerCase();
     if (zoomable && (k === "z" || k === "e")) {
       e.preventDefault();

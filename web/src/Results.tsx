@@ -286,7 +286,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
       if (mode !== "plain") return;
       if (matchMedia("(max-width: 720px)").matches) panelRef.current?.scrollIntoView({ block: "start" }); },
     open: (id) => { setSelected(id); setPicked(new Set()); viewerRef.current?.showModal(); },
-    group: (p) => { setSelected(p.id); setGroupOnly(p.burst_group); },
+    group: (p) => { setSelected(p.id); anchor.current = null; setGroupOnly(p.burst_group); },
     ref: (id, el) => { if (el) tiles.current.set(id, el); else tiles.current.delete(id); },
   };
   const rowState = (p: PhotoRow): RowState => (p.state === "done" ? "ready" : p.state === "failed" ? "failed"
@@ -358,6 +358,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     const next = view.some((p) => p.id === f.id) ? f.id : f.at >= 0 ? view[Math.min(f.at, view.length - 1)]?.id : undefined;
     if (next === undefined) return;
     setSelected(next);
+    anchor.current = null;
     if (!viewerRef.current?.open) requestAnimationFrame(() => tiles.current.get(next)?.focus({ preventScroll: true }));
   }, [followN]);                     // once per answered request, on the view it produced
   // keys on the selected photo (or every picked one): 0-3 stars, X 淘汰, U back to the computed stars (Lightroom's)
@@ -417,8 +418,9 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   // a photo picked from the burst strip may be outside the filtered list: it is still the one shown
   const current = view.find((p) => p.id === selected) ?? (selected !== null ? photos.find((p) => p.id === selected) : undefined) ?? view[0] ?? null;
   const tiles = useRef(new Map<number, HTMLButtonElement>());
-  // the picked photos still in the list (a filter change does not let a batch reach photos out of sight)
-  const pickedIds = view.filter((p) => picked.has(p.id)).map((p) => p.id);
+  // the picked photos still in the list (a filter change does not let a batch reach photos out of sight) that have a
+  // result (like the single-photo keys: no stars or species for a failed or unscanned photo)
+  const pickedIds = view.filter((p) => picked.has(p.id) && p.result).map((p) => p.id);
   const many = pickedIds.length > 1;
   const burst = useMemo(() => {
     if (!current?.burst_group || (current.burst_size ?? 1) < 2) return null;
@@ -435,6 +437,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   })() : null;
   const pick = (id: number) => {
     setSelected(id);
+    anchor.current = null;
     requestAnimationFrame(() => tiles.current.get(id)?.scrollIntoView({ block: "nearest" }));
   };
 
@@ -457,6 +460,7 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
     if (!p || p.id === current?.id) return;
     setSelected(p.id);
     setPicked(new Set());
+    anchor.current = null;
     tiles.current.get(p.id)?.focus({ preventScroll: viewerRef.current?.open });
   };
 
