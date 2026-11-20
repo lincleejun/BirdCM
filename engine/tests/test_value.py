@@ -55,3 +55,22 @@ def test_no_records_is_not_a_top_score():
     photo = value.value(t, "Far bird", "US-CA", 11, photo=True)
     assert photo["status"] == "pending" and photo["regional"] > 8
     assert value.value(t, "Unknown bird", "US-CA", 11) is None
+
+
+def test_grid_cell_and_china_protection():
+    t = _table()
+    lat, lon = 37.32, -122.03
+    t.db.executescript(f"""
+        CREATE TABLE grid(cell INTEGER PRIMARY KEY, records INTEGER);
+        CREATE TABLE grid_counts(cell INTEGER, species_id INTEGER, n INTEGER);
+        INSERT INTO grid VALUES ({value.cell_id(lat, lon)}, 1000000);
+        INSERT INTO grid_counts VALUES ({value.cell_id(lat, lon)}, 1, 3);
+    """)
+    # common in the state, 3 records in a million in this cell: the cell decides, so it scores high
+    state = value.value(t, "Common bird", "US-CA", 11)["regional"]
+    cell = value.value(t, "Common bird", "US-CA", 11, lat=lat, lon=lon)
+    assert cell["regional"] > 8 > state and cell["features"]["L"] > 0.6
+    # 国家一级 raises C in China only (Haliaeetus albicilla is grade 1 in data/cn_protected_birds.tsv)
+    assert value.CN_GRADE["Haliaeetus albicilla"] == 1
+    t.db.execute("UPDATE species SET scientific = 'Haliaeetus albicilla' WHERE id = 2")
+    assert value.value(t, "Haliaeetus albicilla", "CN", 11)["features"]["C"] == 1.0
