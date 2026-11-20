@@ -27,6 +27,7 @@ from pathlib import Path
 
 from birdcm import config
 from birdcm.i18n import R, t, text
+from birdcm.i18n import lang as ui_lang
 
 # BIRDCM_SPECIES_MAP, else the source checkout's data/, else the Mac app's Resources/engine/data/ (macos/build.sh copies
 # it there; the bundled interpreter is Resources/engine/python, so sys.prefix's parent is Resources/engine)
@@ -279,6 +280,8 @@ def card(kind: str, sci: str, network: bool, force: bool = False) -> dict:
     busy; missing = not cached and not asked (due: the page may ask for a refresh). A card never fails the request:
     errors become states."""
     m = mapping(sci)
+    if kind == "summary" and ui_lang() == "en":                 # the English page: the English article first, cached apart
+        kind = "summary-en"
     if m is None or m["wd_state"] not in ACCEPT:
         why = (t("online.unmapped") if m is None else
                t("online.taxonomy_differs", note=m["wd_note"] or m["wd_state"]) if m["wd_state"] in ("broader", "narrower", "split-lump")
@@ -294,7 +297,7 @@ def card(kind: str, sci: str, network: bool, force: bool = False) -> dict:
         due = e is None or (age > (NEGATIVE if e["state"] == "none" else FRESH)) or force
         if network and due:
             try:
-                e = (_summary if kind == "summary" else _image)(sci, m)
+                e = _image(sci, m) if kind == "image" else _summary(sci, m, en_first=kind == "summary-en")
                 _write(kind, sci, e, e.pop("blob", None))
                 age = 0
             except NotFound:                           # e.g. the file's rendition is gone: absent for a day
@@ -326,11 +329,11 @@ def _shown(e: dict | None, age: float | None, problem: str | None) -> dict:
 
 
 # ---- Wikipedia summary --------------------------------------------------------------------------------------------------
-def _summary(sci: str, m: dict) -> dict:
-    """zh article first (its zh-Hans variant), then en; no translation. A disambiguation page or one whose Wikidata
+def _summary(sci: str, m: dict, en_first: bool = False) -> dict:
+    """zh article first (its zh-Hans variant), then en (en_first: the English page), no translation. A disambiguation page or one whose Wikidata
     item is not the mapped QID is not this species' summary."""
     why = R("online.no_article")
-    for lang in ("zh", "en"):
+    for lang in ("en", "zh") if en_first else ("zh", "en"):
         a = m["articles"].get(lang)
         if not a:
             continue

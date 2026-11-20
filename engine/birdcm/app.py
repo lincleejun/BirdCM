@@ -279,7 +279,8 @@ _places_cache: dict[str, list] = {}
 
 def places_search(q: str, fetch=None) -> list[dict]:
     import urllib.parse, urllib.request
-    key = q.lower()
+    al = "en" if i18n.lang() == "en" else "zh,en"           # the names in the page's language
+    key = f"{al}|{q.lower()}"
     with places.LOCK:                                        # serialises requests, so the 1/s spacing holds across threads
         if key in _places_cache:
             return _places_cache[key]
@@ -287,7 +288,7 @@ def places_search(q: str, fetch=None) -> list[dict]:
         if wait > 0:
             time.sleep(wait)
         places.LAST[0] = time.monotonic()
-        url = NOMINATIM + "?" + urllib.parse.urlencode({"format": "jsonv2", "limit": 6, "accept-language": "zh,en", "q": q})
+        url = NOMINATIM + "?" + urllib.parse.urlencode({"format": "jsonv2", "limit": 6, "accept-language": al, "q": q})
         req = urllib.request.Request(url, headers={"User-Agent": places.UA})
         if fetch is None:
             with urllib.request.urlopen(req, timeout=8) as r:
