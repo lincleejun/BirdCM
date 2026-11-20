@@ -77,14 +77,66 @@ extension Geo {
     }
     /// 12 monthly values per catalogue species at a place: the point itself, or for a region the median over its grid
     /// (like `typical`). nil for a species the model does not have (never 0). One 48-week batch per point.
+    /// Points of a region forwarded at once by `months(at:)`. Fixed, not the core count: an iPhone has 6 cores
+    /// (2 performance), and each concurrent 48-row forward holds its live activations and the full 14,082-column output.
+    static let monthsWorkers = 4
     func months(at p: Place) throws -> [[Double]?] {
         let pts = p.source == "region" ? cover(p) : [Self.snap([p.lat, p.lon])]
-        var perPoint = [[[Double]?]]()
-        for pt in pts {
-            let q = try network.predict((1...48).map { [Float(pt[0]), Float(pt[1]), Float($0)] })
-            perPoint.append(indices.map { ids in ids.isEmpty ? nil : Self.monthly(q.map { row in Double(ids.map { row[$0] }.max()!) }) })
+        let n = pts.count, workers = min(Self.monthsWorkers, n)
+        // values[(j*12+m)*n + point]: one flat buffer, not arrays per point, species and week. Same arithmetic as
+        // `monthly` (0 + four weeks in order, / 4) and `median` (sorted in place, the same sort as `sorted()`).
+        var values = [Double](repeating: 0, count: indices.count * 12 * n)
+        try values.withUnsafeMutableBufferPointer { buffer in
+            let out = buffer
+            // Point k into its own slots values[i*n + k]; `sums` is the caller's scratch (one per worker).
+            func point(_ k: Int, _ sums: inout [Double]) throws {
+                let q = try network.predict((1...48).map { [Float(pts[k][0]), Float(pts[k][1]), Float($0)] })
+                // As `monthly`'s precondition did: 48 weeks whenever some species has a model id.
+                precondition(q.count == 48 || indices.allSatisfy(\.isEmpty))
+                for i in sums.indices { sums[i] = 0 }
+                for (w, row) in q.enumerated() {
+                    for (j, ids) in indices.enumerated() where !ids.isEmpty {
+                        var best = row[ids[0]]
+                        for i in ids.dropFirst() where best < row[i] { best = row[i] }   // as Array.max(): first wins ties and NaN
+                        sums[j * 12 + w / 4] += Double(best)
+                    }
+                }
+                for i in sums.indices { out[i * n + k] = sums[i] / 4 }
+            }
+            if workers <= 1 {
+                var sums = [Double](repeating: 0, count: indices.count * 12)
+                for k in 0..<n { try point(k, &sums) }
+                return
+            }
+            // Worker w takes points w, w+workers, …; any failure is thrown once all workers are done.
+            let lock = NSLock(); var failure: Error?
+            DispatchQueue.concurrentPerform(iterations: workers) { w in
+                var sums = [Double](repeating: 0, count: indices.count * 12)
+                do { for k in stride(from: w, to: n, by: workers) { try point(k, &sums) } }
+                catch { lock.lock(); failure = error; lock.unlock() }
+            }
+            if let failure { throw failure }
         }
-        return indices.indices.map { j in indices[j].isEmpty ? nil : (0..<12).map { m in Self.median(perPoint.map { $0[j]![m] }) } }
+        // Median per (species, month), sorted in place; workers take contiguous runs of species and write their own slots.
+        var out = [[Double]?](repeating: nil, count: indices.count)
+        values.withUnsafeMutableBufferPointer { buffer in
+            out.withUnsafeMutableBufferPointer { result in
+                let v = buffer, o = result, count = indices.count
+                func species(_ j: Int) {
+                    guard !indices[j].isEmpty else { return }
+                    o[j] = (0..<12).map { m in
+                        let lo = (j * 12 + m) * n, mid = lo + n / 2
+                        var run = UnsafeMutableBufferPointer(rebasing: v[lo..<lo + n]); run.sort()
+                        return n == 0 ? .nan : n % 2 == 0 ? (v[mid - 1] + v[mid]) / 2 : v[mid]
+                    }
+                }
+                if workers <= 1 { for j in 0..<count { species(j) }; return }
+                DispatchQueue.concurrentPerform(iterations: workers) { w in
+                    for j in count * w / workers..<count * (w + 1) / workers { species(j) }
+                }
+            }
+        }
+        return out
     }
 
     // MARK: range map
@@ -121,7 +173,7 @@ extension Geo {
         if cache, let data = try? Data(contentsOf: file), data.count == grid.count * 12 { return [UInt8](data) }
         let rows = grid.flatMap { c in (1...12).map { [Float(c[0]), Float(c[1]), Float(Self.rangeWeek($0))] } }
         var out = [UInt8](repeating: 0, count: rows.count)
-        // predict keeps every activation until it returns (~120 × 384 floats a row): small chunks bound memory per core.
+        // predict frees each activation after its last use, so a chunk holds only its live ones: chunks bound memory per core.
         let chunk = 256, chunks = (rows.count + chunk - 1) / chunk
         let lock = NSLock(); var done = 0; var failure: Error?
         out.withUnsafeMutableBufferPointer { buffer in
