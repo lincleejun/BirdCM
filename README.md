@@ -43,7 +43,7 @@ uv run birdcm serve          # http://127.0.0.1:8765/
 uv run pytest
 ```
 
-iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs/release.md](docs/release.md)。设计文档在 [docs/design.md](docs/design.md)。
+iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs/release.md](docs/release.md)。推送和 PR 时 CI 跑引擎测试和网页类型检查、构建（`.github/workflows/ci.yml`）。设计文档在 [docs/design.md](docs/design.md)。
 
 ## 联网
 
