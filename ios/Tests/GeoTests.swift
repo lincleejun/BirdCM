@@ -69,7 +69,7 @@ final class GeoTests: XCTestCase {
         // A species with two model ids (none in the bundled mapping) and regions with a repeated point, from test resources.
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("geo-e002-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at:dir, withIntermediateDirectories:true)
-        defer { UserDefaults.standard.removeObject(forKey:"resourceDir"); try? FileManager.default.removeItem(at:dir) }
+        defer { try? FileManager.default.removeItem(at:dir) }
         try FileManager.default.copyItem(at:try XCTUnwrap(Bundle.main.url(forResource:"geo-graph",withExtension:"json")), to:dir.appendingPathComponent("geo-graph.json"))
         let mapping = [["scientific":"two","geo3_index":"4165|8384"], ["scientific":"three","geo3_index":"9642|8021|4165"],
                        ["scientific":"one","geo3_index":"8021"], ["scientific":"none","geo3_index":""]]
@@ -77,8 +77,10 @@ final class GeoTests: XCTestCase {
                     ("odd",-27.5,153.0),("odd",-27.5,153.0),("odd",58.3,-134.4)].map { ["place":$0.0,"lat":"\($0.1)","lon":"\($0.2)"] }
         try JSONEncoder().encode(mapping).write(to:dir.appendingPathComponent("avilist-birdnet-geo3.json"))
         try JSONEncoder().encode(grid).write(to:dir.appendingPathComponent("region-grid.json"))
+        // Only while Geo reads its resources: `resource(_:)` anywhere else in the host would look in `dir` too.
         UserDefaults.standard.set(dir.path, forKey:"resourceDir")
-        let test = try Geo(weights:Models.geoURL, scientific:["two","three","one","none","not in mapping"])
+        let test = try { defer { UserDefaults.standard.removeObject(forKey:"resourceDir") }
+                         return try Geo(weights:Models.geoURL, scientific:["two","three","one","none","not in mapping"]) }()
         XCTAssertEqual(test.indices, [[4165,8384],[9642,8021,4165],[8021],[],[]])
         for p in [Place(lat:0,lon:0,label:"even",source:"region"), Place(lat:0,lon:0,label:"odd",source:"region"),
                   Place(lat:-27.5,lon:153.0,label:"Brisbane",source:"map")] {
