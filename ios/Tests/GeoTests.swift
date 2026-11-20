@@ -109,4 +109,12 @@ final class GeoTests: XCTestCase {
         func at(_ lat:Double,_ lon:Double) -> Double {map[grid.indices.min{abs(grid[$0][0]-lat)+abs(grid[$0][1]-lon) < abs(grid[$1][0]-lat)+abs(grid[$1][1]-lon)}!]}
         XCTAssertGreaterThan(at(58,-134),0.3,"Alaska");XCTAssertLessThan(at(-25,134),0.05,"Australia")
     }
+    /// Peak phys_footprint (sampled every 20 ms) of `months(at:)` for 美国, printed as a BENCH line.
+    func testRegionYearPeakMemory() throws {
+        let geo=try XCTUnwrap(Geo.shared(Catalogue.shared))
+        let (region,mb,_)=try PerformanceTests.measure { try geo.months(at:Place(lat:39.8,lon:-98.6,label:"美国",source:"region",regionCode:"US")) }
+        XCTAssertEqual(region.count,geo.indices.count)
+        print(String(format:"BENCH months region peak %.0f MB",mb))
+        XCTAssertLessThanOrEqual(mb,120)
+    }
 }
