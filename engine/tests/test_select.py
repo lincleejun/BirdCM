@@ -138,3 +138,12 @@ def test_either_will_do_only_for_frames_that_really_look_alike():
     assert any("任选其一" in r for r in two(a))
     assert not any("任选其一" in r for r in two(b)) and any("评分接近" in r for r in two(b))
     assert not any("任选其一" in r for r in two(a, x2=0.7))             # the bird elsewhere in the frame
+
+
+def test_each_strategy_reads_its_own_aesthetic_weight():
+    from birdcm.stars import Config
+    assert (Config().w_aes_select, Config().w_aes, Config().w_sharp) == (0.15, 0.35, 0.65)   # docs/stars.md; quota 0.65 / 0.35
+    ps = [photo(10.0 * i, sharp=1 + i % 3, aes=0.4 + i / 20) for i in range(6)]
+    q = lambda **cfg: [x["q"] for x in run(ps, **cfg)]                    # noqa: E731
+    assert q(w_aes=0.9) == q() != q(w_aes_select=0.9)
+    assert q(strategy="quota", w_aes_select=0.9) == q(strategy="quota") != q(strategy="quota", w_aes=0.9)
