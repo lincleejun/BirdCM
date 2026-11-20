@@ -6,6 +6,20 @@ import UniformTypeIdentifiers
 #endif
 
 final class LogicTests: XCTestCase {
+    /// engine/birdcm/value.py score() on the same features (uv run python -c "from birdcm import value; ...").
+    func testBirdValueMatchesEngine() {
+        let cases: [([String: Double], Double, Double)] = [
+            (["G": 0, "C": 0, "L": 0.1, "N": 0.1, "T": 0, "H": 0], 1.7439775214413649, 1.0),
+            (["G": 0, "C": 1, "L": 0.11, "N": 0.22, "T": 0, "H": 0.71], 6.041384264085509, 6.37631266191911),
+            (["G": 0.2, "C": 0.25, "L": 0.9, "N": 0.4, "T": 0.1, "H": 0.8], 9.560751742495595, 3.5654184565297595)]
+        for (f, regional, base) in cases {
+            let s = BirdValue.score(f)
+            XCTAssertEqual(s.regional!, regional, accuracy: 1e-9); XCTAssertEqual(s.base, base, accuracy: 1e-9)
+        }
+        XCTAssertNil(BirdValue.score(["G": 0.5, "C": 0.5]).regional)
+        XCTAssertEqual(BirdValue.tanhScore(0), 1, accuracy: 1e-12); XCTAssertEqual(BirdValue.tanhScore(1), 10, accuracy: 1e-12)
+        XCTAssertEqual(BirdValue.cellID(lat: 37.32, lon: -122.03), 182995)   // value.cell_id(37.32, -122.03)
+    }
     func testFullDistributionPosteriorAndGenus() {
         let visual=[0.6,0.3,0.1], geo=[0.0,1.0,0.5]
         let p=Confirm.posterior(visual,geo)

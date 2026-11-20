@@ -33,6 +33,22 @@
         }
       }
     },
+    " · 待核实": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · unverified"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " · 待核实"
+          }
+        }
+      }
+    },
     " · 按识别日期": {
       "localizations": {
         "en": {
@@ -1359,6 +1375,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "从观羽的记录与统计中移除这张照片；相册或文件里的原图不受影响。"
+          }
+        }
+      }
+    },
+    "价值 %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Value %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "价值 %@"
+          }
+        }
+      }
+    },
+    "价值：%@%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Value: %@%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "价值：%@%@"
           }
         }
       }
@@ -10925,6 +10973,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "（你改过）"
+          }
+        }
+      }
+    },
+    "（待核实）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " (unverified)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "（待核实）"
           }
         }
       }

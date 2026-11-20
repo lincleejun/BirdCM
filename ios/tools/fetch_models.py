@@ -11,7 +11,7 @@ def digest(p):
     with p.open('rb') as f:
         for b in iter(lambda:f.read(1024*1024),b''): h.update(b)
     return h.hexdigest()
-if digest(rarity)!='1ca100562673df5d03a476e6531973b17ac9c8c716f93e66cca61c918adbee68':
+if digest(rarity)!='f2eff2f41e0bfa5faad0cf70151f66eec64246a7193f81dadba827bb89f54e66':
     raise SystemExit('rarity-global.sqlite SHA256 does not match the reviewed global table.')
 staging=root/'build/model-source'; staging.mkdir(parents=True,exist_ok=True)
 out=root/'Models'; out.mkdir(exist_ok=True)
