@@ -18,7 +18,7 @@ enum Thumb {
     static let maxIDs = 30
     static let maxTaxa = 4 << 20, maxImage = 1 << 20     // no documented `fields`: 30 full taxa are about 2 MB
     static let downloads = 4                               // photos at once
-    static let hint = "网络参考图 · iNaturalist"
+    static let hint = String(localized: "网络参考图 · iNaturalist")
 
     /// The smallest documented variant at least `px` across (square is cropped, small and medium keep the aspect).
     static func variant(px: Int) -> String { [("square", 75), ("small", 240)].first { $0.1 >= px }?.0 ?? "medium" }
@@ -45,11 +45,11 @@ enum Thumb {
         var out = [Int: Reference.Card]()
         for t in page.results {
             let source = "https://www.inaturalist.org/taxa/\(t.id)"
-            guard let p = t.default_photo else { out[t.id] = .init(state: "none", why: "iNaturalist 没有默认照片", fetched: now, sourceURL: source); continue }
+            guard let p = t.default_photo else { out[t.id] = .init(state: "none", why: String(localized: "iNaturalist 没有默认照片"), fetched: now, sourceURL: source); continue }
             guard let lic = licence(p.license_code) else {
-                out[t.id] = .init(state: "none", why: "许可不在白名单：\(p.license_code ?? "保留所有权利")", fetched: now, sourceURL: source); continue
+                out[t.id] = .init(state: "none", why: String(localized: "许可不在白名单：\(p.license_code ?? String(localized: "保留所有权利"))"), fetched: now, sourceURL: source); continue
             }
-            guard photoURL(p.url, "square") != nil else { out[t.id] = .init(state: "none", why: "照片地址不可用", fetched: now, sourceURL: source); continue }
+            guard photoURL(p.url, "square") != nil else { out[t.id] = .init(state: "none", why: String(localized: "照片地址不可用"), fetched: now, sourceURL: source); continue }
             out[t.id] = .init(state: "ok", fetched: now, meta: ["license_code": p.license_code!], sourceURL: source, licence: lic.name,
                               author: p.attribution_name ?? p.attribution, nc: lic.nc, attribution: p.attribution, file: p.url)
         }
@@ -113,7 +113,7 @@ enum Thumb {
                 // ponytail: Cache.write prunes (one directory scan) per thumb; batch the prune if scrolling ever stutters.
                 cache.write(kind, sci, c, blob: blob)
             } catch Reference.NetError.notFound {
-                cache.write(kind, sci, .init(state: "none", why: "照片已不在 iNaturalist", fetched: now(), sourceURL: c.sourceURL))
+                cache.write(kind, sci, .init(state: "none", why: String(localized: "照片已不在 iNaturalist"), fetched: now(), sourceURL: c.sourceURL))
             } catch { return have }
             return Thumb.cached(cache, sci, variant)
         }
@@ -134,7 +134,7 @@ enum Thumb {
                 let body = try? await api.get(Thumb.api + ids.map(String.init).joined(separator: ","), limit: Thumb.maxTaxa).0
                 let got = body.flatMap { Thumb.parse($0, now: now()) }
                 for id in ids {
-                    let card = got.map { $0[id] ?? .init(state: "none", why: "iNaturalist 上没有这个分类", fetched: now()) }
+                    let card = got.map { $0[id] ?? .init(state: "none", why: String(localized: "iNaturalist 上没有这个分类"), fetched: now()) }
                     for w in waiters.removeValue(forKey: id) ?? [] { w.resume(returning: card) }
                 }
             }

@@ -188,6 +188,61 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(Ledger(items: try lib.items(), edits: [:], known: Catalogue.shared.contains).pending.filter { $0.item.id == unclear.id }.count, 1)
     }
 
+    /// 记录 → 照片 multi-select. Two copies of one library: batch on one, the existing single path photo by photo on the
+    /// other (result page: open = markViewed, then 更正鸟种 on the selected bird 1; swipe 删除). Same rows, same 最近查看,
+    /// same statistics and the same eBird bytes; the rest untouched; files exactly as single deletes leave them
+    /// (a delete is a tombstone, the original stays: docs/deviations.md 60).
+    func twin() throws -> (Library, Library, [UUID]) {
+        let dir = tmp(), lib = try Library(dir: dir), A = "Sterna hirundo", B = "Ardea alba"
+        let ids = try [
+            lib.save(record([bird(A)], "2026-01-01T08:00:00", "+08:00", P), data: Data("b1".utf8)),
+            lib.save(record([bird(A), bird(B)], "2026-01-01T09:00:00", "+08:00", P), data: Data("b2".utf8)),
+            lib.save(record([bird(B, clear: false)], "2026-01-02T09:00:00", "+08:00", Q), data: Data("b3".utf8)),
+            lib.save(record([], "2026-01-03T09:00:00", "+08:00", Q), data: Data("b4".utf8)),            // no bird: skipped
+            lib.save(record([bird(B)], "2026-01-04T09:00:00", "+08:00", P), data: Data("b5".utf8)),     // not selected
+        ].map(\.id)
+        try lib.correct(try XCTUnwrap(lib.record(ids[1])?.subjects?[0].id), state: "uncertain")
+        try lib.query("PRAGMA wal_checkpoint(TRUNCATE)")
+        let copy = tmp(); try FileManager.default.copyItem(at: dir, to: copy)
+        return (lib, try Library(dir: copy), ids)
+    }
+    func facts(_ lib: Library) throws -> [String] {
+        let l = Ledger(items: try lib.items(), edits: try lib.groupEdits(), known: Catalogue.shared.contains), s = l.summary(nil)
+        let csv = try EBird.csv(EBird.checklists(l, nil, rarity: Catalogue.shared.rarity), fallback: .include, estimates: true)
+        return try lib.snapshot() + Library.recentFirst(try lib.items()).map { "\($0.id) \($0.viewed ?? "-")" }
+            + ["\([s.observations, s.estimate, s.species, s.photos, s.pending])", csv]
+    }
+    func files(_ lib: Library) -> [String] {
+        (FileManager.default.enumerator(atPath: lib.dir.appendingPathComponent("assets").path)?.allObjects as? [String] ?? []).sorted()
+    }
+    func testBatchCorrectEqualsOneByOne() throws {
+        let now = date("2026-02-01T00:00:00Z"), A = "Sterna hirundo"
+        for (state, key) in [("species", Optional(A)), ("uncertain", nil), ("none", nil)] {
+            let (batch, single, ids) = try twin()
+            let chosen = try batch.items().filter { ids[0...3].contains($0.id) }
+            try batch.correct(photos: chosen, state: state, key: key, now: now)
+            for id in ids[0...3] {
+                guard let r = try single.record(id), let subject = r.subjects?[safe: 0]?.id else { continue }   // no bird: the result page has nothing to correct
+                try single.markViewed(id, now: now); try single.correct(subject, state: state, key: key, now: now)
+            }
+            XCTAssertEqual(try facts(batch), try facts(single), state)
+            XCTAssertEqual(try batch.items().first { $0.id == ids[4] }?.subjects.first?.state, "none", "an unselected photo is untouched")
+        }
+    }
+    func testBatchDeleteEqualsOneByOne() throws {
+        let now = date("2026-02-01T00:00:00Z")
+        let (batch, single, ids) = try twin()
+        let before = try batch.items(), files = self.files(batch)
+        try batch.delete(Array(ids[0...2]), now: now)
+        for id in ids[0...2] { try single.delete(id, now: now) }
+        XCTAssertEqual(try facts(batch), try facts(single))
+        XCTAssertEqual(try batch.items().map(\.id).sorted { $0.uuidString < $1.uuidString }, [ids[3], ids[4]].sorted { $0.uuidString < $1.uuidString })
+        XCTAssertEqual(try batch.items(), before.filter { [ids[3], ids[4]].contains($0.id) }, "the rest unchanged")
+        XCTAssertEqual(self.files(batch), files, "originals stay, as after a single delete")
+        XCTAssertEqual(self.files(single), files)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(batch.url(ids[4])).path))
+    }
+
     /// Old History folder → library: every record, byte and recovery item survives.
     func makeLegacyStore(_ dir: URL) throws -> [Record] {
         let old = try HistoryStore(dir: dir), photo = try Data(contentsOf: fixtures.appendingPathComponent("photo-0.jpg"))

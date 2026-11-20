@@ -54,7 +54,7 @@
     - 检测把握门槛用 0.3（OWLv2 自己的标尺，调研在主人照片上测试时也是 0.3；代码默认的 0.5 是另一个检测器的）；
     - 清晰度缺失不当作 0（§9 要求）：用美学百分位顶替，两样都缺时 Q = 0.5；
     - 连拍分组按相机分开（§9 提到多相机）。"已认出鸟种"= 到种一级且把握 ≥ 0.9（调研测试的口径），其余照片合成一个名额组。
-    曝光扣分没有接（没有曝光测量），永远不触发。
+    曝光扣分原来没有接（没有曝光测量），永远不触发；R5 接上了，见第 88 条。
 16. **单张识别预览和按需预览用一个独立的小进程池**（2 个进程，30 秒超时，同一张照片只解一次），不和批量的解码池共用：
     批量池在调度线程里，按需预览要在扫描暂停、引擎还没加载时也能用。崩溃或超时只重建这个小池。
 17. **结果指纹**现在包括：模型（角色 → sha256）、中文名表的 sha256、流水线版本、处理设置、地区。引擎加载时记下它实际用的清单摘要；
@@ -81,7 +81,7 @@
     这是近似，靠近边界会对错（ponytail，等全球表时换成行政区边界）。表外国家显示"数据不足"。IUCN 用一个开关（`BIRDCM_IUCN=0`）整列关掉。
 27. 地图图块是应用唯一的联网请求，只在打开地图对话框时加载；Leaflet 打包进前端（1.9.4，固定版本），不用 CDN。
 28. **标星默认改为 `select`**（docs/stars.md），旧配额策略保留为 `strategy: "quota"`。同种衰减用 0.995 而不是讨论时举例的 0.985，是在合成场景上定的，
-    没有用主人的照片。旧扫描存的 `{preset, p3, p2}` 读成同档位的新单一比例。在主人两批照片上，"有星"含留片的数量接近随机、不如 Gardener，3★ 的准确率是基准的 2–3 倍。
+    没有用主人的照片。旧扫描存的 `{preset, p3, p2}` 读成同档位的新单一比例。在主人两批照片上，"有星"含留片的数量接近随机、不如 Gardener，3★ 的准确率是基准的 2–3 倍（美学权重误为 0.35 时测的；改回 0.15 后 10061114 约 3 倍（4/25），10161115 约 1.3 倍（3/23），见 80）。
 29. **地区修正按地点的不确定范围取先验**（`engine/birdcm/confirm.py`，docs/eval.md 第三轮）：选的地区用整片区域的格点（Natural Earth），
     点用周围 ±0.25°，时间取前后 3 周，后验用最大值；最大值 < 0.01 不确认（说明"图像最像 X，但此地此季几乎没有它"，候选不再挪位置），
     区域中位数 < 0.05 的确认结果标"本地少见 · 请核对"。讨论中的"图像很强 + 连拍一致可以推翻低先验"**没有做**：评测集上这种情况 31 张里 0 张对。
@@ -213,3 +213,79 @@
 79. **计算单元按模型（检测 / BioCLIP / 小头）分别设置，默认都是 `all`**，在 设置 → 诊断 里可改，重新打开 App 后生效；
     默认值等真机“性能自测”结果再定（模拟器只有 CPU）。同一张照片有多只鸟时，选片后仍先只识别第一只；
     `identify(boxes:)` 用 Core ML 批量接口，但模型 batch 固定为 1，实测不比逐只调用快。
+
+## 桌面端：XMP 边车（R1，主人定的做法 A）
+
+导出框里「写 XMP 边车」：默认不做，点了先列出要新增 / 修改几个 `.xmp`、跳过几张及原因，确认后才写；可撤回。代码 `engine/birdcm/xmp.py`，
+接口 `POST /api/scans/{id}/xmp`（`{ids, dry}`）和 `POST /api/scans/{id}/xmp/undo`，测试 `engine/tests/test_xmp.py`。依据（2026-11-19 查）：
+
+- XMP 规范 Part 1（ISO 16684-1，§8.4）：`xmp:Rating` 取 -1 或 0–5，「-1 表示 rejected，0 表示 unrated；没有这项按 0」。
+  §8.3：`dc:subject` 是关键字的无序数组，`dc:title` / `dc:description` 是多语言单值。
+  [XMPSpecificationPart1.pdf](https://github.com/adobe/XMP-Toolkit-SDK/blob/main/docs/XMPSpecificationPart1.pdf)
+- XMP 规范 Part 3（Storage in Files，引言里的「External storage of metadata」）：边车「在同一目录、与主文件同名但扩展名是 .xmp」。
+  [XMPSpecificationPart3.pdf](https://github.com/adobe/XMP-Toolkit-SDK/blob/main/docs/XMPSpecificationPart3.pdf)；
+  ExifTool 的边车写法也是 `%d%f.xmp`（去掉原扩展名），[Metadata Sidecar Files](https://exiftool.org/metafiles.html)。
+- Lightroom Classic 帮助「Metadata basics and actions」：专有 RAW 的 XMP 存在边车里；「JPEG、TIFF、PSD、DNG」的 XMP 写在文件里面。
+  「Advanced metadata actions」：RAW 存到边车，其他格式存在文件本身；外部改过的元数据用「元数据 › 从文件读取元数据」读进来。
+  「Flag, label, and rate photos」：评星 0–5；「LrC 13.2 起旗标存进 XMP」。（helpx.adobe.com 对脚本返回 403，读的是
+  [web.archive.org 的 2026-01 存档](https://web.archive.org/web/2026/https://helpx.adobe.com/lightroom-classic/help/metadata-basics-actions.html)、
+  [advanced-metadata-actions](https://web.archive.org/web/2025/https://helpx.adobe.com/lightroom-classic/help/advanced-metadata-actions.html)、
+  [flag-label-rate-photos](https://web.archive.org/web/2025/https://helpx.adobe.com/lightroom-classic/help/flag-label-rate-photos.html)。）
+- IPTC Photo Metadata 2025.1：标题 = `dc:title`，说明 = `dc:description`，关键字 = `dc:subject`。
+  [IPTC-PhotoMetadata](https://www.iptc.org/std/photometadata/specification/IPTC-PhotoMetadata)
+- ExifTool XMP 标签表：`lr:hierarchicalSubject`（Lightroom 命名空间）、`xmpDM:pick`（整数）、`xmpDM:good`（布尔）、`xmp:Rating`
+  「0–5，或 -1 表示 rejected」。[XMP Tags](https://exiftool.org/TagNames/XMP.html)
+- 旗标的取值只有社区来源：Lightroom 13.2 用 `xmpDM:pick` = 1 留用 / -1 拒绝 / 0 无旗标，配 `xmpDM:good` = true / false
+  （[digiKam 邮件列表 2024-09](https://mail.kde.org/pipermail/digikam-users/2024-September/036504.html)）。Adobe 的 XMP 规范 Part 2 里只有
+  `xmpDM:good`，没有 `pick`；ExifTool 论坛的原帖没能读到（站点当天不可用）。
+
+80. **只给 RAW（`.ARW`）写边车，文件名 `<原名去扩展名>.xmp`**（`IMG_0001.ARW` → `IMG_0001.xmp`，不是 `IMG_0001.ARW.xmp`）。
+    已有边车按名字不分大小写找（`IMG_0001.XMP` 就写回它）。**JPEG 和 DNG 跳过**：Adobe 帮助只写了 Lightroom 把它们的元数据
+    *写*在文件里面；「它也不从旁边的 `.xmp` 读」是我们据此推断的，没有找到明说的来源（`create-xmp-acr-files` 页还说边车支持
+    「RAW 和少数非 RAW 格式」，没列是哪些）。要让它们读到就得改原片本体，这违反「不改原片」，所以跳过；跳过几张和原因在确认框和返回值里列出。
+    HEIC 等格式观羽本来就不扫。
+81. **星级 → `xmp:Rating`**（`photo.stars`，含手动星级）：0–3 原样；**淘汰 → `xmp:Rating = -1`，另加 `xmpDM:pick = -1`、`xmpDM:good = false`**
+    （-1 是规范里的 rejected；pick / good 是 Lightroom 13.2 起的「拒绝」旗标）。还没评星（`stars` 为空）不写 Rating。
+    不是淘汰时不碰 pick / good（用户自己的留用旗标保留），只有上次是我们标的淘汰、这次不是了，才把我们写的 pick / good 去掉。
+82. **鸟种只写成关键字**：`dc:subject` 和 `lr:hierarchicalSubject` 各加中文名、英文名、学名三个平级关键字（界面显示的名字，人工更正 /
+    连拍组修正优先，同 eBird 导出）；只到属写「<属名> 属」和属名；不确定、没有鸟不写鸟种。**不写 `dc:title` / `dc:description`**：
+    它们是单值，写了就会盖掉主人自己的标题、说明；关键字是加法，合并和撤回都干净。**不写 `xmp:Label`**（色标留给主人自己用）。
+    同一张再导出（比如改了鸟种）时，先去掉上次我们加的鸟种关键字再加新的；主人原本就有的同名关键字不算我们加的，不会被去掉。
+83. **合并交给 exiftool，但它不碰照片文件夹**：把现有边车复制到系统临时目录，用 exiftool 在副本上改我们的字段（-= 再 +=，关键字不重复），
+    读出结果后在照片目录里写一个隐藏临时文件、fsync、`os.replace` 换上，出错就删掉临时文件。写之前确认目标就在原片所在目录、
+    与原片同名；边车是链接或文件夹、或者不是有效 XML 时跳过不动。原片本体从不打开写。用 ElementTree 逐项比对过两种写法
+    （属性形式 `xap:Rating="5"`、非标准前缀 `lightroom:` / `camera:`、xpacket 包装、`xmpMM:History` 结构、`crs:ToneCurvePV2012` 序列、
+    `dc:title`、自定义命名空间；元素形式的 `xmp:Rating`、`crs:Look`、`xmpDM:pick`），我们字段以外逐项不变。exiftool 会重排 XML
+    （拆成每个命名空间一个 `rdf:Description`、改 `x:xmptk`），字节不同但内容相同。
+84. **撤回记在观羽自己的数据库里**（`xmp_batch`、`xmp_file`：边车路径、写入前的完整字节（没有文件为空）、我们写出内容的 sha256、
+    我们加的关键字和是否标了淘汰），不在照片文件夹里留任何记录。「撤回上次写入」撤这次扫描最近一批：现在的内容与我们写出的一致时，
+    原先没有的删掉、原先有的字节级恢复；**写入后又被改过的（Lightroom 开了自动写入 XMP、或主人自己改的）不动，列在返回值里**，
+    已被删掉的也只报告。再点一次撤回上一批。一批里所有文件都写失败时不留记录。
+85. **Lightroom 的衍生 DNG（`-Enhanced-NR` 等）不单独写**：它们已并到原 RAW 名下（`decode.py` 的 `pair_variants`，`photo.variants`），
+    边车只对应原 RAW（`IMG_0001.xmp`）；衍生 DNG 本身是 DNG，元数据在文件里，Lightroom 也不读它的边车。
+86. **没在 Lightroom 里实测**：Lightroom 是否把 `xmp:Rating = -1` 读成拒绝旗标（还是读成 0 星）、13.2 以前的版本怎样处理 pick、
+    从文件读取元数据后平级的 `lr:hierarchicalSubject` 关键字是否正确进到关键字列表、JPEG / DNG 旁的 `.xmp` 是否真的被忽略，
+    都待主人在 Lightroom Classic 里验证。测试用的已有边车是手写的，没有拿带蒙版 / AI 调整、带 `.acr` 伴随文件的真实 Lightroom 边车试过。
+    已有的 Lightroom 星级会被观羽的星级替换（0 星也写 `Rating = 0`）；撤回按扫描分，重扫后的新扫描撤不了旧扫描那一批。
+
+## 星级：美学权重（B1）
+
+87. **select 的美学权重改名为 `w_aes_select`（0.15，docs/stars.md）**：之前和 quota 的 `w_aes`（0.35）同名，dataclass 里后一个生效，select 实际用的是 0.35。
+    quota 的 `w_sharp` / `w_aes`（0.65 / 0.35）不变。没有存过的扫描设置里有 `w_aes`（主人库里 7 个扫描都只有 preset / keep / p3 / p2），所以改名不改变任何已存设置的意思。
+    星级不在结果指纹里（PhotoResult 不含星级，存在每次扫描自己的列里），所以**不升 `PIPELINE_VERSION`**：升了会让所有扫描重扫，而识别结果没有变。
+    按现有机制，新默认在汇总（finalizing）、改留片比例（`PUT /api/scans/{id}/ratio`，同一比例也重算）和更正鸟种后重算星级时生效；
+    之前已完成的扫描在这之前仍显示 0.35 下算的星级。没有做"启动时重算所有已完成扫描"。
+
+## 曝光检测（R5）
+
+88. **曝光在识别时测、在星级时扣**：`pipeline.clipping` 在 `build()` 里、用检测用的那张 2048 帧（不另外解码，和 8×8 相似度缩略图同一份像素）
+    算主体鸟框中间 60%×60% 里三个通道都 ≥ 254 的像素比例（`clip_hi`，高光溢出）和三个通道都 ≤ 3 的比例（`clip_lo`，暗部死黑），存进 PhotoResult。
+    `stars.exposure()` 按 `clip_hi_max`（0.10）/ `clip_lo_max`（0.25）换成扣分，所以改阈值不用重扫。头部清晰度用的是解码分辨率的灰度图，
+    曝光要看三个通道，所以用的是 RGB 帧而不是那份灰度图；两者是同一次解码。阈值和分布见 `docs/stars.md`“曝光检测”。
+    - 测的是相机内嵌 JPEG：RAW 里还能拉回来的高光在这里也算溢出。只看框中间，鸟的边缘（翅尖、尾）溢出不计。
+    - **`PIPELINE_VERSION` 9 → 10**：识别结果多了两个字段，按现有规则升版本。已完成的扫描在结果页显示“这些结果是旧版本算的…重新扫描”（`stale`），照常可看；
+      重新扫描才会有曝光字段，整个扫描按新指纹重算。没有曝光字段的旧结果**不扣分**（`exposure()` 返回 None），星级和以前一样，不会出错。
+      没有把 9 当成等价旧版本（`EQUIVALENT_*` 是给只影响显示的变化用的，这次影响星级）。
+    - quota 和 select 两个策略都扣同一个 `exposure_malus`（0.06）；select 里另外把它作为 3★ 的短处（排第一，所以理由写它），
+      0★ 的理由前面也加“鸟身上高光溢出 / 暗部死黑；”；quota 里理由前加“鸟身上…（扣分）；”。`q_parts.exposure` 记扣了多少，界面显示“曝光扣分”。
+

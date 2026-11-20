@@ -129,7 +129,7 @@ final class Engine: @unchecked Sendable {
         return url
     }
     func rerank(_ cached: Identification, place: Place?, shooting: Shooting) throws -> Identification {
-        guard let visual=cached.visual else { throw NSError(domain:"BirdCM",code:8,userInfo:[NSLocalizedDescriptionKey:"旧记录还不支持更改地点，请重新选择这张照片识别一次。"] ) }
+        guard let visual=cached.visual else { throw NSError(domain:"BirdCM",code:8,userInfo:[NSLocalizedDescriptionKey:String(localized:"旧记录还不支持更改地点，请重新选择这张照片识别一次。")] ) }
         let spread:GeoSpread?
         if let place {
             guard let geo=try geoModel() else {throw CocoaError(.fileReadNoSuchFile)}
@@ -138,7 +138,7 @@ final class Engine: @unchecked Sendable {
         var id=Confirm.decide(p:Confirm.posterior(visual,spread?.wide),rows:rows,wide:spread?.wide,typical:spread?.typical)
         id.visual=visual; id.clear=cached.clear; id.eye=cached.eye; id.beak=cached.beak
         id.flying=cached.flying; id.visibility=cached.visibility; id.diagnostics=cached.diagnostics
-        if cached.clear == false { id.reason="鸟的特征不够清楚，请核对候选或手动画框。" }
+        if cached.clear == false { id.reason=String(localized:"鸟的特征不够清楚，请核对候选或手动画框。") }
         if id.level=="species" {id.rarity=try rarityTable()?.lookup(id.top5[0].scientific,place:place,month:shooting.month)}
         return id
     }
@@ -200,7 +200,7 @@ final class Engine: @unchecked Sendable {
         let outs = try inference.withLock { try species.predictions(fromBatch: MLArrayBatchProvider(array: inputs)) }
         diag.stages["BioCLIP"] = Date().timeIntervalSince(tick); tick = Date()
         let spread = try place.map { p -> GeoSpread in
-            guard let geo = try geoModel() else { throw NSError(domain:"BirdCM",code:1,userInfo:[NSLocalizedDescriptionKey:"安装包缺少地点模型，请重新安装完整 App。"] ) }
+            guard let geo = try geoModel() else { throw NSError(domain:"BirdCM",code:1,userInfo:[NSLocalizedDescriptionKey:String(localized:"安装包缺少地点模型，请重新安装完整 App。")] ) }
             return try geo.spread(p,date:shooting?.takenAt)
         }
         diag.stages["地点先验"] = Date().timeIntervalSince(tick); tick = Date()
@@ -222,7 +222,7 @@ final class Engine: @unchecked Sendable {
             let h = clearWeights
             let z = e.indices.reduce(h["bias"]![0]) { $0 + ((Double(e[$1])-h["mean"]![$1])/h["std"]![$1])*h["weight"]![$1] }
             id.clear = z >= h["z_min"]![0] && Double(m) >= h["cos_min"]![0]
-            if !manual && id.clear == false { id.reason = "鸟的特征不够清楚，请核对候选或手动画框。" }
+            if !manual && id.clear == false { id.reason = String(localized: "鸟的特征不够清楚，请核对候选或手动画框。") }
             id.visual=visual
             if id.level == "species" { id.rarity = rarity?.lookup(id.top5[0].scientific,place:place,month:shooting?.month) ?? RarityValue(label:"数据不足",iucn:nil) }
             if let heads {

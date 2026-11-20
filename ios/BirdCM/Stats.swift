@@ -67,7 +67,7 @@ struct StatsView: View {
         }
     }
     /// polish.md: open numbers, no box; tabular digits; orange only for the 新种 number.
-    func tile(_ title: String, _ value: Int, _ id: String, highlight: Bool = false) -> some View {
+    func tile(_ title: LocalizedStringKey, _ value: Int, _ id: String, highlight: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("\(value)").font(.system(.largeTitle, weight: .bold)).monospacedDigit().foregroundStyle(highlight && value > 0 ? Palette.newSpecies : Palette.ink)
             Text(title).font(.subheadline).foregroundStyle(Palette.secondary)
@@ -151,9 +151,9 @@ struct StatsView: View {
                     HStack(alignment: .firstTextBaseline) { SpeciesName(key: o.species, size: .row); Spacer(); Text(o.day).font(.caption).foregroundStyle(Palette.tertiary).monospacedDigit() }
                         .accessibilityElement(children: .combine)
                 }
-                let labels = ["无记录", "罕见", "少见", "不常见", "常见"]
+                let labels = [String(localized: "无记录"), String(localized: "罕见"), String(localized: "少见"), String(localized: "不常见"), String(localized: "常见")]
                 let buckets = Dictionary(grouping: obs) { book.bucket($0.id) }.mapValues(\.count)
-                Text((0...4).map { "\(labels[$0]) \(buckets[$0] ?? 0)" }.joined(separator: " · ") + " · 无数据 \(buckets[nil] ?? 0)").font(.caption).monospacedDigit().accessibilityIdentifier("stats.rarityBuckets")
+                Text((0...4).map { "\(labels[$0]) \(buckets[$0] ?? 0)" }.joined(separator: " · ") + String(localized: " · 无数据 \(buckets[nil] ?? 0)")).font(.caption).monospacedDigit().accessibilityIdentifier("stats.rarityBuckets")
                 Text("按每条记录自己的地点和月份查 GBIF 观测记录份额；一条记录有多个地点时取最少见的一档。记录数不是实际种群数量。").font(.caption2).foregroundStyle(Palette.secondary)
                 if !UserDefaults.standard.bool(forKey: "hideIUCN") {
                     let threatened = book.iucn.filter { RarityBook.threatened.contains($0.value) }.sorted { $0.key < $1.key }
@@ -192,7 +192,7 @@ struct PhotoCalendar: View {
         }.aspectRatio(1, contentMode: .fit)
     }
     func label(_ d: Ledger.Day) -> String {
-        "\(d.day)，\(d.cover.map { c in model.catalogue.name(c.item.subjects.first { s in s.ordinal == c.ordinal }?.key) } ?? "")，\(d.species.count) 种，\(d.observations) 条观察"
+        String(localized: "\(d.day)，\(d.cover.map { c in model.catalogue.name(c.item.subjects.first { s in s.ordinal == c.ordinal }?.key) } ?? "")，\(d.species.count) 种，\(d.observations) 条观察")
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -224,7 +224,7 @@ struct PhotoCalendar: View {
             let lead = (Calendar(identifier: .gregorian).component(.weekday, from: first) + 5) % 7     // Monday first
             let count = Int(range.1.suffix(2))!
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
-                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { Text($0).font(.caption).foregroundStyle(Palette.secondary) }
+                ForEach(Array([String(localized: "一"), String(localized: "二"), String(localized: "三"), String(localized: "四"), String(localized: "五"), String(localized: "六"), String(localized: "日")].enumerated()), id: \.offset) { Text($0.element).font(.caption).foregroundStyle(Palette.secondary) }
                 ForEach(0..<(lead + count), id: \.self) { i in
                     if i < lead { Color.clear.aspectRatio(1, contentMode: .fit) } else {
                         let n = i - lead + 1, key = String(format: "%04d-%02d-%02d", y, m, n), d = days[key]
@@ -237,7 +237,7 @@ struct PhotoCalendar: View {
         }
     }
     @ViewBuilder func yearTiles(_ y: Int) -> some View {
-        Text(verbatim: "\(y) 年各月").font(.headline).accessibilityIdentifier("stats.calendar")
+        Text("\(String(y)) 年各月").font(.headline).accessibilityIdentifier("stats.calendar")
         LazyVGrid(columns: typeSize.isAccessibilitySize ? [GridItem(.flexible())] : Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
             ForEach(1...12, id: \.self) { m in
                 let days = model.ledger.days(Period.month(y, m).range!)
@@ -292,7 +292,7 @@ struct SightingList: View {
                             HStack(alignment: .firstTextBaseline) { SpeciesName(key: o.species, size: .row); if model.ledger.allTime[o.species]?.first == o.day { NewBadge() } }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(o.day) · \(place(o))").monospacedDigit()
-                                Text("估计 \(o.estimate)\(o.override != nil ? "（你改过）" : "") · \(o.frames.count) 张").monospacedDigit()
+                                Text("估计 \(o.estimate)\(o.override != nil ? String(localized: "（你改过）") : "") · \(o.frames.count) 张").monospacedDigit()
                             }.font(.caption).foregroundStyle(Palette.tertiary)
                         }
                         Spacer()
@@ -319,8 +319,8 @@ struct SightingSheet: View {
                 Section {
                     SpeciesName(key: o.species, size: .row)
                     LabeledContent("日期") { Text(o.day).monospacedDigit() }
-                    LabeledContent("单张照片最多", value: "\(o.frames.values.max() ?? 0) 只")
-                    LabeledContent("照片", value: "\(o.frames.count) 张")
+                    LabeledContent("单张照片最多", value: String(localized: "\(o.frames.values.max() ?? 0) 只"))
+                    LabeledContent("照片", value: String(localized: "\(o.frames.count) 张"))
                 }
                 Section {
                     TextField("本次观察数量", text: $text).keyboardType(.numberPad).accessibilityIdentifier("obs.count")
@@ -400,9 +400,9 @@ struct SightingMap: View {
             }
             Section("只选了地区的记录") {
                 if regionOnly.isEmpty { Text("没有").font(.caption) }
-                ForEach(regionOnly, id: \.key) { k, v in LabeledContent(String(k.dropFirst(2)), value: "\(v) 条") }
+                ForEach(regionOnly, id: \.key) { k, v in LabeledContent(String(k.dropFirst(2)), value: String(localized: "\(v) 条")) }
             }
-            Section("地点未知") { LabeledContent("同日合并的记录", value: "\(none) 条").accessibilityIdentifier("map.noPlace") }
+            Section("地点未知") { LabeledContent("同日合并的记录", value: String(localized: "\(none) 条")).accessibilityIdentifier("map.noPlace") }
         }
         .scrollContentBackground(.hidden).background(Palette.canvas)
         .navigationTitle("地图").navigationBarTitleDisplayMode(.inline)

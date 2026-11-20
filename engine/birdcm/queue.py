@@ -11,6 +11,7 @@ import traceback
 from collections.abc import Callable
 from concurrent.futures import Future
 
+from birdcm.i18n import t
 from birdcm import stars
 from birdcm.store import Store
 
@@ -157,7 +158,7 @@ class Scheduler:
                 rating = self._rate(sid, scan["ratio"])
             except Exception as e:  # noqa: BLE001
                 traceback.print_exc()
-                self.store.set_state(sid, "failed", error=f"标星出错：{type(e).__name__}: {e}"[:500])
+                self.store.set_state(sid, "failed", error=t("queue.rating_failed", e=f"{type(e).__name__}: {e}")[:500])
                 return
             if self.store.write_rating(sid, rating, complete=True, ratio=scan["ratio"]):
                 return
@@ -171,7 +172,7 @@ class Scheduler:
 
     def _rate(self, sid: int, ratio: dict) -> dict[int, dict]:
         rows = self.store.rows_for_rating(sid)                    # read once (it was twice: half of a re-rate)
-        return stars.rate(rows, ratio, rarity=self._rarity(), manual=self.manual(sid, rows))
+        return stars.rate(rows, ratio, rarity=self._rarity(), manual=self.manual(sid, rows), fixed=self.store.star_fixes_for(sid))
 
     def manual(self, sid: int, rows: list[dict]) -> dict[int, dict]:
         """The person's corrections of this scan as species blocks for stars.rate (rows: rows_for_rating, not rated yet)."""
@@ -184,7 +185,7 @@ class Scheduler:
         return {i: {**stars.manual_species(own.get(i), c["sci"], cat), "scope": c["scope"]} for i, c in cor.items()}
 
     def rerate_now(self, sid: int) -> None:
-        """Stars again with the current settings (after a correction), stored only if the settings did not change."""
+        """Stars again with the current settings (after a correction or the person's stars), stored only if the settings did not change."""
         for _ in range(5):
             scan = self.store.scan(sid)
             if not scan or scan["state"] != "completed":

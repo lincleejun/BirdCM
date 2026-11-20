@@ -14,6 +14,7 @@
 		05F9F7DD0B7AFB16A33E9B03 /* PhotoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8171929D21E7139FA08AF9 /* PhotoView.swift */; };
 		130E9932A5461B7185438C94 /* Stats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 006A90032792584A5C2E4B49 /* Stats.swift */; };
 		15546CD4D65177012FF3971F /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6605517F489279F1009821D1 /* Settings.swift */; };
+		15CE0B352BF9DD680A8404E1 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36FF5CCA3177732ABF64711 /* LocalizationTests.swift */; };
 		1639510AAB5EFA02815241AD /* FlowCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D3A911617F950B2E248386 /* FlowCase.swift */; };
 		16B3D2B0A4085940E4C15BF2 /* EBird.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD30D915D433AD16AEB6EEA9 /* EBird.swift */; };
 		1C25ADE4553C97B13152FF0C /* GeoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92750642C7CEA2D95A0A7AA7 /* GeoNetwork.swift */; };
@@ -65,6 +66,7 @@
 		A780706FDB3E09057DB7C789 /* photo-2.jpg in Resources */ = {isa = PBXBuildFile; fileRef = F7937EFBDFABDB1A1D8690E3 /* photo-2.jpg */; };
 		ABD2528274041DD945C9663D /* ResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82CDA918FD5F9D910F73E852 /* ResultView.swift */; };
 		B8774D5CD18905C2169F923E /* RecordFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B11B83261C140FE60490723 /* RecordFlows.swift */; };
+		BC88AC9BEA15D295343C1A5C /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C96682DB40FC34DD5C7B0161 /* InfoPlist.xcstrings */; };
 		C16F865DA367A307655882DF /* Geo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51DFFBE6B207DECEEA343EA0 /* Geo.swift */; };
 		C875DFDF27ADB1A66DECF4C6 /* Explore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B70D6E1935812D02FE9A6A /* Explore.swift */; };
 		C9EFAEFDE332676B38697CEC /* CLEAR-WEIGHTS-LICENSE.md in Resources */ = {isa = PBXBuildFile; fileRef = 99AFDB1C42053870862A0D04 /* CLEAR-WEIGHTS-LICENSE.md */; };
@@ -160,12 +162,14 @@
 		C064BA2F801B919462B1F37A /* Rarity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rarity.swift; sourceTree = "<group>"; };
 		C3D96B5035F9D3A73CE37F12 /* species-map.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "species-map.json"; sourceTree = "<group>"; };
 		C8D7DD89DAFCEA3EDEE2505E /* Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library.swift; sourceTree = "<group>"; };
+		C96682DB40FC34DD5C7B0161 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		C974BB3639AA88AF94DF3C39 /* ImageViewerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewerTests.swift; sourceTree = "<group>"; };
 		CD30D915D433AD16AEB6EEA9 /* EBird.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EBird.swift; sourceTree = "<group>"; };
 		DB2F58A4B3E992DA5D3423A1 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Fixtures; path = Tests/Fixtures; sourceTree = SOURCE_ROOT; };
 		DB4BF15BF0CC42FA7643F590 /* Reference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reference.swift; sourceTree = "<group>"; };
 		DD1FED1AF692275CAA46BD44 /* Thumb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Thumb.swift; sourceTree = "<group>"; };
 		E23C9CA7E9EBF3F47CC033A2 /* Ledger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ledger.swift; sourceTree = "<group>"; };
+		F36FF5CCA3177732ABF64711 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationTests.swift; sourceTree = "<group>"; };
 		F388947B5CEEA82620053E9B /* clear.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = clear.json; sourceTree = "<group>"; };
 		F39911F570E6DA1264A3A0C3 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		F52A403EFA257B3C771DFF3C /* GeoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoTests.swift; sourceTree = "<group>"; };
@@ -256,6 +260,7 @@
 				C974BB3639AA88AF94DF3C39 /* ImageViewerTests.swift */,
 				C05B99E1AEF8F35E781BE1E6 /* LaunchTests.swift */,
 				7A1B835A1050E34974A411DD /* LibraryTests.swift */,
+				F36FF5CCA3177732ABF64711 /* LocalizationTests.swift */,
 				344DA05F98C2FC721F554253 /* LogicTests.swift */,
 				83C43C33A3EF0B135A96FBE0 /* PerformanceTests.swift */,
 				A4668201A11936E9A1AF6313 /* PipelineTests.swift */,
@@ -313,6 +318,7 @@
 				5D252954BF27BD52A11F848B /* countries.json */,
 				9844DA70F8616A0E09609DED /* ebird-names.csv */,
 				1EA75BE835A9655F80493366 /* geo-graph.json */,
+				C96682DB40FC34DD5C7B0161 /* InfoPlist.xcstrings */,
 				0313F836D02EF328BF4F1D7E /* Localizable.xcstrings */,
 				B39535F38A0EE6F535D65138 /* NOTICE.md */,
 				5E173523A2A0C66AEEDC6C66 /* PrivacyInfo.xcprivacy */,
@@ -415,6 +421,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
+				en,
 				"zh-Hans",
 			);
 			mainGroup = DD2DAE5CA5D033A11E9332C7;
@@ -438,6 +445,7 @@
 			files = (
 				4D287CAB90BFA983FAB7C7CA /* Assets.xcassets in Resources */,
 				C9EFAEFDE332676B38697CEC /* CLEAR-WEIGHTS-LICENSE.md in Resources */,
+				BC88AC9BEA15D295343C1A5C /* InfoPlist.xcstrings in Resources */,
 				4AE835BD873625AE826C0984 /* Localizable.xcstrings in Resources */,
 				6BEEC576DBB6E08C0C197812 /* Models in Resources */,
 				002A5BCB61E66B6F597F8046 /* NOTICE.md in Resources */,
@@ -562,6 +570,7 @@
 				1C5A6757D4BDBAE777963B3B /* ImageViewerTests.swift in Sources */,
 				8AD7DBBE750D2E66338F5453 /* LaunchTests.swift in Sources */,
 				2E0EB25027086D0E70E11A7A /* LibraryTests.swift in Sources */,
+				15CE0B352BF9DD680A8404E1 /* LocalizationTests.swift in Sources */,
 				448BEEC9B2253191DCEE8565 /* LogicTests.swift in Sources */,
 				DADEF10A81D28D1910D60BE0 /* PerformanceTests.swift in Sources */,
 				9725D7A4088B49D6A47176DD /* PipelineTests.swift in Sources */,

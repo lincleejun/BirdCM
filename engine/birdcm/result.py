@@ -97,6 +97,8 @@ class PhotoResult(TypedDict):
     sharpness: float | None         # head sharpness, grad ratio (~1 blurred, larger crisper); uncalibrated scale
     sharpness_region: str | None    # eye | head | box
     sharpness_window: Box | None    # where it was measured
+    clip_hi: NotRequired[float | None]   # share of the subject's core blown (all channels >= 254); absent in results before v10
+    clip_lo: NotRequired[float | None]   # ... crushed (all channels <= 3); stars.py turns both into exposure_malus
     aesthetic: float | None         # 0-1 (EVA general score / 10), whole photo
     rarity: Rarity | None           # pending: rarity table
     rejected: bool                  # 淘汰: no bird, or no clear bird
@@ -107,6 +109,7 @@ class PhotoResult(TypedDict):
 class ScanFields(TypedDict):        # per scan, computed by stars.py at finalizing
     stars: int | None               # -1 淘汰, 0-3; None = 待定
     star_reason: str | None
+    star_auto: dict | None          # set when the person chose the stars: the computed {stars, reason}
     burst_group: int | None
     burst_rank: int | None
     burst_size: int | None

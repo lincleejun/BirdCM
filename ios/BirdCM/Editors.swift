@@ -4,13 +4,18 @@ import SwiftUI
 struct CorrectionSheet: View {
     @Environment(AppModel.self) var model
     @Environment(\.dismiss) var dismiss
-    let record: Record
+    let record: Record?
     let index: Int
+    /// 记录 → 照片 multi-select: the photos whose 鸟 1 this sheet corrects, through the same Library.correct.
+    var batch: [PhotoItem] = []
+    init(record: Record, index: Int) { self.record = record; self.index = index }
+    init(batch: [PhotoItem]) { record = nil; index = 0; self.batch = batch }
     @State private var query = ""
     @State private var results = [Catalogue.Species]()
     @State private var limit = 50
     @State private var picked: Catalogue.Species?
-    var effective: AppModel.Effective { model.effective(record, index) }
+    var effective: AppModel.Effective? { record.map { model.effective($0, index) } }
+    var birds: [SubjectItem] { batch.compactMap(\.subjects.first) }
     func row(_ sp: Catalogue.Species) -> some View {
         Button { picked = sp } label: {
             HStack {
@@ -24,22 +29,29 @@ struct CorrectionSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("当前") {
-                    LabeledContent("模型判断", value: effective.model.map { m in title(m) + (m.level == "species" ? " · " + (m.top5.first?.p ?? 0).formatted(.percent.precision(.fractionLength(1))) : "") } ?? "未识别")
-                    if effective.state != "none" { LabeledContent("你的更正", value: effective.name).accessibilityIdentifier("correction.current") }
+                if let effective {
+                    Section("当前") {
+                        LabeledContent("模型判断", value: effective.model.map { m in title(m) + (m.level == "species" ? " · " + (m.top5.first?.p ?? 0).formatted(.percent.precision(.fractionLength(1))) : "") } ?? String(localized: "未识别"))
+                        if effective.state != "none" { LabeledContent("你的更正", value: effective.name).accessibilityIdentifier("correction.current") }
+                    }
+                } else {
+                    Section {
+                        Text("改所选 \(birds.count) 张照片的鸟 1，与在每张结果页里更正相同。").accessibilityIdentifier("correction.batch")
+                        if birds.count < batch.count { Text("另有 \(batch.count - birds.count) 张没有找到鸟，不改。").foregroundStyle(Palette.secondary) }
+                    }
                 }
                 if let picked {
                     Section("确认更正") {
-                        Text("\(effective.name) → \(picked.name)").font(.headline).accessibilityIdentifier("correction.review")
+                        (effective.map { Text("\($0.name) → \(picked.name)") } ?? Text("\(birds.count) 张 → \(picked.name)")).font(.headline).accessibilityIdentifier("correction.review")
                         SpeciesName(title: picked.name, alt: picked.alt, sci: picked.sci, size: .row)
                         Button("保存更正") { save("species", picked.sci) }.buttonStyle(PrimaryActionStyle()).accessibilityIdentifier("correction.save")
                     }
                 }
                 Section {
                     Button("标为不确定", systemImage: "questionmark.circle") { save("uncertain", nil) }.accessibilityIdentifier("correction.uncertain").frame(minHeight: 44)
-                    if effective.state != "none" { Button("恢复自动识别", systemImage: "arrow.uturn.backward") { save("none", nil) }.accessibilityIdentifier("correction.reset").frame(minHeight: 44) }
+                    if effective.map({ $0.state != "none" }) ?? birds.contains(where: { $0.state != "none" }) { Button("恢复自动识别", systemImage: "arrow.uturn.backward") { save("none", nil) }.accessibilityIdentifier("correction.reset").frame(minHeight: 44) }
                 } footer: { Text("更正只代表你的判断，不改变模型把握；恢复自动识别不会重新运行模型。") }
-                if query.isEmpty, let top = effective.model?.top5, !top.isEmpty {
+                if query.isEmpty, let top = effective?.model?.top5, !top.isEmpty {
                     Section("模型建议") { ForEach(top.compactMap { model.catalogue.species($0.scientific) }) { row($0) } }
                 }
                 Section(query.isEmpty ? "全部 \(model.catalogue.all.count) 种（按学名）" : "搜索结果 · \(results.count)") {
@@ -60,7 +72,8 @@ struct CorrectionSheet: View {
         }
     }
     func save(_ state: String, _ key: String?) {
-        guard let subject = effective.subject else { return }
+        if record == nil { if model.edit(viewing: false, { try $0.correct(photos: batch, state: state, key: key) }) { dismiss() }; return }
+        guard let subject = effective?.subject else { return }
         if model.edit({ try $0.correct(subject, state: state, key: key) }) { dismiss() }
     }
 }

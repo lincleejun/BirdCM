@@ -4,6 +4,7 @@
 // first use shows the disclosure. Only the species' ids and titles leave the machine (the engine sends them).
 import { useEffect, useState } from "react";
 import { del, get, post } from "./api";
+import { getLang, t } from "./i18n";
 
 interface Card {
   state: "ok" | "stale" | "none" | "unmapped" | "off" | "unavailable" | "busy" | "missing"; why?: string; problem?: string;
@@ -12,19 +13,19 @@ interface Card {
   attribution?: string; width?: number; height?: number;
 }
 interface Reference { summary: Card; image: Card; links: { name: string; url: string }[] }
-interface Settings { enabled: boolean; disclosed: boolean; places: boolean; disclosure: string }
+interface Settings { enabled: boolean; disclosed: boolean; places: boolean; updates: boolean; disclosure: string }
 type Kind = "summary" | "image";
 
 const ext = { target: "_blank", rel: "noopener noreferrer" } as const;
 
 function problem(c: Card, retry: () => void, what: string) {
-  const text = c.state === "unmapped" ? c.why ?? "资料未对应"
-    : c.state === "none" ? c.why ?? `暂无${what}`
-    : c.state === "off" ? "在线资料已关闭；打开后才会联网取" : c.state === "missing" ? "正在取在线资料…"
-    : c.state === "busy" || c.problem === "busy" ? "来源请求较多，稍后可重试" : "在线资料暂不可用（可能离线）";
+  const text = c.state === "unmapped" ? c.why ?? t("ref.unmapped")
+    : c.state === "none" ? c.why ?? t("ref.none", { what })
+    : c.state === "off" ? t("ref.off") : c.state === "missing" ? t("ref.fetching")
+    : c.state === "busy" || c.problem === "busy" ? t("ref.busy") : t("ref.unavailable");
   const again = c.state === "unavailable" || c.state === "busy" || c.problem || c.state === "none";
-  return <p className="hint" role="status">{text}{c.cached_at && c.state !== "none" ? `（显示 ${c.cached_at} 的缓存）` : ""}
-    {again && <> <button className="btn link" onClick={retry}>重试</button></>}</p>;
+  return <p className="hint" role="status">{text}{c.cached_at && c.state !== "none" ? t("ref.showing_cache", { d: c.cached_at }) : ""}
+    {again && <> <button className="btn link" onClick={retry}>{t("ref.retry")}</button></>}</p>;
 }
 
 export default function SpeciesReference({ sci, own }: { sci: string; own: number }) {
@@ -65,45 +66,47 @@ export default function SpeciesReference({ sci, own }: { sci: string; own: numbe
   const shown = (c?: Card) => c && (c.state === "ok" || c.state === "stale") && (c.text || c.licence);
   return (
     <div className="result-section ref-section" aria-labelledby="h-ref">
-      <div className="row"><h3 id="h-ref">物种参考</h3>
-        {s && <label className="inline"><input type="checkbox" checked={s.enabled} onChange={(e) => setting({ enabled: e.target.checked, disclosed: true })} /> 在线资料（Wikipedia / Wikimedia）</label>}
-        {s && <label className="inline" title="只把经纬度（约 1 公里）发给 OpenStreetMap Nominatim；关闭后显示离线的地区名">
-          <input type="checkbox" checked={s.places} onChange={(e) => setting({ places: e.target.checked })} /> 用网络显示地名（OpenStreetMap）</label>}
-        <button className="btn link" onClick={clearCache}>删除网络缓存</button></div>
-      {s && !s.enabled && <p className="hint" role="status">在线资料已关闭：不会联网，只显示已经缓存的资料。</p>}
+      <div className="row"><h3 id="h-ref">{t("ref.title")}</h3>
+        {s && <label className="inline"><input type="checkbox" checked={s.enabled} onChange={(e) => setting({ enabled: e.target.checked, disclosed: true })} /> {t("ref.online")}</label>}
+        {s && <label className="inline" title={t("ref.places_title")}>
+          <input type="checkbox" checked={s.places} onChange={(e) => setting({ places: e.target.checked })} /> {t("ref.places")}</label>}
+        {s && <label className="inline" title={t("ref.updates_title")}>
+          <input type="checkbox" checked={s.updates} onChange={(e) => setting({ updates: e.target.checked })} /> {t("ref.updates")}</label>}
+        <button className="btn link" onClick={clearCache}>{t("ref.clear_cache")}</button></div>
+      {s && !s.enabled && <p className="hint" role="status">{t("ref.off_note")}</p>}
       {s && !s.disclosed && <div className="ref-disclosure" role="note">
         <p>{s.disclosure}</p>
-        <div className="row"><button className="btn" onClick={() => setting({ disclosed: true })}>知道了</button>
-          <button className="btn link" onClick={() => setting({ enabled: false, disclosed: true })}>关闭在线资料</button></div></div>}
+        <div className="row"><button className="btn" onClick={() => setting({ disclosed: true })}>{t("ref.got_it")}</button>
+          <button className="btn link" onClick={() => setting({ enabled: false, disclosed: true })}>{t("ref.turn_off")}</button></div></div>}
       <div className="ref-grid">
         <figure className="ref-figure">
           {img && shown(img) && imgOk ? <>
-            <img src={`/api/species/reference/image?sci=${encodeURIComponent(sci)}&v=${img.cached_at}`} alt={own ? "网络参考图" : "网络参考图，不是你的观察"}
+            <img src={`/api/species/reference/image?sci=${encodeURIComponent(sci)}&v=${img.cached_at}`} alt={own ? t("ref.web_image") : t("ref.web_image_not_yours")}
               width={img.width} height={img.height} onError={() => setImgOk(false)} />
-            <figcaption><b className="ref-label">{own ? "参考图" : "网络参考图，不是你的观察"}</b>
-              照片：<a href={img.source_url} {...ext}>{img.author ?? "作者见 Commons 文件页"}</a> · <a href={img.licence_url} {...ext}>{img.licence}</a>
-              {img.nc && <span className="pill">非商业许可（NC）</span>}
-              {img.credit && img.credit !== img.author && !/^own work$/i.test(img.credit) && <> · 出处 {img.credit}</>}
-              {" "}· 来源 <a href={img.source_url} {...ext}>Wikimedia Commons 文件页</a>
-              {img.changes && <> · {img.changes}</>} · 缓存于 {img.cached_at}{img.state === "stale" && "（离线显示缓存）"}</figcaption>
-          </> : <div className="ref-empty">{img ? problem(img, () => refresh(["image"], true), "可用的授权参考图") : <p className="hint">正在读取…</p>}</div>}
+            <figcaption><b className="ref-label">{own ? t("ref.image") : t("ref.web_image_not_yours")}</b>
+              {t("ref.photo_by")}<a href={img.source_url} {...ext}>{img.author ?? t("ref.author_on_commons")}</a> · <a href={img.licence_url} {...ext}>{img.licence}</a>
+              {img.nc && <span className="pill">{t("ref.nc")}</span>}
+              {img.credit && img.credit !== img.author && !/^own work$/i.test(img.credit) && <> · {t("ref.credit")} {img.credit}</>}
+              {" "}· {t("ref.source")} <a href={img.source_url} {...ext}>{t("ref.commons_page")}</a>
+              {img.changes && <> · {img.changes}</>} · {t("ref.cached_on")} {img.cached_at}{img.state === "stale" && t("ref.stale")}</figcaption>
+          </> : <div className="ref-empty">{img ? problem(img, () => refresh(["image"], true), t("ref.what_image")) : <p className="hint">{t("ref.loading")}</p>}</div>}
         </figure>
         <div className="ref-summary">
-          <h4>简介{sum?.lang === "en" && <span className="pill">英文资料</span>}</h4>
+          <h4>{t("ref.summary")}{sum?.lang && sum.lang !== getLang() && <span className="pill">{t("ref.other_lang")}</span>}</h4>
           {sum && shown(sum) ? <>
             <p className={open ? "ref-text" : "ref-text clamp"} lang={sum.lang === "zh" ? "zh-Hans" : "en"}>{sum.text}</p>
-            {(sum.text?.length ?? 0) > 160 && <button className="btn link" onClick={() => setOpen(!open)}>{open ? "收起" : "展开"}</button>}
+            {(sum.text?.length ?? 0) > 160 && <button className="btn link" onClick={() => setOpen(!open)}>{open ? t("ref.less") : t("ref.more")}</button>}
             <p className="hint ref-credit">{sum.credit} · {sum.changes} · <a href={sum.licence_url} {...ext}>{sum.licence}</a> ·{" "}
-              <a href={sum.source_url} {...ext}>原文「{sum.title}」</a>{sum.history_url && <> / <a href={sum.history_url} {...ext}>历史</a></>}
-              {sum.revision && ` · 修订 ${sum.revision}`} · 缓存于 {sum.cached_at}{sum.state === "stale" && "（离线显示缓存）"}</p>
-          </> : sum ? problem(sum, () => refresh(["summary"], true), "简介") : <p className="hint">正在读取…</p>}
+              <a href={sum.source_url} {...ext}>{t("ref.original", { title: sum.title ?? "" })}</a>{sum.history_url && <> / <a href={sum.history_url} {...ext}>{t("ref.history")}</a></>}
+              {sum.revision && t("ref.revision", { r: sum.revision })} · {t("ref.cached_on")} {sum.cached_at}{sum.state === "stale" && t("ref.stale")}</p>
+          </> : sum ? problem(sum, () => refresh(["summary"], true), t("ref.summary")) : <p className="hint">{t("ref.loading")}</p>}
         </div>
       </div>
-      <p className="hint ll-links">在浏览器里查：
+      <p className="hint ll-links">{t("ref.look_up")}
         {(r?.links ?? []).map((l) => <a key={l.name} href={l.url} {...ext}>{l.name}</a>)}
-        {r && !r.links.some((l) => l.name === "eBird") && <a href={`https://ebird.org/explore?q=${encodeURIComponent(sci)}`} {...ext}>eBird（搜索）</a>}
-        {r && !r.links.some((l) => l.name.startsWith("Wikipedia")) && <a href={`https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(sci)}`} {...ext}>Wikipedia（搜索）</a>}
-        <button className="btn link" onClick={() => navigator.clipboard?.writeText(sci)}>复制学名</button></p>
+        {r && !r.links.some((l) => l.name === "eBird") && <a href={`https://ebird.org/explore?q=${encodeURIComponent(sci)}`} {...ext}>{t("ref.ebird_search")}</a>}
+        {r && !r.links.some((l) => l.url.startsWith("https://en.wikipedia.org/")) && <a href={`https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(sci)}`} {...ext}>{t("ref.wiki_search")}</a>}
+        <button className="btn link" onClick={() => navigator.clipboard?.writeText(sci)}>{t("ref.copy_sci")}</button></p>
     </div>
   );
 }

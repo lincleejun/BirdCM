@@ -14,8 +14,8 @@ A local, private assistant for bird photographers. Your photos never leave your 
 
 - 找鸟、认种（全球 11,000+ 种，按拍摄地点和季节修正），看眼睛和嘴是否清晰、是不是在飞、头部锐度，打星
 - 连拍取一致结果；IUCN 受威胁等级；当地稀有度（数据表暂未发布，见下方许可）
-- 鸟种清单、统计、日历、地图；导出 CSV / JSON 和 [eBird 文件](docs/ebird.md)
-- 照片文件夹只读，不改、不上传
+- 鸟种清单、统计、日历、地图；导出 CSV / JSON、[eBird 文件](docs/ebird.md)，以及给 Lightroom 的 XMP 边车（星级、鸟种关键字）
+- 不改原片、不上传；只有你在导出框里点了「写 XMP 边车」，才在 RAW 旁写同名 `.xmp`，可撤回
 
 **iPhone 版**（iOS 17+）：单张照片离线识别。
 
@@ -23,6 +23,8 @@ A local, private assistant for bird photographers. Your photos never leave your 
 - 记录、鸟种、统计、探索；维基百科简介与参考图（可在设置里关掉）
 
 名称统一两行显示：中文名在上，英文名 · *学名* 在下。
+
+**界面语言 / Language**：简体中文或英文，默认跟随浏览器语言，可点顶部栏的「English / 中文」切换（记在本浏览器里）；星级理由和引擎的提示跟着界面语言。命令行（`birdcm …`）按 `LANG` 或 `BIRDCM_LANG=en|zh`。The web UI is in Simplified Chinese or English: it follows the browser's language, and the “English / 中文” button in the top bar switches it; the CLI follows `LANG` or `BIRDCM_LANG`.
 
 ## 下载
 
@@ -43,7 +45,7 @@ uv run birdcm serve          # http://127.0.0.1:8765/
 uv run pytest
 ```
 
-iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs/release.md](docs/release.md)。设计文档在 [docs/design.md](docs/design.md)。
+iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs/release.md](docs/release.md)。推送和 PR 时 CI 跑引擎测试和网页类型检查、构建（`.github/workflows/ci.yml`）。设计文档在 [docs/design.md](docs/design.md)。
 
 ## 联网
 
@@ -53,6 +55,7 @@ iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs
 - 用 Nominatim 显示地名，只发送取整到约 1 km 的坐标
 - 物种页的维基百科资料，只发送物种的条目名
 - iOS 列表里的物种缩略图（iNaturalist 默认照片），只发送物种的 iNaturalist 分类编号
+- 检查更新（网页「物种参考」里的「检查更新（GitHub）」；iOS「设置 → 更新」里的同名开关）：**默认关闭**。打开后每天最多一次向 GitHub 公开接口 GET 最新正式版的版本号，什么都不发送（不带 cookie、安装编号、当前版本号或设备信息，GitHub 只看到 IP）；有新版时网页在顶部、iOS 在设置页给出 Releases 页的链接，不自动下载、不自动安装
 
 照片、路径和你输入的文字从不上传。
 

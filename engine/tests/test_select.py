@@ -3,6 +3,7 @@ import random
 from collections import Counter
 
 from birdcm.stars import rate
+from birdcm.i18n import text  # star reasons are codes: rendered in Chinese (conftest)
 
 
 def photo(t, sp="Aa bb", sharp=2.0, aes=0.6, eye=0.9, area=0.03, fly=0.1, cam="A", **k):
@@ -63,8 +64,8 @@ def test_near_identical_burst_gives_one_or_two_stars():
     rest = [photo(100.0 + 60 * j, sp=f"R{j} x", sharp=2.5, aes=0.6) for j in range(24)]
     o = run(burst + rest)
     assert 1 <= sum(1 for x in o[:6] if x["stars"] and x["stars"] > 0) <= 2
-    assert any("同组" in x["star_reason"] for x in o[:6] if x["stars"] == 0)
-    assert any("任选其一" in x["star_reason"] for x in o[:6] if x["stars"] == 0)          # near-identical: either will do
+    assert any("同组" in text(x["star_reason"]) for x in o[:6] if x["stars"] == 0)
+    assert any("任选其一" in text(x["star_reason"]) for x in o[:6] if x["stars"] == 0)          # near-identical: either will do
 
 
 def test_a_scan_can_have_no_three_stars():
@@ -78,7 +79,7 @@ def test_three_stars_need_everything_and_flight_weighs():
     fly = photo(100, sharp=2.0, aes=0.5, eye=0.95, area=0.05, fly=0.9, sp="Flyer a")
     perched = photo(200, sharp=2.0, aes=0.5, eye=0.95, area=0.05, sp="Flyer a")
     o = run([good, fly, perched] + [photo(300.0 + 60 * j, sp=f"R{j} x", sharp=1.5, aes=0.4) for j in range(12)])
-    assert o[0]["stars"] == 3 and "各方面" in o[0]["star_reason"]
+    assert o[0]["stars"] == 3 and "各方面" in text(o[0]["star_reason"])
     assert o[1]["q"] > o[2]["q"] + 0.1 and "fly" in o[1]["q_parts"]
 
 
@@ -134,7 +135,16 @@ def test_either_will_do_only_for_frames_that_really_look_alike():
         p2["boxes"] = [{"box": [x2, 0.4, x2 + 0.17, 0.57], "score": 0.9}]
         rest = [photo(100.0 + 60 * j, sp=f"R{j} x", sharp=2.5, aes=0.6) for j in range(10)]
         o = run([p1, p2] + rest, keep=10)
-        return [x["star_reason"] for x in o[:2] if x["stars"] == 0]
+        return [text(x["star_reason"]) for x in o[:2] if x["stars"] == 0]
     assert any("任选其一" in r for r in two(a))
     assert not any("任选其一" in r for r in two(b)) and any("评分接近" in r for r in two(b))
     assert not any("任选其一" in r for r in two(a, x2=0.7))             # the bird elsewhere in the frame
+
+
+def test_each_strategy_reads_its_own_aesthetic_weight():
+    from birdcm.stars import Config
+    assert (Config().w_aes_select, Config().w_aes, Config().w_sharp) == (0.15, 0.35, 0.65)   # docs/stars.md; quota 0.65 / 0.35
+    ps = [photo(10.0 * i, sharp=1 + i % 3, aes=0.4 + i / 20) for i in range(6)]
+    q = lambda **cfg: [x["q"] for x in run(ps, **cfg)]                    # noqa: E731
+    assert q(w_aes=0.9) == q() != q(w_aes_select=0.9)
+    assert q(strategy="quota", w_aes_select=0.9) == q(strategy="quota") != q(strategy="quota", w_aes=0.9)

@@ -231,8 +231,8 @@ final class Rarity {
         return out
     }
     static func iucnLabel(_ value: String?) -> String {
-        guard let value else { return "数据不足" }
-        return ["LC":"无危","NT":"近危","VU":"易危","EN":"濒危","CR":"极危","DD":"数据缺乏","NE":"未评估","EX":"灭绝","EW":"野外灭绝"][value].map {"\($0) · \(value)"} ?? value
+        guard let value else { return String(localized: "数据不足") }
+        return ["LC":String(localized:"无危"),"NT":String(localized:"近危"),"VU":String(localized:"易危"),"EN":String(localized:"濒危"),"CR":String(localized:"极危"),"DD":String(localized:"数据缺乏"),"NE":String(localized:"未评估"),"EX":String(localized:"灭绝"),"EW":String(localized:"野外灭绝")][value].map {"\($0) · \(value)"} ?? value
     }
 }
 

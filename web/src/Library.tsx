@@ -5,6 +5,8 @@ import { get, post, postText, upload } from "./api";
 import LocationPicker, { type Country, PlaceName } from "./Location";
 import SpeciesReference from "./Reference";
 import { PlainName } from "./names";
+import { getLang, t } from "./i18n";
+import { iucnText, rarityText } from "./look";
 import type { Place } from "./types";
 
 export interface Ref { kind: "photo" | "single" | "import"; id: string; subject_id: string; asset_hash: string; thumb: string; day?: string; sci?: string }
@@ -29,9 +31,10 @@ interface Obs {
 }
 interface PhotoItem extends Ref { day: string; level: string; species_key: string | null; zh?: string | null; en?: string | null; reason?: string; subjects?: number; date_source?: string; place_label?: string | null; lat?: number | null; lon?: number | null }
 
-const IUCN_ZH: Record<string, string> = { LC: "无危", NT: "近危", VU: "易危", EN: "濒危", CR: "极危", DD: "数据缺乏", NE: "未评估", EX: "灭绝", EW: "野外灭绝" };
-const ESTIMATE_NOTE = "同日同地点取单张最大值；可能重复见到同一只鸟";
-const NO_PLACE_NOTE = "地点未知的同日记录合并，可能低估次数";
+const ESTIMATE_NOTE = () => t("library.estimate_note");
+const NO_PLACE_NOTE = () => t("library.no_place_note");
+/** A region label from our Chinese catalogue: as it is in Chinese, the engine's English name (by code) in English. */
+const regionLabel = (label: string | null, code: string) => getLang() === "en" ? <PlaceName code={code} label={label} /> : (label ?? code);
 const pad = (n: number) => String(n).padStart(2, "0");
 const label = (x: { zh: string | null; en: string | null; key: string }) => x.zh || x.en || x.key;
 export const preview = (r: Ref) => r.thumb.replace("/thumb", "/preview").replace("size=thumb", "size=preview");
@@ -42,10 +45,10 @@ const q = (o: Record<string, string | number | null | undefined>) =>
 export interface Period { kind: "month" | "year" | "all"; y: number; m: number }
 export function today(): Period { const d = new Date(); return { kind: "month", y: d.getFullYear(), m: d.getMonth() + 1 }; }
 export function range(p: Period): { from: string | null; to: string | null; text: string } {
-  if (p.kind === "all") return { from: null, to: null, text: "全部记录" };
-  if (p.kind === "year") return { from: `${p.y}-01-01`, to: `${p.y}-12-31`, text: `${p.y} 年（${p.y}-01-01 至 ${p.y}-12-31）` };
+  if (p.kind === "all") return { from: null, to: null, text: t("library.all_records") };
+  if (p.kind === "year") return { from: `${p.y}-01-01`, to: `${p.y}-12-31`, text: t("library.range_year", { y: p.y }) };
   const last = new Date(p.y, p.m, 0).getDate();
-  return { from: `${p.y}-${pad(p.m)}-01`, to: `${p.y}-${pad(p.m)}-${pad(last)}`, text: `${p.y} 年 ${p.m} 月（${p.y}-${pad(p.m)}-01 至 ${p.y}-${pad(p.m)}-${pad(last)}）` };
+  return { from: `${p.y}-${pad(p.m)}-01`, to: `${p.y}-${pad(p.m)}-${pad(last)}`, text: t("library.range_month", { y: p.y, m: p.m, from: `${p.y}-${pad(p.m)}-01`, to: `${p.y}-${pad(p.m)}-${pad(last)}` }) };
 }
 const shift = (p: Period, d: number): Period => p.kind === "year" ? { ...p, y: p.y + d }
   : { ...p, y: p.y + Math.floor((p.m - 1 + d) / 12), m: ((((p.m - 1 + d) % 12) + 12) % 12) + 1 };
@@ -69,20 +72,20 @@ function useSummary(from: string | null, to: string | null) {
 }
 
 function Updating({ s, err }: { s: Status | null; err: string }) {
-  if (err) return <p className="error-text" role="alert">统计读不出来：{err}</p>;
-  if (!s) return <p className="hint" role="status">正在读取…</p>;
-  if (s.error) return <p className="error-text" role="alert">更新统计出错：{s.error}（显示的是上一次完整的结果）</p>;
+  if (err) return <p className="error-text" role="alert">{t("library.read_error", { e: err })}</p>;
+  if (!s) return <p className="hint" role="status">{t("library.reading")}</p>;
+  if (s.error) return <p className="error-text" role="alert">{t("library.update_error", { e: s.error })}</p>;
   const h = s.hashing;
   // a first rebuild reads every original once (one fingerprint per photo); the counts below are usable meanwhile
-  if (h && h.of > 0) return <p className="hint" role="status">正在给照片做指纹 {h.files} / {h.of} 张（{(h.bytes / 1e9).toFixed(1)} / {(h.of_bytes / 1e9).toFixed(1)} GB）·
-    数字先按文件算，同一张照片在两处出现时可能暂时多算；做完自动刷新，改动要等做完</p>;
-  return s.updating ? <p className="hint" role="status">更新统计中…（第 {s.generation} 版，完成后自动刷新）</p> : null;
+  if (h && h.of > 0) return <p className="hint" role="status">{t("library.hashing", { files: h.files, of: h.of,
+    gb: (h.bytes / 1e9).toFixed(1), of_gb: (h.of_bytes / 1e9).toFixed(1) })}</p>;
+  return s.updating ? <p className="hint" role="status">{t("library.updating", { g: s.generation })}</p> : null;
 }
 
 function Thumb({ r, alt }: { r: Ref | null; alt: string }) {
   const [ok, setOk] = useState(true);
   return r && ok ? <img className="ll-thumb" src={r.thumb} alt={alt} loading="lazy" onError={() => setOk(false)} />
-    : <span className="ll-thumb ll-none" aria-hidden="true">{r ? "原图不可用" : "—"}</span>;
+    : <span className="ll-thumb ll-none" aria-hidden="true">{r ? t("library.original_unavailable") : "—"}</span>;
 }
 
 // ---- 记录 ---------------------------------------------------------------------------------------------------------
@@ -98,24 +101,24 @@ export function Records({ catalogue, sci, onSpecies }: { catalogue: Country[]; s
   const m = s?.metrics;
   return (
     <section className="ll" aria-labelledby="h-rec">
-      <div className="topbar"><div><h2 id="h-rec">记录</h2>
-        <span className="sub">{m ? `已见 ${m.species} 种 · ${m.observations} 条观察记录 · ${m.photos} 张照片` : " "}</span></div></div>
+      <div className="topbar"><div><h2 id="h-rec">{t("library.records")}</h2>
+        <span className="sub">{m ? t("library.records_sub", { species: m.species, obs: m.observations, photos: m.photos }) : " "}</span></div></div>
       <Updating s={s} err={err} />
       <div className="filters">
-        <div className="seg" role="radiogroup" aria-label="记录视图">
-          {([["species", "鸟种"], ["photos", "照片"], ["pending", `待确认${m ? ` ${m.pending_subjects}` : ""}`]] as const).map(([k, t]) => (
-            <label key={k}><input type="radio" name="ll-tab" checked={tab === k} onChange={() => setTab(k)} /><span>{t}</span></label>))}
+        <div className="seg" role="radiogroup" aria-label={t("library.records_view")}>
+          {([["species", t("library.tab_species")], ["photos", t("library.tab_photos")], ["pending", `${t("library.tab_pending")}${m ? ` ${m.pending_subjects}` : ""}`]] as const).map(([k, name]) => (
+            <label key={k}><input type="radio" name="ll-tab" checked={tab === k} onChange={() => setTab(k)} /><span>{name}</span></label>))}
         </div>
         {tab === "species" && <>
-          <input className="map-search ll-search" type="search" placeholder="搜鸟种：中文、英文或学名" aria-label="搜鸟种" value={text} onChange={(e) => setText(e.target.value)} />
-          <label className="inline"><input type="checkbox" checked={explore} onChange={(e) => setExplore(e.target.checked)} /> 全部物种（探索，含未见）</label>
-          <label className="inline">排序 <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-            <option value="recent">最近见到</option><option value="first">首次见到</option><option value="name">名称</option></select></label>
+          <input className="map-search ll-search" type="search" placeholder={t("library.search")} aria-label={t("library.search_label")} value={text} onChange={(e) => setText(e.target.value)} />
+          <label className="inline"><input type="checkbox" checked={explore} onChange={(e) => setExplore(e.target.checked)} /> {t("library.explore")}</label>
+          <label className="inline">{t("library.sort")} <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <option value="recent">{t("library.sort_recent")}</option><option value="first">{t("library.sort_first")}</option><option value="name">{t("library.sort_name")}</option></select></label>
         </>}
       </div>
       {tab === "species" && <SpeciesGrid gen={s?.generation} text={text} explore={explore} sort={sort} onSpecies={onSpecies} />}
       {tab !== "species" && <PhotoList gen={s?.generation} status={tab === "pending" ? "pending" : "all"} onOpen={setOpen}
-        empty={tab === "pending" ? "所有已识别主体都已确定到种" : "还没有记录：在批量选片里扫一个文件夹，或认一张照片"} />}
+        empty={tab === "pending" ? t("library.pending_empty") : t("library.records_empty")} />}
       {open && <Evidence r={open} catalogue={catalogue} onClose={() => setOpen(null)} onChanged={reload} />}
     </section>
   );
@@ -141,20 +144,20 @@ function SpeciesGrid({ gen, text, explore, sort, onSpecies, from = null, to = nu
     return () => clearTimeout(t);
   }, [gen, text, explore, sort, n, from, to]);
   if (err) return <p className="error-text" role="alert">{err}</p>;
-  if (!items.length) return <p className="empty">{text ? <>没有找到 “{text}”</> : explore ? "名录还没装好（需要模型文件里的名称表）" : "还没有记录，从批量选片或认一张开始"}</p>;
+  if (!items.length) return <p className="empty">{text ? t("library.not_found", { q: text }) : explore ? t("library.no_catalogue") : t("library.start_empty")}</p>;
   return (
     <>
-      <ul className="ll-grid" aria-label="鸟种">
+      <ul className="ll-grid" aria-label={t("library.species_list")}>
         {items.map((x) => (
-          <li key={x.key}><button className="ll-card" onClick={() => onSpecies(x.key)} aria-label={`${label(x)}，${x.seen ? `${x.observations} 条观察记录` : "未见"}`}>
+          <li key={x.key}><button className="ll-card" onClick={() => onSpecies(x.key)} aria-label={t("library.card_label", { name: label(x), what: x.seen ? t("library.card_obs", { n: x.observations }) : t("library.unseen") })}>
             <Thumb r={x.cover_ref} alt={label(x)} />
             <span className="ll-card-text"><PlainName zh={x.zh} en={x.en} sci={x.key} size="card" />
-              <small className="ll-card-meta">{x.seen ? (x.observations ? `${x.observations} 条观察 · ${x.photos} 张照片` : "这段时间没有") : "未见"}
-                {!x.zh && x.en && " · 暂无中文名"}</small>
-              {x.seen && <small>首见 {x.first_day}</small>}</span>
+              <small className="ll-card-meta">{x.seen ? (x.observations ? t("library.card_meta", { obs: x.observations, photos: x.photos }) : t("library.none_in_range")) : t("library.unseen")}
+                {!x.zh && x.en && t("library.no_zh")}</small>
+              {x.seen && <small>{t("library.first_seen", { d: x.first_day ?? "" })}</small>}</span>
           </button></li>))}
       </ul>
-      {total > items.length && <button className="btn" onClick={() => setN(n + 60)}>再显示 60 种（共 {total}）</button>}
+      {total > items.length && <button className="btn" onClick={() => setN(n + 60)}>{t("library.more_species", { total })}</button>}
     </>
   );
 }
@@ -177,12 +180,12 @@ function PhotoList({ gen, status, onOpen, empty, sci, day }: { gen?: number; sta
             <button className="history-open" onClick={() => onOpen(x)}>
               <Thumb r={x} alt="" />
               <span>{!x.reason && x.species_key ? <PlainName zh={x.zh ?? null} en={x.en ?? null} sci={x.species_key} size="row" />
-                : <span className="history-name">{x.reason ?? (x.level === "photo" ? "未找到鸟" : "待确认")}</span>}
-                <span className="history-meta">{x.day}{x.date_source?.startsWith("identified") ? "（拍摄日期缺失，按首次识别日期统计）" : ""}
-                  {x.lat != null && x.lon != null ? <> · <PlaceName lat={x.lat} lon={x.lon} name={x.place_label ?? null} /></> : x.place_label ? ` · ${x.place_label}` : ""}{x.subjects && x.subjects > 1 ? ` · ${x.subjects} 个主体` : ""} · {x.kind === "photo" ? "批量选片" : x.kind === "single" ? "认一张" : "导入"}</span></span>
+                : <span className="history-name">{x.reason ?? (x.level === "photo" ? t("library.no_bird_found") : t("library.pending"))}</span>}
+                <span className="history-meta">{x.day}{x.date_source?.startsWith("identified") ? t("library.fallback_date") : ""}
+                  {x.lat != null && x.lon != null ? <> · <PlaceName lat={x.lat} lon={x.lon} name={x.place_label ?? null} /></> : x.place_label ? ` · ${x.place_label}` : ""}{x.subjects && x.subjects > 1 ? t("library.subjects", { n: x.subjects }) : ""} · {x.kind === "photo" ? t("library.kind_photo") : x.kind === "single" ? t("library.kind_single") : t("library.kind_import")}</span></span>
             </button></li>))}
       </ul>
-      {total > items.length && n < 100 && <button className="btn" onClick={() => setN(100)}>再显示更多（共 {total}）</button>}
+      {total > items.length && n < 100 && <button className="btn" onClick={() => setN(100)}>{t("library.more", { total })}</button>}
     </>
   );
 }
@@ -205,30 +208,30 @@ function SpeciesPage({ sci, gen, onBack, onOpen, dialog }: { sci: string; gen?: 
   const max = Math.max(1, ...(d?.months ?? [0]));
   return (
     <section className="ll" aria-labelledby="h-sp">
-      <button className="btn link" onClick={onBack}>← 返回记录</button>
+      <button className="btn link" onClick={onBack}>{t("library.back")}</button>
       {err && <p className="error-text" role="alert">{err}</p>}
       <h2 id="h-sp" tabIndex={-1} ref={head} className="ll-sp-title">{d ? <PlainName zh={d.zh} en={d.en} sci={d.key} size="hero" /> : sci}</h2>
       {d && <>
-        {(d.family || !d.zh) && <p className="hint">{[!d.zh && "暂无中文名", d.family].filter(Boolean).join(" · ")}</p>}
+        {(d.family || !d.zh) && <p className="hint">{[!d.zh && t("library.no_zh_name"), d.family].filter(Boolean).join(" · ")}</p>}
         <p className="facts-inline">
-          <span>{d.seen ? <>首次 <strong>{d.first_day}</strong> · 最近 <strong>{d.last_day}</strong></> : <strong>未见</strong>}</span>
-          {d.iucn && <span>IUCN <strong>{IUCN_ZH[d.iucn] ?? d.iucn}</strong>（{d.iucn}）</span>}
-          <span>观察记录 <strong>{d.scope.observations}</strong></span><span title={ESTIMATE_NOTE}>估计数量 <strong>{d.scope.estimated_count}</strong></span>
-          <span>照片 <strong>{d.scope.photos}</strong></span>
+          <span>{d.seen ? <>{t("library.first")} <strong>{d.first_day}</strong> · {t("library.latest")} <strong>{d.last_day}</strong></> : <strong>{t("library.unseen")}</strong>}</span>
+          {d.iucn && <span>IUCN <strong>{iucnText(d.iucn)}</strong>{t("library.paren", { x: d.iucn })}</span>}
+          <span>{t("library.observations")} <strong>{d.scope.observations}</strong></span><span title={ESTIMATE_NOTE()}>{t("library.estimated")} <strong>{d.scope.estimated_count}</strong></span>
+          <span>{t("library.photos")} <strong>{d.scope.photos}</strong></span>
         </p>
-        <div className="result-section"><h3>每月观察记录（全部年份按月份合计）</h3>
-          <ol className="ll-months" aria-label="每月观察记录">
-            {d.months.map((v, i) => <li key={i} title={`${i + 1} 月：${v} 条`}><span style={{ height: `${(v / max) * 100}%` }} /><small>{i + 1}</small><b className="sr-only">{i + 1} 月 {v} 条</b></li>)}
+        <div className="result-section"><h3>{t("library.by_month")}</h3>
+          <ol className="ll-months" aria-label={t("library.by_month_label")}>
+            {d.months.map((v, i) => <li key={i} title={t("library.month_count", { m: i + 1, n: v })}><span style={{ height: `${(v / max) * 100}%` }} /><small>{i + 1}</small><b className="sr-only">{t("library.month_count_sr", { m: i + 1, n: v })}</b></li>)}
           </ol></div>
-        <div className="result-section"><h3>地点</h3>
+        <div className="result-section"><h3>{t("library.places")}</h3>
           {d.places.length ? <ul className="ll-places">{d.places.map((p) => <li key={p.place_key}>
-            {p.place_key === "none" ? `地点未知（${NO_PLACE_NOTE}）` : p.region_code ? `${p.label ?? p.region_code}（只选了地区 ${p.region_code}）`
+            {p.place_key === "none" ? t("library.place_unknown_note", { note: NO_PLACE_NOTE() }) : p.region_code ? <>{regionLabel(p.label, p.region_code)}{t("library.region_only", { code: p.region_code })}</>
               : p.lat != null && p.lon != null ? <PlaceName lat={p.lat} lon={p.lon} name={p.label} /> : (p.label || p.place_key)}
-            <small> · {p.observations} 条</small></li>)}</ul> : <p className="hint">没有观察记录</p>}</div>
-        <div className="result-section"><h3>照片（{d.total_photos} 张{d.total_photos > 50 ? "，显示最近 50 张" : ""}）</h3>
+            <small>{t("library.place_count", { n: p.observations })}</small></li>)}</ul> : <p className="hint">{t("library.no_obs")}</p>}</div>
+        <div className="result-section"><h3>{t("library.photos_head", { n: d.total_photos, more: d.total_photos > 50 ? t("library.photos_recent") : "" })}</h3>
           {d.photo_refs.length ? <ul className="ll-gallery">{d.photo_refs.map((r) => <li key={r.asset_hash}>
-            <button onClick={() => onOpen(r)} aria-label={`打开 ${r.day} 的照片`}><Thumb r={r} alt="" /><small>{r.day}</small></button></li>)}</ul>
-            : <p className="hint">还没有自己的照片</p>}</div>
+            <button onClick={() => onOpen(r)} aria-label={t("library.open_day", { d: r.day ?? "" })}><Thumb r={r} alt="" /><small>{r.day}</small></button></li>)}</ul>
+            : <p className="hint">{t("library.no_own_photos")}</p>}</div>
         <SpeciesReference sci={sci} own={d.total_photos} />
       </>}
       {dialog}
@@ -257,10 +260,10 @@ function Evidence({ r, catalogue, onClose, onChanged }: { r: Ref; catalogue: Cou
     try {
       const st = await get<Status>("/api/library/summary");
       await post("/api/library/subject-edit", { source_ref: r, edit, expected_generation: st.generation });
-      setMsg("已保存，统计更新中"); onChanged();
+      setMsg(t("library.saved")); onChanged();
     } catch (e) {
-      const t = String((e as Error).message);
-      setMsg(t.includes("重新载入") ? `${t}（你的输入还在，稍后再保存）` : t);
+      const m = String((e as Error).message);
+      setMsg((e as Error & { status?: number }).status === 409 ? `${m}${t("library.keep_input")}` : m);
     } finally { setBusy(false); }
   };
   const bird = r.subject_id !== "photo";
@@ -270,37 +273,37 @@ function Evidence({ r, catalogue, onClose, onChanged }: { r: Ref; catalogue: Cou
   };
   return (
     <dialog ref={ref} className="map-dlg" onClose={onClose} aria-labelledby="ev-title">
-      <div className="dlg-head"><h3 id="ev-title">{r.day ?? "照片"}{r.sci ? ` · ${r.sci}` : ""}</h3>
-        {r.kind === "photo" && <button className="btn" onClick={openScan}>在批量选片中打开</button>}
-        <button className="btn" onClick={() => ref.current?.close()}>关闭</button></div>
+      <div className="dlg-head"><h3 id="ev-title">{r.day ?? t("library.photo")}{r.sci ? ` · ${r.sci}` : ""}</h3>
+        {r.kind === "photo" && <button className="btn" onClick={openScan}>{t("library.open_in_batch")}</button>}
+        <button className="btn" onClick={() => ref.current?.close()}>{t("library.close")}</button></div>
       <div className="dlg-body ll-ev">
-        <img className="ll-ev-img" src={preview(r)} alt="照片预览" />
+        <img className="ll-ev-img" src={preview(r)} alt={t("library.preview_alt")} />
         <div>
-          <p className="hint">{r.kind === "import" ? "导入的记录（原图在观羽自己的文件夹里）" : "原片不会被改动；这里的更正只改记录本"}</p>
-          {bird && <div className="result-section"><h3>更正鸟种</h3>
-            <input className="map-search" placeholder="搜鸟种：中文、英文或学名" value={find} onChange={(e) => setFind(e.target.value)} />
+          <p className="hint">{r.kind === "import" ? t("library.import_note") : t("library.edit_note")}</p>
+          {bird && <div className="result-section"><h3>{t("library.fix_species")}</h3>
+            <input className="map-search" placeholder={t("library.search")} value={find} onChange={(e) => setFind(e.target.value)} />
             <ul className="correct-list">{hits.map((h) => <li key={h.sci}><button type="button" disabled={busy}
               onClick={() => send({ op: "species", state: "species", key: h.sci })}><PlainName zh={h.zh} en={h.en} sci={h.sci} size="row" /></button></li>)}</ul>
-            <div className="row"><button className="btn" disabled={busy} onClick={() => send({ op: "species", state: "uncertain", key: null })}>标为不确定</button>
-              <button className="btn" disabled={busy} onClick={() => send({ op: "species", state: "none", key: null })}>恢复自动识别</button></div></div>}
-          {bird && <div className="result-section"><h3>数量</h3>
-            <div className="row"><input type="number" min={1} max={999998} value={count} onChange={(e) => setCount(e.target.value)} aria-label="这个框里的鸟数" />
-              <button className="btn" disabled={busy || !(+count >= 1 && +count <= 999998)} onClick={() => send({ op: "count", value: Math.round(+count) })}>保存数量</button>
-              <button className="btn link" disabled={busy} onClick={() => send({ op: "count", value: null })}>恢复自动（1）</button></div>
-            <div className="row" style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={() => send({ op: "exclude", value: true })}>排除这个框（不是鸟 / 认错）</button>
-              <button className="btn link" disabled={busy} onClick={() => send({ op: "exclude", value: false })}>取消排除</button></div></div>}
-          <div className="result-section"><h3>拍摄日期（整张照片）</h3>
-            <div className="row"><input type="date" value={day} onChange={(e) => setDay(e.target.value)} aria-label="拍摄日期" />
-              <button className="btn" disabled={busy || !day} onClick={() => send({ op: "date", value: { wall: day, offset_min: null } })}>保存日期</button>
-              <button className="btn link" disabled={busy} onClick={() => send({ op: "date", value: null })}>恢复照片里的日期</button></div></div>
-          <div className="result-section"><h3>地点（整张照片）</h3>
+            <div className="row"><button className="btn" disabled={busy} onClick={() => send({ op: "species", state: "uncertain", key: null })}>{t("library.mark_uncertain")}</button>
+              <button className="btn" disabled={busy} onClick={() => send({ op: "species", state: "none", key: null })}>{t("library.auto_species")}</button></div></div>}
+          {bird && <div className="result-section"><h3>{t("library.count")}</h3>
+            <div className="row"><input type="number" min={1} max={999998} value={count} onChange={(e) => setCount(e.target.value)} aria-label={t("library.count_label")} />
+              <button className="btn" disabled={busy || !(+count >= 1 && +count <= 999998)} onClick={() => send({ op: "count", value: Math.round(+count) })}>{t("library.save_count")}</button>
+              <button className="btn link" disabled={busy} onClick={() => send({ op: "count", value: null })}>{t("library.auto_count")}</button></div>
+            <div className="row" style={{ marginTop: 8 }}><button className="btn" disabled={busy} onClick={() => send({ op: "exclude", value: true })}>{t("library.exclude")}</button>
+              <button className="btn link" disabled={busy} onClick={() => send({ op: "exclude", value: false })}>{t("library.unexclude")}</button></div></div>}
+          <div className="result-section"><h3>{t("library.date_head")}</h3>
+            <div className="row"><input type="date" value={day} onChange={(e) => setDay(e.target.value)} aria-label={t("library.date_label")} />
+              <button className="btn" disabled={busy || !day} onClick={() => send({ op: "date", value: { wall: day, offset_min: null } })}>{t("library.save_date")}</button>
+              <button className="btn link" disabled={busy} onClick={() => send({ op: "date", value: null })}>{t("library.photo_date")}</button></div></div>
+          <div className="result-section"><h3>{t("library.place_head")}</h3>
             <LocationPicker value={place} onChange={setPlace} catalogue={catalogue} compact />
             <div className="row" style={{ marginTop: 8 }}>
               <button className="btn" disabled={busy || !place} onClick={() => place && send({ op: "place", value: place.source === "region"
                 ? { source: "region", lat: null, lon: null, label: place.label, region_code: place.code ?? null }
-                : { source: place.source, lat: place.lat, lon: place.lon, label: place.label, region_code: null } })}>保存地点</button>
-              <button className="btn link" disabled={busy} onClick={() => send({ op: "place", value: { source: "none", lat: null, lon: null, label: "", region_code: null } })}>设为地点未知</button>
-              <button className="btn link" disabled={busy} onClick={() => send({ op: "place", value: null })}>恢复原来的地点</button></div></div>
+                : { source: place.source, lat: place.lat, lon: place.lon, label: place.label, region_code: null } })}>{t("library.save_place")}</button>
+              <button className="btn link" disabled={busy} onClick={() => send({ op: "place", value: { source: "none", lat: null, lon: null, label: "", region_code: null } })}>{t("library.no_place")}</button>
+              <button className="btn link" disabled={busy} onClick={() => send({ op: "place", value: null })}>{t("library.orig_place")}</button></div></div>
           {msg && <p className="hint" role="status">{msg}</p>}
         </div>
       </div>
@@ -320,39 +323,39 @@ export function Stats({ catalogue, onSpecies }: { catalogue: Country[]; onSpecie
   const [list, setList] = useState<{ kind: "species" | "obs"; day?: string; rare?: boolean } | null>(null);
   const [open, setOpen] = useState<Ref | null>(null);
   const m = s?.metrics;
-  const tile = (n: number | undefined, t: string, onClick?: () => void, title?: string, cls = "") => (
-    <button className={`ll-metric ${cls}`} onClick={onClick} disabled={!onClick} title={title}><b>{n ?? "–"}</b><small>{t}</small></button>);
+  const tile = (n: number | undefined, name: string, onClick?: () => void, title?: string, cls = "") => (
+    <button className={`ll-metric ${cls}`} onClick={onClick} disabled={!onClick} title={title}><b>{n ?? "–"}</b><small>{name}</small></button>);
   return (
     <section className="ll" aria-labelledby="h-stats">
-      <div className="topbar"><div><h2 id="h-stats">统计</h2><span className="sub">{rg.text}</span></div>
+      <div className="topbar"><div><h2 id="h-stats">{t("stats.title")}</h2><span className="sub">{rg.text}</span></div>
         <div className="row">
-          <div className="seg" role="radiogroup" aria-label="统计范围">
-            {([["month", "本月"], ["year", "本年"], ["all", "全部"]] as const).map(([k, t]) => (
-              <label key={k}><input type="radio" name="ll-period" checked={p.kind === k} onChange={() => { setP({ ...today(), kind: k }); setList(null); }} /><span>{t}</span></label>))}
+          <div className="seg" role="radiogroup" aria-label={t("stats.range")}>
+            {([["month", t("stats.month")], ["year", t("stats.year")], ["all", t("stats.all")]] as const).map(([k, name]) => (
+              <label key={k}><input type="radio" name="ll-period" checked={p.kind === k} onChange={() => { setP({ ...today(), kind: k }); setList(null); }} /><span>{name}</span></label>))}
           </div>
-          {p.kind !== "all" && <><button className="btn" onClick={() => setP(shift(p, -1))} aria-label="上一个">‹</button>
-            <button className="btn" onClick={() => setP(shift(p, 1))} aria-label="下一个">›</button></>}
+          {p.kind !== "all" && <><button className="btn" onClick={() => setP(shift(p, -1))} aria-label={t("stats.prev")}>‹</button>
+            <button className="btn" onClick={() => setP(shift(p, 1))} aria-label={t("stats.next")}>›</button></>}
         </div></div>
       <Updating s={s} err={err} />
       <div className="ll-metrics">
-        {tile(m?.species, "鸟种", () => setList({ kind: "species" }))}
-        {tile(m?.observations, "观察记录", () => setList({ kind: "obs" }), "同一种鸟、同一天、同一地点算一条")}
-        {tile(m?.estimated_count, "估计数量", () => setList({ kind: "obs" }), ESTIMATE_NOTE)}
-        {tile(m?.new_species, "新种", undefined, "这段时间里第一次见到的鸟种（按全部记录算）", "new")}
+        {tile(m?.species, t("stats.species"), () => setList({ kind: "species" }))}
+        {tile(m?.observations, t("stats.obs"), () => setList({ kind: "obs" }), t("stats.obs_title"))}
+        {tile(m?.estimated_count, t("stats.estimated"), () => setList({ kind: "obs" }), ESTIMATE_NOTE())}
+        {tile(m?.new_species, t("stats.new"), undefined, t("stats.new_title"), "new")}
       </div>
-      {m && <p className="hint">照片 {m.photos} 张 · 待确认 {m.pending_subjects} 个主体（{m.pending_photos} 张）· 未找到鸟 {m.no_bird_photos} 张 · 有记录的天数 {m.active_days}
-        {s!.coverage.fallback_date_photos > 0 && ` · ${s!.coverage.fallback_date_photos} 张拍摄日期缺失，按首次识别日期统计`}
-        {s!.coverage.no_place_photos > 0 && ` · ${s!.coverage.no_place_photos} 张地点未知（${NO_PLACE_NOTE}）`}
-        {s!.coverage.region_only_photos > 0 && ` · ${s!.coverage.region_only_photos} 张只选了地区`}。估计数量：{ESTIMATE_NOTE}。</p>}
-      {m && m.species === 0 && <p className="empty">这段时间没有确定到种的观察记录{m.pending_subjects ? `；有 ${m.pending_subjects} 个主体待确认，在“记录 → 待确认”里改正` : ""}</p>}
+      {m && <p className="hint">{t("stats.line", { photos: m.photos, pending: m.pending_subjects, pending_photos: m.pending_photos, no_bird: m.no_bird_photos, days: m.active_days })}
+        {s!.coverage.fallback_date_photos > 0 && t("stats.fallback", { n: s!.coverage.fallback_date_photos })}
+        {s!.coverage.no_place_photos > 0 && t("stats.no_place", { n: s!.coverage.no_place_photos, note: NO_PLACE_NOTE() })}
+        {s!.coverage.region_only_photos > 0 && t("stats.region_only", { n: s!.coverage.region_only_photos })}{t("stats.estimate_tail", { note: ESTIMATE_NOTE() })}</p>}
+      {m && m.species === 0 && <p className="empty">{t("stats.none")}{m.pending_subjects ? t("stats.none_pending", { n: m.pending_subjects }) : ""}</p>}
       {m && <div className="ll-rarity">
-        <button className="btn link" onClick={() => setList({ kind: "obs", rare: true })}>本地罕见 / 少见的观察记录：<b>{m.rare_observations}</b></button>
-        <span>受威胁鸟种（IUCN 易危、濒危、极危）：<b>{m.threatened_species}</b></span>
-        <span className="hint">按每条记录自己的地点和月份：{Object.entries(s!.rarity_buckets).map(([k, v]) => `${k} ${v}`).join(" · ")}</span>
+        <button className="btn link" onClick={() => setList({ kind: "obs", rare: true })}>{t("stats.rare_obs")}<b>{m.rare_observations}</b></button>
+        <span>{t("stats.threatened")}<b>{m.threatened_species}</b></span>
+        <span className="hint">{t("stats.buckets")}{Object.entries(s!.rarity_buckets).map(([k, v]) => `${rarityText(k)} ${v}`).join(" · ")}</span>
       </div>}
       {list && <div className="result-section">
-        <div className="row"><h3>{list.kind === "species" ? "这段时间的鸟种" : list.rare ? "本地罕见 / 少见" : list.day ? `${list.day} 的观察记录` : "观察记录"}</h3>
-          <button className="btn link" onClick={() => setList(null)}>收起</button></div>
+        <div className="row"><h3>{list.kind === "species" ? t("stats.list_species") : list.rare ? t("stats.list_rare") : list.day ? t("stats.list_day", { d: list.day }) : t("stats.list_obs")}</h3>
+          <button className="btn link" onClick={() => setList(null)}>{t("stats.fold")}</button></div>
         {list.kind === "species" ? <SpeciesGrid gen={s?.generation} text="" explore={false} sort="recent" onSpecies={onSpecies} from={rg.from} to={rg.to} />
           : <ObsList gen={s?.generation} from={list.day ?? rg.from} to={list.day ?? rg.to} rare={list.rare} onSpecies={onSpecies} onOpen={setOpen} onChanged={reload} />}
       </div>}
@@ -383,30 +386,30 @@ function ObsList({ gen, from, to, rare, onSpecies, onOpen, onChanged }: {
     try { await post("/api/library/observation-count", { group_key: o.key, count, expected_generation: gen }); onChanged(); }
     catch (e) { setMsg(String((e as Error).message)); }
   };
-  if (!items.length) return <p className="empty">没有观察记录</p>;
+  if (!items.length) return <p className="empty">{t("library.no_obs")}</p>;
   return (
     <>
       {msg && <p className="error-text" role="alert">{msg}</p>}
       <ul className="ll-obs">
         {items.map((o) => (
           <li key={o.key}>
-            <div className="ll-obs-refs">{o.source_refs.slice(0, 3).map((r) => <button key={r.asset_hash + r.subject_id} onClick={() => onOpen({ ...r, day: o.day, sci: o.sci })} aria-label="打开照片"><Thumb r={r} alt="" /></button>)}</div>
+            <div className="ll-obs-refs">{o.source_refs.slice(0, 3).map((r) => <button key={r.asset_hash + r.subject_id} onClick={() => onOpen({ ...r, day: o.day, sci: o.sci })} aria-label={t("obs.open_photo")}><Thumb r={r} alt="" /></button>)}</div>
             <div>
               <button className="ll-obs-name" onClick={() => onSpecies(o.sci)}><PlainName zh={o.zh} en={o.en} sci={o.sci} size="row" /></button>
-              {o.first_seen && <span className="pill">新种</span>}{o.rare && <span className="pill rare">本地{o.contexts.find((c) => c.tier === 1) ? "罕见" : "少见"}</span>}
-              <span className="history-meta">{o.day} · {o.place_key === "none" ? "地点未知" : o.place.region_code ? `${o.place.label ?? o.place.region_code}（地区）`
+              {o.first_seen && <span className="pill">{t("obs.new")}</span>}{o.rare && <span className="pill rare">{t("obs.local", { r: rarityText(o.contexts.find((c) => c.tier === 1) ? "罕见" : "少见") })}</span>}
+              <span className="history-meta">{o.day} · {o.place_key === "none" ? t("obs.place_unknown") : o.place.region_code ? <>{regionLabel(o.place.label, o.place.region_code)}{t("obs.region")}</>
                 : o.place.points.length ? <PlaceName lat={o.place.points[0][0]} lon={o.place.points[0][1]} name={o.place.label} /> : o.place.label ?? o.place_key}
-                {" · "}{o.photo_count} 张 · 估计 {o.estimate} 只{o.estimate_source === "edit" ? `（你改的；单张最多 ${o.max_in_photo}）` : ""}
-                {o.fallback_date ? " · 拍摄日期缺失" : ""} · 稀有度 {o.contexts.map((c) => c.label + (c.note ? `（${c.note}）` : "")).join(" / ")}</span>
-              <span className="row ll-count"><input type="number" min={1} max={999998} aria-label="本次观察数量" placeholder={String(o.estimate)}
+                {" · "}{t("obs.photos_est", { n: o.photo_count, e: o.estimate })}{o.estimate_source === "edit" ? t("obs.edited", { max: o.max_in_photo }) : ""}
+                {o.fallback_date ? t("obs.no_date") : ""}{t("obs.rarity")}{o.contexts.map((c) => rarityText(c.label) + (c.note ? t("library.paren", { x: rarityText(c.note) }) : "")).join(" / ")}</span>
+              <span className="row ll-count"><input type="number" min={1} max={999998} aria-label={t("obs.count_label")} placeholder={String(o.estimate)}
                 value={edit[o.key] ?? ""} onChange={(e) => setEdit({ ...edit, [o.key]: e.target.value })} />
-                <button className="btn slim" disabled={!(+edit[o.key] >= 1 && +edit[o.key] <= 999998)} onClick={() => save(o, Math.round(+edit[o.key]))}>改本次观察数量</button>
-                {o.estimate_source === "edit" && <button className="btn link" onClick={() => save(o, null)}>恢复单张最大值</button>}
-                {+edit[o.key] > 0 && +edit[o.key] < o.max_in_photo && <small className="hint">比单张照片里最多的 {o.max_in_photo} 只还少：这是你的估计</small>}</span>
+                <button className="btn slim" disabled={!(+edit[o.key] >= 1 && +edit[o.key] <= 999998)} onClick={() => save(o, Math.round(+edit[o.key]))}>{t("obs.set_count")}</button>
+                {o.estimate_source === "edit" && <button className="btn link" onClick={() => save(o, null)}>{t("obs.max_count")}</button>}
+                {+edit[o.key] > 0 && +edit[o.key] < o.max_in_photo && <small className="hint">{t("obs.below_max", { max: o.max_in_photo })}</small>}</span>
             </div>
           </li>))}
       </ul>
-      {total > items.length && <p className="hint">显示前 {items.length} 条，共 {total} 条</p>}
+      {total > items.length && <p className="hint">{t("obs.shown", { n: items.length, total })}</p>}
     </>
   );
 }
@@ -417,9 +420,9 @@ interface CalCell { observations: number; species: number; cover: (Ref & { crop:
 function CoverCell({ c, text, big }: { c: CalCell; text: string; big?: boolean }) {
   const [ok, setOk] = useState(true);
   const name = c.cover ? (c.cover.zh || c.cover.en || c.cover.sci) : "";
-  return ok && c.cover ? <><img src={c.cover.crop} alt={`${name}${c.species > 1 ? ` 等 ${c.species} 种` : ""}`} loading="lazy" onError={() => setOk(false)} />
+  return ok && c.cover ? <><img src={c.cover.crop} alt={`${name}${c.species > 1 ? t("cal.more_species", { n: c.species }) : ""}`} loading="lazy" onError={() => setOk(false)} />
     {!big && c.species > 1 && <span className="ll-badge" aria-hidden="true">{c.species}</span>}<span className="ll-cal-n">{text}</span></>
-    : <><span className="ll-cal-count">{c.species} 种</span><span className="ll-cal-n">{text}</span></>;   // no picture (volume not mounted)
+    : <><span className="ll-cal-count">{t("cal.species", { n: c.species })}</span><span className="ll-cal-n">{text}</span></>;   // no picture (volume not mounted)
 }
 
 function Calendar({ p, gen, onDay, onMonth }: { p: Period; gen?: number; onDay: (d: string) => void; onMonth: (y: number, m: number) => void }) {
@@ -428,29 +431,29 @@ function Calendar({ p, gen, onDay, onMonth }: { p: Period; gen?: number; onDay: 
   useEffect(() => { setYear(p.kind === "all" ? new Date().getFullYear() : p.y); }, [p.kind, p.y]);
   useEffect(() => { if (gen !== undefined) get<typeof cal>(`/api/library/calendar?year=${p.kind === "month" ? p.y : year}`).then(setCal).catch(() => setCal(null)); }, [year, gen, p.kind, p.y]);
   if (!cal) return null;
-  const label = (c: CalCell) => c.cover ? `${c.cover.zh || c.cover.en || c.cover.sci}${c.species > 1 ? ` 等 ${c.species} 种` : ""}，${c.observations} 条观察记录` : "";
+  const label = (c: CalCell) => c.cover ? t("cal.label", { name: c.cover.zh || c.cover.en || c.cover.sci, more: c.species > 1 ? t("cal.more_species", { n: c.species }) : "", obs: c.observations }) : "";
   if (p.kind === "month") {
     const first = new Date(p.y, p.m - 1, 1), lead = (first.getDay() + 6) % 7, n = new Date(p.y, p.m, 0).getDate();
-    return (<div className="result-section"><h3>日历</h3>
-      <div className="ll-month" aria-label={`${p.y} 年 ${p.m} 月`}>
-        {["一", "二", "三", "四", "五", "六", "日"].map((w) => <span key={w} className="ll-wd">{w}</span>)}
+    return (<div className="result-section"><h3>{t("cal.title")}</h3>
+      <div className="ll-month" aria-label={t("cal.month_label", { y: p.y, m: p.m })}>
+        {t("cal.weekdays").split(",").map((w) => <span key={w} className="ll-wd">{w}</span>)}
         {Array.from({ length: lead }, (_, i) => <span key={`x${i}`} />)}
         {Array.from({ length: n }, (_, i) => {
           const k = `${p.y}-${pad(p.m)}-${pad(i + 1)}`, c = cal.days[k];
-          return c ? <button key={k} className="ll-cal has" onClick={() => onDay(k)} aria-label={`${k}：${label(c)}`} title={`${k}：${label(c)}`}>
+          return c ? <button key={k} className="ll-cal has" onClick={() => onDay(k)} aria-label={t("cal.day", { k, label: label(c) })} title={t("cal.day", { k, label: label(c) })}>
             <CoverCell c={c} text={String(i + 1)} /></button>
             : <span key={k} className="ll-cal"><span className="ll-cal-n">{i + 1}</span></span>;
         })}
       </div></div>);
   }
-  return (<div className="result-section"><div className="row"><h3>{year} 年</h3>
-    {p.kind === "all" && <select value={year} onChange={(e) => setYear(+e.target.value)} aria-label="年份">
+  return (<div className="result-section"><div className="row"><h3>{t("cal.year", { y: year })}</h3>
+    {p.kind === "all" && <select value={year} onChange={(e) => setYear(+e.target.value)} aria-label={t("cal.year_label")}>
       {[...new Set([...cal.years, String(new Date().getFullYear())])].sort().map((y) => <option key={y}>{y}</option>)}</select>}
-    <small className="hint">{cal.active_days} 天有记录</small></div>
+    <small className="hint">{t("cal.active_days", { n: cal.active_days })}</small></div>
     <ol className="ll-year-tiles">{cal.months.map((c) => (
-      <li key={c.month}>{c.observations ? <button className="ll-cal has big" onClick={() => onMonth(year, c.month)} aria-label={`${year} 年 ${c.month} 月：${c.species} 种，${c.observations} 条观察；代表照片 ${label(c)}`}>
-        <CoverCell c={c} text={`${c.month} 月`} big /></button> : <span className="ll-cal big"><span className="ll-cal-n">{c.month} 月</span></span>}
-        <small>{c.observations ? `${c.species} 种 · ${c.observations} 条观察` : "没有记录"}</small></li>))}</ol></div>);
+      <li key={c.month}>{c.observations ? <button className="ll-cal has big" onClick={() => onMonth(year, c.month)} aria-label={t("cal.month_tile", { y: year, m: c.month, species: c.species, obs: c.observations, label: label(c) })}>
+        <CoverCell c={c} text={t("cal.month", { m: c.month })} big /></button> : <span className="ll-cal big"><span className="ll-cal-n">{t("cal.month", { m: c.month })}</span></span>}
+        <small>{c.observations ? t("cal.month_meta", { species: c.species, obs: c.observations }) : t("cal.no_records")}</small></li>))}</ol></div>);
 }
 
 function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | null; gen?: number; onOpen: (r: Ref) => void }) {
@@ -466,9 +469,9 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
       if (dead || !box.current) return;
       const L = mod.default;
       const m = L.map(box.current, { worldCopyJump: true }).setView([20, 0], 2);
-      const t = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18,
+      const tl = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' });
-      t.on("tileload", () => setTiles(true)); t.on("tileerror", () => setTiles((ok) => ok ?? false)); t.addTo(m);
+      tl.on("tileload", () => setTiles(true)); tl.on("tileerror", () => setTiles((ok) => ok ?? false)); tl.addTo(m);
       const layer = L.layerGroup().addTo(m);
       let first = true;
       const load = () => {
@@ -481,7 +484,7 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
           layer.clearLayers(); setInfo(r);
           for (const c of r.clusters) {
             L.marker([c.lat, c.lon], { icon: L.divIcon({ className: "ll-pin", html: `<span>${c.observations}</span>`, iconSize: [30, 30] }),
-              title: `${c.observations} 条观察记录（照片位置）` }).on("click", () => setPick(c.refs)).addTo(layer);
+              title: t("map.pin", { n: c.observations }) }).on("click", () => setPick(c.refs)).addTo(layer);
           }
           if (first && r.clusters.length) { first = false; m.fitBounds(L.latLngBounds(r.clusters.map((c) => [c.lat, c.lon] as [number, number])).pad(0.3), { maxZoom: 11 }); }
         }).catch(() => {});
@@ -492,19 +495,19 @@ function MapView({ from, to, gen, onOpen }: { from: string | null; to: string | 
     return () => { dead = true; map?.remove(); };
   }, [shown, from, to, gen]);
   return (
-    <div className="result-section"><div className="row"><h3>地图</h3>
-      {!shown && <button className="btn" onClick={() => setShown(true)}>打开地图</button>}</div>
-      {!shown && <p className="hint">地图图块来自 openstreetmap.org，打开时才加载；照片和记录不会离开这台电脑（开着「用网络显示地名」时，只把地点的经纬度取到约 1 公里发给 OpenStreetMap Nominatim 换成地名）。</p>}
+    <div className="result-section"><div className="row"><h3>{t("map.title")}</h3>
+      {!shown && <button className="btn" onClick={() => setShown(true)}>{t("map.open")}</button>}</div>
+      {!shown && <p className="hint">{t("map.note")}</p>}
       {shown && <>
-        <div ref={box} className="map-box ll-map" aria-label="观察记录地图（数字是该处的观察记录数）" />
-        {tiles === false && <p className="hint">地图图块加载不了（可能离线）。下面的地区和列表仍然可用。</p>}
+        <div ref={box} className="map-box ll-map" aria-label={t("map.label")} />
+        {tiles === false && <p className="hint">{t("map.offline")}</p>}
         {pick.length > 0 && <div className="ll-gallery">{pick.map((r) => <button key={r.asset_hash + r.subject_id} onClick={() => onOpen(r)}>
           <Thumb r={r} alt="" /><PlainName zh={r.zh} en={r.en} sci={r.sci ?? ""} size="card" /><small>{r.day}</small>
           {/* each photo's own place: a cluster's centre at a low zoom is no place at all */}
           <small className="ll-pick-place"><PlaceName lat={r.lat} lon={r.lon} /></small></button>)}</div>}
-        {info && <p className="hint">{info.truncated ? "点太多，只显示观察记录最多的 500 处；放大看更多。" : ""}
-          {info.regions.length > 0 && <>只选了地区的观察记录（不在地图上标点）：{info.regions.map((x) => `${x.code} ${x.observations}`).join(" · ")}。</>}
-          {info.no_place_observations > 0 && <>地点未知：{info.no_place_observations} 条（{NO_PLACE_NOTE}）。</>}</p>}
+        {info && <p className="hint">{info.truncated ? t("map.truncated") : ""}
+          {info.regions.length > 0 && t("map.regions", { list: info.regions.map((x) => `${x.code} ${x.observations}`).join(" · ") })}
+          {info.no_place_observations > 0 && t("map.no_place", { n: info.no_place_observations, note: NO_PLACE_NOTE() })}</p>}
       </>}
     </div>
   );
@@ -529,7 +532,7 @@ function DataTools({ from, to, gen, onChanged }: { from: string | null; to: stri
   };
   const choose = async (f: File | undefined) => {
     if (!f) return;
-    setMsg("正在检查文件…"); setPv(null);
+    setMsg(t("data.checking")); setPv(null);
     try { const fd = new FormData(); fd.append("file", f); setPv(await upload("/api/library/import/preview", fd)); setMsg(""); }
     catch (e) { setMsg(String((e as Error).message)); }
   };
@@ -537,32 +540,32 @@ function DataTools({ from, to, gen, onChanged }: { from: string | null; to: stri
     try {
       const r = await post<{ added_photos: number; merged_photos: number; pending_conflicts: number }>("/api/library/import/apply",
         { token: pv!.token, mode: "merge", choices, expected_generation: gen });
-      setMsg(`已导入：新增 ${r.added_photos} 张，已有 ${r.merged_photos} 张${r.pending_conflicts ? `，${r.pending_conflicts} 处冲突保留了本机的` : ""}`);
+      setMsg(t("data.imported", { added: r.added_photos, merged: r.merged_photos, conflicts: r.pending_conflicts ? t("data.conflicts", { n: r.pending_conflicts }) : "" }));
       setPv(null); onChanged();
     } catch (e) { setMsg(String((e as Error).message)); }
   };
   return (
-    <div className="result-section"><h3>数据</h3>
+    <div className="result-section"><h3>{t("data.title")}</h3>
       <div className="row">
-        <a className="btn" href={`/api/library/export?${q({ from, to })}`} download>{from ? "导出这段时间（.birdcm）" : "完整备份（.birdcm）"}</a>
-        <label className="btn">导入 .birdcm<input type="file" accept=".birdcm" hidden onChange={(e) => choose(e.target.files?.[0])} /></label>
+        <a className="btn" href={`/api/library/export?${q({ from, to })}`} download>{from ? t("data.export_range") : t("data.backup")}</a>
+        <label className="btn">{t("data.import")}<input type="file" accept=".birdcm" hidden onChange={(e) => choose(e.target.files?.[0])} /></label>
       </div>
-      <p className="hint">备份文件里有原图，没有加密，放在你选的位置；只在你自己分享时才离开这台电脑。导入先预览，不会改动扫描结果和原片。</p>
+      <p className="hint">{t("data.note")}</p>
       {pv && <div className="missing soft" role="status">
-        文件里 {String(pv.summary.records)} 条记录：新照片 {String(pv.summary.new_photos)} 张，已有 {String(pv.summary.identical_photos)} 张，
-        原图缺失 {String(pv.summary.missing_originals)} 张，需要 {Math.ceil(+pv.summary.required_bytes / 1e6)} MB。
-        {pv.conflicts.map((c) => <label key={c.id} className="row">{c.field}：本机 {JSON.stringify(c.local)} / 文件 {JSON.stringify(c.file)}
+        {t("data.preview", { records: String(pv.summary.records), new: String(pv.summary.new_photos), same: String(pv.summary.identical_photos),
+          missing: String(pv.summary.missing_originals), mb: Math.ceil(+pv.summary.required_bytes / 1e6) })}
+        {pv.conflicts.map((c) => <label key={c.id} className="row">{t("data.conflict", { field: c.field, local: JSON.stringify(c.local), file: JSON.stringify(c.file) })}
           <select value={choices[c.id] ?? "local"} onChange={(e) => setChoices({ ...choices, [c.id]: e.target.value as "local" | "file" })}>
-            <option value="local">保留本机</option><option value="file">用文件的</option></select></label>)}
-        <div className="row"><button className="btn primary" onClick={apply}>合并导入</button><button className="btn link" onClick={() => setPv(null)}>取消</button></div>
+            <option value="local">{t("data.keep_local")}</option><option value="file">{t("data.use_file")}</option></select></label>)}
+        <div className="row"><button className="btn primary" onClick={apply}>{t("data.merge")}</button><button className="btn link" onClick={() => setPv(null)}>{t("data.cancel")}</button></div>
       </div>}
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn" onClick={ebird}>导出 eBird 文件（这段时间）</button>
-        <label className="inline"><input type="checkbox" checked={est} onChange={(e) => setEst(e.target.checked)} /> 用估计数量（默认 X）</label>
-        <label className="inline">拍摄日期缺失的记录 <select value={fallback} onChange={(e) => setFallback(e.target.value as typeof fallback)}>
-          <option value="refuse">先让我核对</option><option value="include">包含（按首次识别日期）</option><option value="exclude">排除</option></select></label>
+        <button className="btn" onClick={ebird}>{t("data.ebird")}</button>
+        <label className="inline"><input type="checkbox" checked={est} onChange={(e) => setEst(e.target.checked)} /> {t("data.estimates")}</label>
+        <label className="inline">{t("data.no_date")} <select value={fallback} onChange={(e) => setFallback(e.target.value as typeof fallback)}>
+          <option value="refuse">{t("data.refuse")}</option><option value="include">{t("data.include")}</option><option value="exclude">{t("data.exclude")}</option></select></label>
       </div>
-      <p className="hint">eBird Record Format，Incidental，不是完整清单；只含确定到种的记录，待确认的不导出。上传在 eBird 网站上手动做。</p>
+      <p className="hint">{t("data.ebird_note")}</p>
       {msg && <p className="hint" role="status">{msg}</p>}
     </div>
   );

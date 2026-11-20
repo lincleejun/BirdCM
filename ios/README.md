@@ -2,7 +2,7 @@
 
 SwiftUI / iOS 17+，`cc.outman.birdcm`，无第三方 iOS 运行库。地点现在是首页常驻输入：定位、地图搜索/图钉、离线国家/地区与最近地点。初次识别采用 **照片 GPS > 首页地点 > 无地点**；缺少两者时先提示，也可直接识别。结果显示地点来源和拍摄日期；显式“改地点”可以纠正照片 GPS，并用每只鸟保存的完整视觉分布重排，不重复跑图像模型。旧记录没有缓存时会明确要求重新选片，不偷偷重跑。
 
-所有模型随安装包提供。首次打开只校验/加载，**没有下载、蜂窝开关或模型重下载修复**。完整性损坏提示重新安装。原图、地点、缓存与历史保存在本机；Apple 地图搜索和瓦片需要网络。物种页的“物种参考”（Wikipedia 简介 + 一张 Commons 参考图，`BirdCM/Reference.swift`，与桌面 `engine/birdcm/online.py` 同规则）默认开启、只在打开物种页时联网，首次显示披露，可在“设置 → 物种参考”关闭并删除网络缓存（Caches，上限 200 MiB）；只发送该鸟种映射里的条目名、QID 和 Commons 文件名。映射 `BirdCM/Resources/species-map.json` 由 `python3 ios/tools/build_species_map.py` 从 `data/species-map.sqlite` 生成。UI 测试默认关闭在线资料；`-referenceOnline YES -referenceFixtures <dir>`（仅 Debug）用引擎录制的夹具代替网络。只用仓库已有的 CC0 验收照片，不使用所有者照片。
+所有模型随安装包提供。首次打开只校验/加载，**没有下载、蜂窝开关或模型重下载修复**。完整性损坏提示重新安装。原图、地点、缓存与历史保存在本机；Apple 地图搜索和瓦片需要网络。物种页的“物种参考”（Wikipedia 简介 + 一张 Commons 参考图，`BirdCM/Reference.swift`，与桌面 `engine/birdcm/online.py` 同规则）默认开启、只在打开物种页时联网，首次显示披露，可在“设置 → 物种参考”关闭并删除网络缓存（Caches，上限 200 MiB）；只发送该鸟种映射里的条目名、QID 和 Commons 文件名。“设置 → 更新”的“检查更新（GitHub）”默认关闭，规则同桌面 `engine/birdcm/update.py`（`Update`，同在 `Reference.swift`）：开启后打开设置页时每天最多一次 GET GitHub 最新正式版，只认 `release/vX.Y.Z`，失败静默也算当天查过，有新版只给 Releases 链接。映射 `BirdCM/Resources/species-map.json` 由 `python3 ios/tools/build_species_map.py` 从 `data/species-map.sqlite` 生成。UI 测试默认关闭在线资料；`-referenceOnline YES -referenceFixtures <dir>`（仅 Debug）用引擎录制的夹具代替网络。只用仓库已有的 CC0 验收照片，不使用所有者照片。
 
 设计与颜色实测见 [DESIGN.md](DESIGN.md)，实际执行记录与限制见 [VALIDATION.md](VALIDATION.md)。改动清单见 [ROUND4_FILES.txt](ROUND4_FILES.txt)。
 
@@ -116,6 +116,17 @@ python3 ios/tools/test_model_bundle.py
 ```
 
 `Screens_Previews` 及 `tools/screenshots.sh` 提供各状态预览；Debug 启动参数 `-previewState normal|home|multiple|uncertain|genus|rare|unknown-prior|no-location|no-bird|loading -previewImage /absolute/CC0.jpg` 可直接进入固定状态。`-darkMode YES` / `-largestType YES` 控制 UI 验收组合。
+
+## 本地化（简体中文 / 英文）
+
+界面文案在 `BirdCM/Resources/Localizable.xcstrings`（源语言 zh-Hans，键就是中文原文，另有 en），App 名和权限说明在 `InfoPlist.xcstrings`；系统语言为英文时用 en，其余照旧中文（鸟的中文名不翻译）。新文案照常写 `Text("中文")` / `String(localized: "中文")`（存储或比较用的中文内部键，如稀有度档位，显示时过 `loc()`），构建后把新键同步进 catalog 再补 en：
+
+```sh
+xcrun xcstringstool sync ios/BirdCM/Resources/Localizable.xcstrings $(find ios/DerivedData -path '*/BirdCM.build/*' -name '*.stringsdata' -not -path '*Tests*' | sed 's/^/--stringsdata /')
+python3 ios/tools/check_l10n.py     # 没走本地化的中文字面量；故意保留的写进它的 ALLOWED 并说明原因
+```
+
+`LocalizationTests` 检查两个 catalog 每个键都有 zh-Hans 和 en、en 不含中文、格式符一致。scheme 的测试语言固定为 zh-Hans（`project.yml`），所以测试和截图仍是中文；看英文可用 `xcrun simctl launch <设备> cc.outman.birdcm -AppleLanguages "(en)" -previewState normal -previewImage …`。
 
 ## 安装到所有者 iPhone 15
 

@@ -3,7 +3,7 @@ struct AboutView: View {
     @Environment(\.dismiss) var dismiss
     var body: some View {NavigationStack{ScrollView{VStack(alignment:.leading,spacing:20){
         Text("观羽 · BirdCM").font(.largeTitle.bold())
-        Text("开源代码 MIT。识别离线运行，照片与历史仅保存在设备。系统 PhotosPicker 无需授予整个相册权限。所有模型随安装包提供；只有 Apple 地图搜索、瓦片和地名（开启“用网络显示地名”时只发送坐标），以及物种页的在线物种资料（开启“在线物种资料”时只把该鸟种的 Wikipedia 条目名、Wikidata 编号和 Commons 文件名发给 Wikipedia / Wikimedia；列表缩略图只把该鸟种的 iNaturalist 分类编号发给 iNaturalist）联网；不向我们上传照片、坐标或结果。Apple 获取地图浏览区域以提供瓦片。在线简介按 CC BY-SA 4.0，参考图按各自的 Commons 许可，列表缩略图是 iNaturalist 分类默认照片、按各自的 CC 许可（长按查看作者与许可），署名与许可显示在图文旁。")
+        Text("开源代码 MIT。识别离线运行，照片与历史仅保存在设备。系统 PhotosPicker 无需授予整个相册权限。所有模型随安装包提供；只有 Apple 地图搜索、瓦片和地名（开启“用网络显示地名”时只发送坐标），以及物种页的在线物种资料（开启“在线物种资料”时只把该鸟种的 Wikipedia 条目名、Wikidata 编号和 Commons 文件名发给 Wikipedia / Wikimedia；列表缩略图只把该鸟种的 iNaturalist 分类编号发给 iNaturalist）和“检查更新（GitHub）”（默认关闭；开启后每天最多一次向 GitHub 查询最新正式版的版本号，不发送当前版本号或设备信息）联网；不向我们上传照片、坐标或结果。Apple 获取地图浏览区域以提供瓦片。在线简介按 CC BY-SA 4.0，参考图按各自的 Commons 许可，列表缩略图是 iNaturalist 分类默认照片、按各自的 CC 许可（长按查看作者与许可），署名与许可显示在图文旁。")
         Link("github.com/lincleejun/BirdCM",destination:URL(string:"https://github.com/lincleejun/BirdCM")!)
         Text("眼嘴与飞行模型仅限非商业用途。BioCLIP 2.5：MIT；D-FINE nano：Apache-2.0；AviList v2026：CC BY 4.0；文本向量：CC0。")
         Text("中文鸟名：Gill F, D Donsker & P Rasmussen (Eds). 2026. IOC World Bird List v15.2. doi:10.14344/IOC.ML.15.2，CC BY 3.0。多语言表编纂 Peter Kovalik；中文来源与逐行归属见下方完整声明。少数 Wikidata 名称 CC0。")
@@ -18,7 +18,7 @@ struct AboutView: View {
 struct ResourceText: View {
     @Environment(\.dismiss) var dismiss
     let name:String,ext:String
-    var body:some View {ScrollView{Text((Bundle.main.url(forResource:name,withExtension:ext).flatMap{try? String(contentsOf:$0,encoding:.utf8)}) ?? "资源未找到").font(.caption).textSelection(.enabled).padding()}.navigationTitle(name).navigationBarBackButtonHidden().toolbar{ToolbarItem(placement:.topBarLeading){Button("返回"){dismiss()}.accessibilityIdentifier("resource.back")}}}
+    var body:some View {ScrollView{Text((Bundle.main.url(forResource:name,withExtension:ext).flatMap{try? String(contentsOf:$0,encoding:.utf8)}) ?? String(localized: "资源未找到")).font(.caption).textSelection(.enabled).padding()}.navigationTitle(name).navigationBarBackButtonHidden().toolbar{ToolbarItem(placement:.topBarLeading){Button("返回"){dismiss()}.accessibilityIdentifier("resource.back")}}}
 }
 struct DiagnosticsView: View {
     @Environment(AppModel.self) var model
@@ -42,7 +42,7 @@ struct DiagnosticsView: View {
             LabeledContent("全部模型就绪", value: seconds("models.ready"))
             LabeledContent("预热完成", value: seconds("models.warm"))
             LabeledContent("预热用时", value: seconds("models.warmup"))
-            ForEach([("完整性 · SHA-256", "models.integrity.sha256"), ("完整性 · 只查大小", "models.integrity.sizes"), ("名录", "load.names"), ("检测模型", "load.detector"), ("BioCLIP", "load.bioclip"), ("眼嘴与飞行", "load.heads"), ("地点模型", "load.geo"), ("稀有度表", "load.rarity"), ("等待模型（选片早于就绪）", "identify.waitedForModels")], id: \.1) { title, key in
+            ForEach([("完整性 · SHA-256", "models.integrity.sha256"), ("完整性 · 只查大小", "models.integrity.sizes"), ("名录", "load.names"), ("检测模型", "load.detector"), ("BioCLIP", "load.bioclip"), ("眼嘴与飞行", "load.heads"), ("地点模型", "load.geo"), ("稀有度表", "load.rarity"), ("等待模型（选片早于就绪）", "identify.waitedForModels")] as [(LocalizedStringKey, String)], id: \.1) { title, key in
                 if marks[key] != nil { LabeledContent(title, value: seconds(key)) }
             }
             let freed = UserDefaults.standard.object(forKey: "legacyModelsFreed") as? Int64 ?? 0
@@ -53,7 +53,7 @@ struct DiagnosticsView: View {
                 Task {
                     let t = Date()
                     let r = try? await Task.detached { try Models.check(full: true) }.value
-                    verified = r.map { $0.invalid.isEmpty ? String(format: "全部文件完好（%.1f s）", Date().timeIntervalSince(t)) : "损坏：" + $0.invalid.joined(separator: "、") } ?? "无法读取模型文件"
+                    verified = r.map { $0.invalid.isEmpty ? String(format: String(localized: "全部文件完好（%.1f s）"), Date().timeIntervalSince(t)) : String(localized: "损坏：\($0.invalid.joined(separator: String(localized: "、")))") } ?? String(localized: "无法读取模型文件")
                     verifying = false
                 }
             }.disabled(verifying).accessibilityIdentifier("diagnostics.verify")
@@ -66,7 +66,7 @@ struct DiagnosticsView: View {
             LabeledContent("加载采样峰值",value:String(format:"%.1f MB",Double(model.engine?.loadPeakBytes ?? 0)/1e6))
             LabeledContent("选片到结果（含定位与等待模型）",value:String(format:"%.3f s",model.sessionSeconds))
             if let d=model.current?.result?.diagnostics {
-                ForEach(d.stages.keys.sorted(),id:\.self){key in LabeledContent(key,value:String(format:"%.3f s",d.stages[key]!))}
+                ForEach(d.stages.keys.sorted(),id:\.self){key in LabeledContent(loc(key),value:String(format:"%.3f s",d.stages[key]!))}
                 LabeledContent("采样峰值内存",value:String(format:"%.1f MB",Double(d.peakBytes)/1e6))
                 Text("每 20 ms 采样 phys_footprint；可能漏掉瞬时峰值。已有历史里的指标来自识别当时。") .font(.caption)
             }

@@ -1,0 +1,67 @@
+# Checks on every branch push and pull request: engine pytest, web typecheck + tests + build. iOS is not built here. docs/release.md
+# Tag pushes are left to release.yml (branches: '**' matches no tag).
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash   # -eo pipefail: a failing command (pytest exits non-zero) fails the job
+
+env:
+  SAVE_CACHE: ${{ github.ref == 'refs/heads/main' }}   # as in release.yml: only main writes caches
+  UV_PYTHON: '3.12'
+
+jobs:
+  engine:
+    # macOS arm64 as in release.yml: on Linux uv.lock pulls torch's CUDA wheels (several GB) and the engine targets macOS
+    runs-on: macos-15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: 0.9.26
+          enable-cache: true
+          save-cache: ${{ env.SAVE_CACHE }}
+          cache-dependency-glob: engine/uv.lock
+          cache-suffix: ci
+      - name: exiftool (the XMP sidecar tests skip without it)
+        run: brew install exiftool
+      - name: engine tests (model tests skip, no model files on the runner)
+        working-directory: engine
+        run: uv run --locked pytest -rs
+
+  web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - working-directory: web
+        run: npm ci --no-audit --no-fund
+      - working-directory: web
+        run: npm run typecheck
+      - working-directory: web
+        run: npm test
+      - working-directory: web
+        run: npm run build

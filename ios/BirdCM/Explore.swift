@@ -107,7 +107,7 @@ struct ExploreView: View {
                 if mode == "local" {
                     if model.homePlace == nil { Text("还没有地点：先选择地点；下面先列出全部物种。") }
                     else if let likely {
-                        Text(likely.geo ? (likely.gbif ? "按地点模型与 GBIF 观测记录排序。\(likely.coverage == "country" ? "按全国数据估计。" : "")" : "按地点模型排序；这个地方这个月没有观测数据。") : (likely.gbif ? "地点模型不可用，按观测记录排序。" : "这个地方这个月没有观测数据，列出全部物种，不作“可能见到”判断。"))
+                        Text(likely.geo ? (likely.gbif ? "按地点模型与 GBIF 观测记录排序。\(likely.coverage == "country" ? String(localized: "按全国数据估计。") : "")" : "按地点模型排序；这个地方这个月没有观测数据。") : (likely.gbif ? "地点模型不可用，按观测记录排序。" : "这个地方这个月没有观测数据，列出全部物种，不作“可能见到”判断。"))
                             + Text(" 表示适宜度与被报告的程度，不是散步时见到的概率；只有零星记录或模型值很低的鸟列在最后的“罕见 / 偶见”里。小条是这里全年 12 个月的模型估计（相对该鸟最可能的月份），下划线是所选月份。“未见”= 全部记录里还没有。")
                     }
                 } else { Text("离线搜索 \(model.catalogue.all.count) 种（中文、英文、学名、拼音或首字母）。没有内置参考图片或介绍。") }
@@ -148,7 +148,7 @@ struct ExploreView: View {
         .navigationTitle("探索")
     }
     var header: String {
-        local ? "这里这个月可能见到的鸟 · \(results.count)" : query.isEmpty ? "按学名排列 · \(results.count)" : "搜索结果 · \(results.count)"
+        local ? String(localized: "这里这个月可能见到的鸟 · \(results.count)") : query.isEmpty ? String(localized: "按学名排列 · \(results.count)") : String(localized: "搜索结果 · \(results.count)")
     }
     func filtered() -> [Catalogue.Species] {
         let seenSet = model.ledger.allTime
@@ -199,7 +199,7 @@ struct ExploreView: View {
     }
     @ViewBuilder func localTag(_ l: Likely) -> some View {
         if let word = l.label {
-            StateTag(text: (l.tier == nil ? "估计：" : "本地：") + word, state: ThemeContrast.rarity[word] ?? ThemeContrast.unavailable, strong: ["罕见", "少见"].contains(word), small: true).fixedSize()
+            StateTag(text: l.tier == nil ? String(localized: "估计：\(loc(word))") : String(localized: "本地：\(loc(word))"), state: ThemeContrast.rarity[word] ?? ThemeContrast.unavailable, strong: ["罕见", "少见"].contains(word), small: true).fixedSize()
         }
     }
 }
@@ -221,6 +221,6 @@ struct MonthStrip: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("全年：\(values.indices.filter { values[$0] >= top * 0.8 }.map { "\($0 + 1)" }.joined(separator: "、")) 月最可能")
+        .accessibilityLabel("全年：\(values.indices.filter { values[$0] >= top * 0.8 }.map { "\($0 + 1)" }.joined(separator: String(localized: "、"))) 月最可能")
     }
 }

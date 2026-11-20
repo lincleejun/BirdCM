@@ -1,0 +1,9 @@
+"CFBundleName" = "观羽";
+"CFBundleDisplayName" = "观羽";
+"NSHumanReadableCopyright" = "观羽 BirdCM · MIT License";
+"NSAppleEventsUsageDescription" = "观羽用系统对话框让你选择要扫描的照片文件夹。";
+"NSRemovableVolumesUsageDescription" = "观羽要读取外接磁盘上你选择的照片（只读，不会改动照片）。";
+"NSNetworkVolumesUsageDescription" = "观羽要读取网络磁盘上你选择的照片（只读，不会改动照片）。";
+"NSDesktopFolderUsageDescription" = "观羽要读取“桌面”里你选择的照片（只读，不会改动照片）。";
+"NSDocumentsFolderUsageDescription" = "观羽要读取“文稿”里你选择的照片（只读，不会改动照片）。";
+"NSDownloadsFolderUsageDescription" = "观羽要读取“下载”里你选择的照片（只读，不会改动照片）。";

@@ -25,7 +25,13 @@ struct Place: Codable, Equatable {
     var lat: Double, lon: Double, label: String, source: String
     var regionCode:String?
     var regionEnglish:String?
-    var sourceLabel:String { if source=="region" {return "按整个"+(label.components(separatedBy:" · ").last ?? label)+"估计"};return ["photo":"用了照片自带的位置","device":"当前位置","map":"按地图上选的位置","region":"按整个地区估计"][source] ?? source }
+    var sourceLabel:String { if source=="region" {let name=Self.display(label);return String(localized:"按整个\(name.components(separatedBy:" · ").last ?? name)估计")};return ["photo":String(localized:"用了照片自带的位置"),"device":String(localized:"当前位置"),"map":String(localized:"按地图上选的位置")][source] ?? source }
+    /// In English: the bundled English name for a region or country label, and 地图选点 etc. translated (stored labels stay Chinese).
+    static let english=Bundle.main.preferredLocalizations.first?.hasPrefix("en") ?? false
+    static func display(_ label:String) -> String {
+        guard english else {return label}
+        return Library.regionCodes[label].flatMap{englishNames[$0]} ?? label.components(separatedBy:" · ").map(loc).joined(separator:" · ")
+    }
     /// The label without a trailing "lat, lon" (photo GPS and device labels are only coordinates; map picks append them).
     /// Coordinates are shown on a map snapshot and as a caption instead.
     var name:String {

@@ -45,16 +45,16 @@ enum SelfTest {
             return try Data(contentsOf: url)
         }
         // Preprocessing, on a synthetic 48 MP HEIC (the app's own code path, fixed boxes).
-        progress("合成 48 MP HEIC")
+        progress(String(localized: "合成 48 MP HEIC"))
         var steps = [Step]()
         if let big = synthetic48MP(files[0]) {
             let (photo, mb, s) = measure { Photo(data: big) }
-            steps.append(Step(name: "48 MP HEIC → 2048 帧", seconds: s, peakMB: mb))
+            steps.append(Step(name: String(localized: "48 MP HEIC → 2048 帧"), seconds: s, peakMB: mb))
             if let photo {
                 let w = Double(photo.frame.w), h = Double(photo.frame.h)
                 let (_, dmb, ds) = measure { photo.frame.resized(640, 640, .bilinear).pixelBuffer() }
-                steps.append(Step(name: "检测输入 640", seconds: ds, peakMB: dmb))
-                for (name, box) in [("大鸟裁剪 → 224", [w * 0.2, h * 0.3, w * 0.7, h * 0.7]), ("小鸟只解码区域 → 224", [w * 0.4, h * 0.4, w * 0.41, h * 0.41])] {
+                steps.append(Step(name: String(localized: "检测输入 640"), seconds: ds, peakMB: dmb))
+                for (name, box) in [(String(localized: "大鸟裁剪 → 224"), [w * 0.2, h * 0.3, w * 0.7, h * 0.7]), (String(localized: "小鸟只解码区域 → 224"), [w * 0.4, h * 0.4, w * 0.41, h * 0.41])] {
                     let (_, cmb, cs) = measure { Engine.crop(photo, box).image.pixelBuffer() }
                     steps.append(Step(name: name, seconds: cs, peakMB: cmb))
                 }
@@ -74,7 +74,7 @@ enum SelfTest {
                 progress("\(model) · \(unit)")
                 var row = Row(model: model, units: unit)
                 let inputs: [MLFeatureProvider] = model == "Detector" ? detectorInputs : model == "BioCLIP" ? crops : tokens
-                if inputs.isEmpty { row.error = "缺少输入"; rows.append(row); continue }
+                if inputs.isEmpty { row.error = String(localized: "缺少输入"); rows.append(row); continue }
                 do {
                     let (outs, mb, _) = try measure { () -> [MLFeatureProvider] in
                         let cfg = MLModelConfiguration(); cfg.computeUnits = Diagnostics.units(unit)
@@ -118,7 +118,7 @@ struct SelfTestView: View {
     @State private var result: (rows: [SelfTest.Row], steps: [SelfTest.Step])?
     @State private var error: String?
     static let shortUnits = ["all": "all", "cpuAndNeuralEngine": "CPU+ANE", "cpuAndGPU": "CPU+GPU", "cpuOnly": "CPU"]
-    static let shortModels = ["Detector": "检测", "BioCLIP": "BioCLIP", "Heads": "小头"]
+    static let shortModels = ["Detector": String(localized: "检测"), "BioCLIP": "BioCLIP", "Heads": String(localized: "小头")]
     var body: some View {
         List {
             Section {
@@ -170,7 +170,7 @@ struct SelfTestView: View {
             do {
                 let r = try await Task.detached { try SelfTest.run(units: units) { p in Task { @MainActor in progress = p } } }.value
                 result = r
-            } catch { self.error = "自测失败：\(error.localizedDescription)" }
+            } catch { self.error = String(localized: "自测失败：\(error.localizedDescription)") }
             running = false
             UIApplication.shared.isIdleTimerDisabled = false
         }

@@ -5,6 +5,7 @@ import argparse
 import json
 import sys
 import time
+from birdcm.i18n import t
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,11 +48,11 @@ def main(argv: list[str] | None = None) -> int:
             return 1 if models.fetch() else 0
         st = models.status()
         for f in st["files"]:
-            tag = "ok     " if f["path"] else "未发布 " if not f["released"] else "可选缺 " if f["optional"] else "MISSING"
+            tag = "ok     " if f["path"] else t("cli.unreleased") if not f["released"] else t("cli.optional_missing") if f["optional"] else "MISSING"
             print(f"{tag} {f['role']:22s} {f['path'] or f['name']}")
         unrel = [o for o in st["optional_missing"] if not o["released"]]
         if unrel:
-            print(f"这 {len(unrel)} 个文件还没有发布：{'、'.join(o['name'] for o in unrel)}。没有它们也能用：")
+            print(t("cli.unreleased_list", n=len(unrel), names=t("cli.list_sep").join(o["name"] for o in unrel)))
             for o in unrel:
                 print(f"  - {o['effect']}")
         print("ready" if st["ready"] else f"missing {len(st['missing'])}: {st['fetch_hint']}")
@@ -107,8 +108,8 @@ def scan(a) -> int:
                 print(f"{os.path.basename(it['path'])}  FAILED {err}")
             else:
                 sp = res["species"]
-                name = (sp["label"]["zh"] or sp["label"]["en"] or sp["label"]["sci"]) if sp and sp["label"] else ("不确定" if sp else "—")
-                print(f"{res['file']}  {len(res['boxes'])} box  {name}  {'飞' if res['flying'] else ''}")
+                name = (sp["label"]["zh"] or sp["label"]["en"] or sp["label"]["sci"]) if sp and sp["label"] else (t("cli.uncertain") if sp else "—")
+                print(f"{res['file']}  {len(res['boxes'])} box  {name}  {t('cli.flying') if res['flying'] else ''}")
             n_ok += err is None
             n_bird += bool(res and not res["rejected"])
     finally:

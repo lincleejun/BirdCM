@@ -30,7 +30,7 @@ final class Catalogue {
     }
     func contains(_ key: String?) -> Bool { key.map { index[$0] != nil } ?? false }
     func species(_ key: String?) -> Species? { key.flatMap { index[$0] }.map { all[$0] } }
-    func name(_ key: String?) -> String { species(key)?.name ?? key ?? "未知" }
+    func name(_ key: String?) -> String { species(key)?.name ?? key ?? String(localized: "未知") }
     /// Exact > prefix > substring over Chinese / English / scientific; ties by scientific name. Empty query: alphabetical.
     /// Pinyin (full, no spaces) and initials per Chinese name, built once off the main actor with Foundation's
     /// Mandarin transliteration. A convenience only: never an identity, never guaranteed pronunciation.
@@ -171,12 +171,12 @@ struct Ledger {
         items.flatMap { item in item.subjects.filter { !$0.excluded && !Self.eligible($0, known) }.map { Pending(item: item, subject: $0, reason: Self.reason($0, known)) } }
     }
     static func reason(_ s: SubjectItem, _ known: (String) -> Bool) -> String {
-        if s.state == "uncertain" { return "已标为不确定" }
-        if let k = s.key, !known(k) { return "名录中没有 \(k)，请更正" }
+        if s.state == "uncertain" { return String(localized: "已标为不确定") }
+        if let k = s.key, !known(k) { return String(localized: "名录中没有 \(k)，请更正") }
         switch s.level {
-        case "genus": return "只到属：\(s.modelKey ?? "")"
-        case "unclassified": return "这只还没识别"
-        default: return "模型未能确定到种"
+        case "genus": return String(localized: "只到属：\(s.modelKey ?? "")")
+        case "unclassified": return String(localized: "这只还没识别")
+        default: return String(localized: "模型未能确定到种")
         }
     }
     func photos(of species: String) -> [PhotoItem] { items.filter { $0.subjects.contains { Self.eligible($0, known) && $0.key == species } } }
@@ -200,9 +200,9 @@ enum Period: Hashable {
     }
     var title: String {
         switch self {
-        case let .month(y, m): return "\(y) 年 \(m) 月"
-        case let .year(y): return "\(y) 年"
-        case .all: return "全部记录"
+        case let .month(y, m): return String(localized: "\(String(y)) 年 \(m) 月")
+        case let .year(y): return String(localized: "\(String(y)) 年")
+        case .all: return String(localized: "全部记录")
         }
     }
     func shifted(_ d: Int) -> Period {

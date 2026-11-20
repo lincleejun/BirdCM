@@ -89,7 +89,7 @@ enum EBird {
             }
         }
         let text = lines.joined(separator: "\n") + (lines.isEmpty ? "" : "\n")
-        guard text.utf8.count <= 1_000_000 else { throw StoreError(message: "文件超过 eBird 的 1 MB 上限：请缩短时间范围后分几次导出") }
+        guard text.utf8.count <= 1_000_000 else { throw StoreError(message: String(localized: "文件超过 eBird 的 1 MB 上限：请缩短时间范围后分几次导出")) }
         return text
     }
 }
@@ -127,7 +127,7 @@ struct EBirdSheet: View {
                     if loading { ProgressView("正在整理清单…") }
                 }
                 ForEach(lists) { cl in
-                    Section("\(cl.day) · \(cl.name)\(cl.fallback ? " · 按识别日期" : "")") {
+                    Section("\(cl.day) · \(cl.name)\(cl.fallback ? String(localized: " · 按识别日期") : "")") {
                         ForEach(cl.sightings) { o in LabeledContent(model.catalogue.name(o.species), value: estimates ? "\(o.estimate)" : "X") }
                     }
                 }

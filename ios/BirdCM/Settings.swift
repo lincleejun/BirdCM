@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var clear = false
     @State private var cleanup = false
     @AppStorage("placeNamesOnline") private var placeNamesOnline = true
+    @AppStorage("updateCheck") private var updateCheck = false
+    @State private var newVersion: String?
     /// Directory size and the legacy-copy scan read every file: computed off the main actor, not in `body`.
     @State private var disk: (storage: Int, redundant: [URL], redundantBytes: Int)?
     func scanDisk() async {
@@ -43,12 +45,19 @@ struct SettingsView: View {
             } header: { Text("关于") } footer: { Text("系统选片无需相册访问授权；仅读取你选择的照片。") }
             ReferenceSettingsSection()
             Section {
+                Toggle("检查更新（GitHub）", isOn: $updateCheck).accessibilityIdentifier("settings.updateCheck")
+                if let newVersion { Link("有新版本 v\(newVersion)", destination: Update.releases).accessibilityIdentifier("settings.newVersion") }
+            } header: { Text("更新") } footer: {
+                Text("默认关闭。开启后每天最多一次向 GitHub 查询最新正式版的版本号，不发送 cookie、设备信息或当前版本号；有新版时在这里给出发布页链接，不自动下载或安装。")
+            }
+            Section {
                 Button("清空本机记录", role: .destructive) { clear = true }.accessibilityIdentifier("history.clear").disabled(model.items.isEmpty)
             } footer: { Text("清空前可以先在“备份与恢复”导出一份备份。") }
         }
         .scrollContentBackground(.hidden).background(Palette.canvas)
         .navigationTitle("设置")
         .task(id: model.items.count) { await scanDisk() }
+        .task(id: updateCheck) { newVersion = await Update.check() }
         .sheet(isPresented: $about) { AboutView().debugAppearance() }
         .sheet(isPresented: $diagnostics) { DiagnosticsView().debugAppearance() }
         .sheet(isPresented: $place) { PlacePicker(onChoose: { p in model.chooseHome(p) }).debugAppearance() }
@@ -283,7 +292,7 @@ struct FolderBackupSection: View {
                 Text("关闭。选好文件夹（“我的 iPhone”或 iCloud 云盘等）后，App 回到前台时如果记录有变化、且距上次成功备份满 24 小时，会自动写一份新备份；只保留本应用在那里写的最近 3 份。").font(.footnote)
                 Button("选择备份文件夹…", systemImage: "folder") { choosing = true }.accessibilityIdentifier("backup.chooseFolder").frame(minHeight: 44)
             } else {
-                LabeledContent("文件夹", value: backup.folderName ?? "测试文件夹")
+                LabeledContent("文件夹", value: backup.folderName ?? String(localized: "测试文件夹"))
                 LabeledContent("上次成功", value: backup.lastSuccess.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? String(localized: "还没有"))
                 LabeledContent("预计大小", value: storage.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "…")
                 if let e = backup.lastError { Text(e).font(.footnote).foregroundStyle(Palette.warning).accessibilityIdentifier("backup.folderError") }

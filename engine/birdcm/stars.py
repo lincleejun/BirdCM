@@ -14,7 +14,7 @@ Rules, in order (the spec design §9 asks for):
    mean rank). A missing value is not zero: a photo without sharpness uses its aesthetic percentile in its place (and
    the other way round); with neither, 0.5. Then + fly_bonus when P(fly) >= 0.5, + head_focus_bonus when the camera
    focused on the head, - outside_focus_malus when it focused off the bird (forgiven when the sharpness percentile >=
-   outside_forgive_pct), - exposure_malus when exposure is known bad (not measured yet: never applied).
+   outside_forgive_pct), - exposure_malus when the bird is blown or crushed (exposure(); both strategies).
 3. Quotas per species group (identified = species level with p >= species_min_p; the rest form one group):
    n3 = round(q3 * n), n2 = round(q2 * n), Python rounding. Order: Q descending, then queue order.
 4. Caps on three stars: eye not visible (< eye_vis_min), focus off the bird, sharpness < min_sharp3 (off), and at most
@@ -32,6 +32,8 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass, fields
 from datetime import datetime
 
+from birdcm.i18n import R, t
+
 BURST_GAP = 2.0
 OLD_PRESET_KEEP = {"loose": 30, "std": 25, "strict": 20, "stricter": 10}   # preset -> share of photos with a star (%)
 
@@ -46,7 +48,7 @@ class Config:
     w_eye: float = 0.10               # P(eye visible)
     w_size: float = 0.10              # bird size in frame (box area share, saturating at size_full)
     w_focus: float = 0.05             # camera focus on the head 1, on the bird 0.6, off the bird 0 (forgiven when sharp)
-    w_aes: float = 0.15               # aesthetic percentile over the scan
+    w_aes_select: float = 0.15        # aesthetic percentile over the scan (quota's own is w_aes below)
     w_det: float = 0.05               # detection score
     fly_boost: float = 0.15           # added to Q for a flying bird
     rare_boost: float = 0.05          # 少见 (and 0.1 for 罕见 / 无记录) locally this month
@@ -81,7 +83,9 @@ class Config:
     head_focus_bonus: float = 0.04
     outside_focus_malus: float = 0.06
     outside_forgive_pct: float = 0.9
-    exposure_malus: float = 0.06
+    exposure_malus: float = 0.06      # off Q (both strategies) when exposure() says the bird is blown or crushed
+    clip_hi_max: float = 0.10         # blown: share of the subject's core at 255 above this (owner's photos: max 0.022; docs/stars.md R5)
+    clip_lo_max: float = 0.25         # crushed: share at 0 above this (black birds: max 0.11; a backlit burst 0.21 is left)
     burst_cap: int = 2
     burst_gap: float = BURST_GAP
     per_species: bool = True
@@ -110,51 +114,51 @@ def validate(ratio: dict) -> dict:
     """The scan's star settings as given by a client, checked: ValueError on an unknown key, a wrong type or a value out of
     range (a bad setting must be refused at the API, not discovered by the scheduler)."""
     if not isinstance(ratio, dict):
-        raise ValueError("星级设置要是一个对象")
+        raise ValueError(t("stars.v_object"))
     known = {f.name: f for f in fields(Config)} | {"p3": None, "p2": None, "preset": None}
     if ratio.get("strategy", "select") not in ("select", "quota"):
-        raise ValueError("strategy 只能是 select 或 quota")
+        raise ValueError(t("stars.v_strategy"))
     for k, v in ratio.items():
         if k not in known:
-            raise ValueError(f"不认识的星级设置：{k}")
+            raise ValueError(t("stars.v_unknown", k=k))
         if k == "strategy":
             continue
         if k == "preset":
             if not isinstance(v, str):
-                raise ValueError("preset 要是文字")
+                raise ValueError(t("stars.v_preset"))
         elif k == "per_species":
             if not isinstance(v, bool):
-                raise ValueError("per_species 要是 true / false")
+                raise ValueError(t("stars.v_per_species"))
         elif v is None and k.startswith("min_"):
             continue
         elif isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
-            raise ValueError(f"{k} 要是数字")
+            raise ValueError(t("stars.v_number", k=k))
     c = Config.from_ratio(ratio)
     unit = ("keep", "eye3", "burst3", "species3", "aes3", "q3_min", "q2_min", "q_floor", "species_min_p", "eye_vis_min",
             "outside_forgive_pct", "size3", "weak_size", "alike", "margin3", "burst_share", "fly_boost", "rare_boost",
-            "fly_bonus", "head_focus_bonus", "outside_focus_malus", "exposure_malus", "min_det")
+            "fly_bonus", "head_focus_bonus", "outside_focus_malus", "exposure_malus", "min_det", "clip_hi_max", "clip_lo_max")
     for k in unit:
         if not 0 <= getattr(c, k) <= 1:
-            raise ValueError(f"{k} 要在 0–1 之间")
+            raise ValueError(t("stars.v_unit", k=k))
     for k in ("size_full", "d_species", "d_burst"):
         if not 0 < getattr(c, k) <= 1:
-            raise ValueError(f"{k} 要大于 0、不超过 1")
+            raise ValueError(t("stars.v_positive", k=k))
     for f in fields(Config):
         if f.name.startswith("w_") and getattr(c, f.name) < 0:
-            raise ValueError(f"{f.name} 不能为负")
+            raise ValueError(t("stars.v_negative", k=f.name))
     if not any(getattr(c, f.name) > 0 for f in fields(Config) if f.name.startswith("w_") and f.name not in ("w_sharp", "w_aes")):
-        raise ValueError("至少要有一个权重大于 0")
+        raise ValueError(t("stars.v_weight"))
     for k in ("min_sharp", "min_sharp3", "min_aes"):
         if getattr(c, k) is not None and getattr(c, k) < 0:
-            raise ValueError(f"{k} 不能为负")
+            raise ValueError(t("stars.v_negative", k=k))
     if not float(c.burst_cap).is_integer() or not 0 <= c.burst_gap <= 3600:
-        raise ValueError("连拍上限要是整数，连拍间隔在 0–3600 秒")
+        raise ValueError(t("stars.v_burst"))
     if not 0 <= c.keep <= 1:
-        raise ValueError("留片比例在 0–100%")
+        raise ValueError(t("stars.v_keep"))
     if not (0 <= c.q3 <= 1 and 0 <= c.q2 <= 1 and c.q3 + c.q2 <= 1 + 1e-9):
-        raise ValueError("三星、两星比例各在 0–100%，合计不超过 100%")
+        raise ValueError(t("stars.v_quota"))
     if c.w_sharp < 0 or c.w_aes < 0 or c.burst_cap < 0 or c.burst_gap < 0 or not 0 <= c.species_min_p <= 1:
-        raise ValueError("权重、连拍上限、连拍间隔不能为负，鸟种把握在 0–1")
+        raise ValueError(t("stars.v_old"))
     return ratio
 
 
@@ -230,9 +234,20 @@ def focus_class(res: dict) -> str | None:
     return "bird" if inside else "outside"
 
 
-def _name(res: dict, fix: dict | None = None) -> str:
+def exposure(res: dict, c: "Config") -> list | None:
+    """A code for "高光溢出" / "暗部死黑" (i18n) when the subject's clipped share is over its limit; None otherwise and for
+    a result without the measurement (scanned before PIPELINE_VERSION 10): no malus."""
+    if (res.get("clip_hi") or 0) > c.clip_hi_max:
+        return R("stars.clip_hi")
+    if (res.get("clip_lo") or 0) > c.clip_lo_max:
+        return R("stars.clip_lo")
+    return None
+
+
+def _name(res: dict, fix: dict | None = None) -> dict:
+    """The bird's {zh, en, sci} as a reason's parameter (i18n renders it in the reader's language)."""
     lab = ((fix or res.get("species")) or {}).get("label") or {}
-    return lab.get("zh") or lab.get("en") or lab.get("sci") or "未定种"
+    return {"zh": lab.get("zh"), "en": lab.get("en"), "sci": lab.get("sci")}
 
 
 SUPPORT_P = 0.05     # a frame's own probability for a species at least this: it votes for it in the burst
@@ -353,9 +368,12 @@ def manual_species(own: dict | None, sci: str | None, names: dict | None = None)
     return {"level": "species", "label": label, "top5": top5, "geo": (own or {}).get("geo", False), "manual": True}
 
 
-def rate(rows: list[dict], ratio: dict | None, rarity=None, manual: dict[int, dict] | None = None) -> dict[int, dict]:
-    """rows: {id, result (PhotoResult or None)} -> id: {stars, star_reason, burst_group, burst_rank, burst_size, q}.
-    manual: id -> the person's species block (manual_species); it wins over burst consensus and the photo's own."""
+def rate(rows: list[dict], ratio: dict | None, rarity=None, manual: dict[int, dict] | None = None,
+         fixed: dict[int, int] | None = None) -> dict[int, dict]:
+    """rows: {id, result (PhotoResult or None)} -> id: {stars, star_reason, burst_group, burst_rank, burst_size, q, star_auto}.
+    manual: id -> the person's species block (manual_species); it wins over burst consensus and the photo's own.
+    fixed: id -> the person's stars. Laid over the finished rating, so they take no budget and move no other photo
+    (bursts keep the computed ranks); star_auto keeps what was computed (what an undo returns to)."""
     c = Config.from_ratio(ratio)
     res = {r["id"]: r.get("result") for r in rows}
     bursts = group_bursts([{"id": i, "camera": (x or {}).get("exif", {}).get("camera_id") or (x or {}).get("exif", {}).get("camera"),
@@ -388,6 +406,10 @@ def rate(rows: list[dict], ratio: dict | None, rarity=None, manual: dict[int, di
         idx.sort(key=lambda i: (-(out[i]["stars"] if out[i]["stars"] is not None else -2), -(out[i]["q"] or -1), seq[i]))
         for rank, i in enumerate(idx, 1):
             out[i].update(burst_group=g, burst_rank=rank, burst_size=len(idx))
+    for i, n in (fixed or {}).items():
+        if i in res and res[i] is not None:                        # a failed photo has no stars to change
+            out[i]["star_auto"] = {"stars": out[i]["stars"], "reason": out[i]["star_reason"]}
+            out[i].update(stars=n, star_reason=R("stars.manual"))
     return out
 
 
@@ -400,18 +422,18 @@ def _quota(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config", 
         if x is None:                                              # failed photo: no stars, says why in its error
             continue
         if x.get("rejected"):
-            out[i].update(stars=-1, star_reason=x.get("reject_reason") or "没有找到鸟")
+            out[i].update(stars=-1, star_reason=x.get("reject_reason") or R("stars.no_bird"))
             continue
         det = x["boxes"][x["subject"]]["score"] if x.get("subject") is not None else 0.0
         if det < c.min_det:
-            out[i].update(stars=0, star_reason=f"检测把握太低（{det:.2f}），不参与排名")
+            out[i].update(stars=0, star_reason=R("stars.low_det", det=det))
         elif c.min_aes is not None and x.get("aesthetic") is not None and x["aesthetic"] < c.min_aes:
-            out[i].update(stars=0, star_reason=f"美学分太低（{x['aesthetic']:.2f}），不参与排名")
+            out[i].update(stars=0, star_reason=R("stars.low_aes", aes=x["aesthetic"]))
         elif c.min_sharp is not None and x.get("sharpness") is not None and x["sharpness"] < c.min_sharp:
-            out[i].update(stars=0, star_reason="头部清晰度太低，不参与排名")
+            out[i].update(stars=0, star_reason=R("stars.low_sharp"))
         elif (x.get("eye_p") is not None and x.get("beak_p") is not None
               and x["eye_p"] < c.eye_vis_min and x["beak_p"] < c.eye_vis_min):
-            out[i].update(stars=1, star_reason="眼睛和嘴都看不见，角度不佳")
+            out[i].update(stars=1, star_reason=R("stars.no_eye_beak"))
         else:
             ok.append(i)
 
@@ -428,6 +450,7 @@ def _quota(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config", 
         q += c.fly_bonus if (x.get("p_fly") or 0) >= 0.5 else 0
         q += c.head_focus_bonus if fc[i] == "head" else 0
         q -= c.outside_focus_malus if fc[i] == "outside" and (ps.get(i) or 0) < c.outside_forgive_pct else 0
+        q -= c.exposure_malus if exposure(x, c) else 0
         out[i]["q"] = round(q, 6)
 
     def species(i: int) -> str | None:
@@ -443,26 +466,30 @@ def _quota(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config", 
     for sp, idx in groups.items():
         idx.sort(key=lambda i: (-out[i]["q"], seq[i]))
         n, n3, n2 = len(idx), round(c.q3 * len(idx)), round(c.q2 * len(idx))
-        who = _name(res[idx[0]], fixes.get(idx[0])) if sp else "未确认鸟种的照片中"
+        who = _name(res[idx[0]], fixes.get(idx[0])) if sp else R("stars.unconfirmed_among")
+        rank_key = "stars.rank_ascii" if sp and not who["zh"] and (who["en"] or who["sci"]) else "stars.rank"
         got3 = got2 = 0
         for rank, i in enumerate(idx, 1):
             x, b = res[i], bursts[i][0]
-            place = f"{who}{' ' if who[-1:].isascii() else ''}第 {rank} / {n} 名"
-            cap = ("看不见眼睛，最多两星" if x.get("eye_p") is not None and x["eye_p"] < c.eye_vis_min
-                   else "对焦点不在鸟身上，最多两星" if fc[i] == "outside"
-                   else "头部清晰度不够三星" if c.min_sharp3 is not None and x.get("sharpness") is not None and x["sharpness"] < c.min_sharp3
-                   else "同一连拍组已有两张三星" if per_burst[b] >= c.burst_cap else None)
+            place = R(rank_key, who=who, rank=rank, n=n)
+            cap = (R("stars.cap_no_eye") if x.get("eye_p") is not None and x["eye_p"] < c.eye_vis_min
+                   else R("stars.cap_focus") if fc[i] == "outside"
+                   else R("stars.cap_sharp3") if c.min_sharp3 is not None and x.get("sharpness") is not None and x["sharpness"] < c.min_sharp3
+                   else R("stars.cap_burst") if per_burst[b] >= c.burst_cap else None)
             if got3 < n3 and cap is None:
                 got3 += 1
                 per_burst[b] += 1
-                out[i].update(stars=3, star_reason=("飞版，" if (x.get("p_fly") or 0) >= 0.5 else "") + place)
+                out[i].update(stars=3, star_reason=R("stars.flying", r=place) if (x.get("p_fly") or 0) >= 0.5 else place)
             elif got2 < n2:
                 got2 += 1
-                out[i].update(stars=2, star_reason=(cap + "；" if cap and got3 < n3 else "") + place)
+                out[i].update(stars=2, star_reason=R("stars.joined", a=cap, b=place) if cap and got3 < n3 else place)
             else:
-                out[i].update(stars=1, star_reason="排名靠后，" + place)
+                out[i].update(stars=1, star_reason=R("stars.ranked_low", r=place))
         if sp is not None and idx and max(out[i]["stars"] for i in idx) < 2:
-            out[idx[0]].update(stars=2, star_reason="保底：这个鸟种最好的一张")
+            out[idx[0]].update(stars=2, star_reason=R("stars.floor_quota"))
+        for i in idx:
+            if (bad := exposure(res[i], c)):
+                out[i]["star_reason"] = R("stars.expo_malus", bad=bad, r=out[i]["star_reason"])
 
 
 def _pctl(ids: list[int], value, alone: float = 1.0) -> dict[int, float]:
@@ -556,7 +583,7 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         if x is None:
             continue
         if x.get("rejected"):
-            out[i].update(stars=-1, star_reason=x.get("reject_reason") or "没有找到鸟")
+            out[i].update(stars=-1, star_reason=x.get("reject_reason") or R("stars.no_bird"))
         else:
             elig.append(i)
     if not elig:
@@ -571,7 +598,7 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         if sp.get("level") == "species" and lab and (i in fixes or (lab.get("p") or 0) >= c.species_min_p):
             return lab["sci"]
         g = (lab or sp.get("genus") or {}).get("sci") if sp.get("level") == "genus" else None
-        return f"genus:{g.split(' ')[0]}" if g else "未确认"
+        return f"genus:{g.split(' ')[0]}" if g else "unconfirmed"
     pools = {i: pool(i) for i in elig}
     burst_of = {i: bursts[i][0] for i in elig}
     by_burst, by_pool = defaultdict(list), defaultdict(list)
@@ -606,7 +633,7 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         det = x["boxes"][x["subject"]]["score"] if x.get("subject") is not None else None
         sig = {"sharp_burst": (pbq.get(i), c.w_sharp_burst), "sharp_species": (psp.get(i), c.w_sharp_species),
                "eye": (x.get("eye_p"), c.w_eye), "size": (None if a is None else min(1.0, math.sqrt(a / c.size_full)), c.w_size),
-               "focus": (focus, c.w_focus), "aesthetic": (pa.get(i), c.w_aes),
+               "focus": (focus, c.w_focus), "aesthetic": (pa.get(i), c.w_aes_select),
                "detection": (None if det is None else min(1.0, max(0.0, (det - 0.1) / 0.6)), c.w_det),
                "burst_length": (bl_pct[burst_of[i]], c.w_burst)}
         tw = sum(w for _, w in sig.values()) or 1.0
@@ -614,8 +641,9 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         fly = c.fly_boost if (x.get("p_fly") or 0) >= 0.5 else 0.0
         tier = ((fixes.get(i) or {}).get("rarity") or x.get("rarity") or {}).get("tier")
         rare = 2 * c.rare_boost if tier in (0, 1) else c.rare_boost if tier == 2 else 0.0
-        q[i] = round(base + fly + rare, 4)
-        parts[i] = {k: (None if v is None else round(v, 3)) for k, (v, _) in sig.items()} | {"fly": fly, "rare": rare}
+        expo = -c.exposure_malus if exposure(x, c) else 0.0
+        q[i] = round(base + fly + rare + expo, 4)
+        parts[i] = {k: (None if v is None else round(v, 3)) for k, (v, _) in sig.items()} | {"fly": fly, "rare": rare, "exposure": expo}
         out[i].update(q=q[i], q_parts=parts[i])
 
     def weak(i: int) -> bool:
@@ -626,7 +654,7 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
     picked = set(chosen)
     floor = set()
     for sp, ids in by_pool.items():                               # every confirmed species: at least its best photo
-        if sp.startswith("genus:") or sp == "未确认" or picked & set(ids):
+        if sp.startswith("genus:") or sp == "unconfirmed" or picked & set(ids):
             continue
         ok = [i for i in ids if not weak(i)]                       # a weak photo is not starred even to keep its species
         if not ok:
@@ -657,44 +685,46 @@ def _select(rows: list[dict], res: dict, fixes: dict, bursts: dict, c: "Config",
         name = _name(res[i], fixes.get(i))
         if i not in picked:
             other = best_in_burst.get(burst_of[i])
-            why = (f"和同组 {res[other].get('file', '另一张')} 差不多，任选其一" if other is not None and alike(i, other)
-                   else f"和同组 {res[other].get('file', '另一张')} 评分接近，选了那张" if other is not None and close_scores(i, other)
-                   else f"同组 {res[other].get('file', '另一张')} 更好" if other is not None
-                   else "整体质量不够，不为凑比例而给星" if weak(i) else "比例已满，排在后面")
-            out[i].update(stars=0, star_reason=why)
+            file = res[other].get("file") or R("stars.another") if other is not None else None
+            why = (R("stars.alike", file=file) if other is not None and alike(i, other)
+                   else R("stars.close", file=file) if other is not None and close_scores(i, other)
+                   else R("stars.better", file=file) if other is not None
+                   else R("stars.weak") if weak(i) else R("stars.full"))
+            bad = exposure(x, c)
+            out[i].update(stars=0, star_reason=R("stars.expo_joined", bad=bad, r=why) if bad else why)
             continue
-        short = []
+        short = [R("stars.expo", bad=bad)] if (bad := exposure(x, c)) else []     # named first: the reason shows short[0]
         if (x.get("eye_p") or 0) < c.eye3:
-            short.append("眼睛不够清楚")
+            short.append(R("stars.short_eye"))
         if (pb.get(i) or 0) < c.burst3:
-            short.append("同组里不是最清楚的")
+            short.append(R("stars.short_burst"))
         if (psp.get(i) if psp.get(i) is not None else 1.0) < c.species3:
-            short.append("同种里清晰度偏低")
+            short.append(R("stars.short_species"))
         if fc[i] == "outside" and (pb.get(i) or 0) < 0.8:
-            short.append("对焦点不在鸟身上")
+            short.append(R("stars.short_focus"))
         a = area(i)
         if a is not None and a < c.size3:
-            short.append("鸟太小")
+            short.append(R("stars.short_small"))
         if (pa.get(i) if pa.get(i) is not None else 1.0) < c.aes3:
-            short.append("构图美感一般")
-        if pools[i].startswith("genus:") or pools[i] == "未确认":
-            short.append("鸟种没认准")
+            short.append(R("stars.short_aes"))
+        if pools[i].startswith("genus:") or pools[i] == "unconfirmed":
+            short.append(R("stars.short_genus"))
         if best_in_burst.get(burst_of[i]) != i:
-            short.append("同组已有更好的一张")
+            short.append(R("stars.short_better"))
         if q[i] < c.q3_min:
-            short.append("综合分不够高")
+            short.append(R("stars.short_q"))
         if not short and q[i] < med.get(pools[i], 0) + c.margin3 and len([j for j in by_pool[pools[i]] if j in picked]) > 1:
-            short.append(f"和其他{name}差不多")
-        lead = "飞版，" if flying else ""
+            short.append(R("stars.short_alike", name=name))
+        lead = (lambda r: R("stars.flying", r=r)) if flying else (lambda r: r)
         if i in floor:                                             # the summary counts these: they can exceed the ratio
             out[i]["q_parts"] = {**(out[i].get("q_parts") or {}), "floor": 1}
         if not short:
-            out[i].update(stars=3, star_reason=f"{lead}各方面都很好（综合 {q[i]:.2f}）")
+            out[i].update(stars=3, star_reason=lead(R("stars.three", q=q[i])))
         elif q[i] >= c.q2_min and ((x.get("eye_p") or 0) >= 0.5 or flying):
-            out[i].update(stars=2, star_reason=f"{lead}值得留，但{short[0]}")
+            out[i].update(stars=2, star_reason=lead(R("stars.two", short=short[0])))
         else:
-            why = ("这个鸟种在这批里最好的一张" if i in floor else
-                   "当地少见，留作记录" if (parts[i]["rare"] or 0) > 0 else
-                   "飞版，有瑕疵" if flying else "留作记录")
-            out[i].update(stars=1, star_reason=f"{why}；{short[0]}")
+            why = (R("stars.floor") if i in floor else
+                   R("stars.rare") if (parts[i]["rare"] or 0) > 0 else
+                   R("stars.flying_flawed") if flying else R("stars.record"))
+            out[i].update(stars=1, star_reason=R("stars.joined", a=why, b=short[0]))
 
