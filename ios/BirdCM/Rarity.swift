@@ -149,20 +149,22 @@ final class Rarity {
     /// RarityBook.compute's one read of the species table. ids: name → id, the name as rows() reads it (NULL as ""), keyed by Swift String like the
     /// old Set and month dictionary. iucn: keyed by the name's bytes, as `scientific=?` compares (NULL and BLOB names never match; NULL or empty = none).
     /// nil when the query can't be prepared, an id isn't an integer, or two rows share a name by Swift equality: the caller then takes the old path.
-    /// A step error part way keeps the rows read so far, as rows() does.
+    /// Also nil on a step error part way: the old scientific-only read and per-species lookups may not fail where this three-column scan does.
     func speciesIndex() -> (ids: [String: Int64], iucn: [[UInt8]: String])? {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, "SELECT id,scientific,iucn FROM species", -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         var ids = [String: Int64](), iucn = [[UInt8]: String]()
-        while sqlite3_step(stmt) == SQLITE_ROW {
+        var rc = sqlite3_step(stmt)
+        while rc == SQLITE_ROW {
             guard sqlite3_column_type(stmt, 0) == SQLITE_INTEGER else { return nil }
             let text = sqlite3_column_type(stmt, 1) == SQLITE_TEXT   // before column_text, which converts
             let p = sqlite3_column_text(stmt, 1)
             guard ids.updateValue(sqlite3_column_int64(stmt, 0), forKey: p.map { String(cString: $0) } ?? "") == nil else { return nil }
             if text, let p, let c = sqlite3_column_text(stmt, 2).map({ String(cString: $0) }), !c.isEmpty { iucn[Array(UnsafeBufferPointer(start: p, count: Int(sqlite3_column_bytes(stmt, 1))))] = c }
+            rc = sqlite3_step(stmt)
         }
-        return (ids, iucn)
+        return rc == SQLITE_DONE ? (ids, iucn) : nil
     }
     /// The one IUCN read for display: the current table's category for a species (nil when hidden or unknown).
     /// Never the value stored inside an old Identification.

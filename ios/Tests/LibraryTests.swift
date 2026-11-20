@@ -691,6 +691,24 @@ extension CrossPlatformTests {
             if label.hasPrefix("duplicate") { XCTAssertEqual(tier(pre), [2, 2]); XCTAssertEqual(old.iucn[pre], "EN") }
             else { XCTAssertEqual([tier(pre), tier("Real tier"), tier("Text tier"), tier("Big tier"), tier("Plain")], [[2, 2], [0], [0], [7], [0, 0]]); XCTAssertNil(old.iucn[pre]); XCTAssertEqual(old.iucn["Plain"], "NT"); XCTAssertNil(old.iucn["Text tier"]); XCTAssertNil(old.iucn["Big tier"]); XCTAssertEqual(tier("Blob name"), [1]); XCTAssertNil(old.iucn["Blob name"]) }
         }
+        // species as a view whose second row's iucn fails (abs overflow): a scan reading iucn stops part way, the old scientific-only
+        // reads and point lookups of other rows do not, so the whole call must take the old path.
+        do {
+            let path = tmp().appendingPathExtension("sqlite"); try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var db: OpaquePointer?
+            XCTAssertEqual(sqlite3_open(path.path, &db), SQLITE_OK)
+            let view = schema.replacingOccurrences(of: "CREATE TABLE species(id INTEGER PRIMARY KEY, scientific TEXT UNIQUE, iucn TEXT);", with: "CREATE TABLE sp0(id INTEGER PRIMARY KEY, scientific TEXT UNIQUE, iucn TEXT, bad INTEGER); CREATE VIEW species AS SELECT id, scientific, CASE WHEN bad THEN abs(-9223372036854775808) ELSE iucn END AS iucn FROM sp0;")
+            XCTAssertNotEqual(view, schema)
+            XCTAssertEqual(sqlite3_exec(db, view + "INSERT INTO sp0 VALUES(1,'First','LC',0),(2,'Second','NT',1),(3,'Third','VU',0); INSERT INTO counts VALUES(1,5,1,3,4),(1,5,2,3,1),(1,5,3,3,2);", nil, nil, nil), SQLITE_OK)
+            sqlite3_close(db)
+            setDefault("rarityPath", path.path)
+            let ledger = Ledger(items: ["First", "Second", "Third"].enumerated().map { photo("v\($0)", "2024-05-01", $1, region: "XX") })
+            for hide in [false, true] { setDefault("hideIUCN", hide); _ = assertBook(ledger, nil, "view hide \(hide)") }
+            setDefault("hideIUCN", false)
+            let old = referenceRarityBook(ledger, nil)
+            XCTAssertEqual(ledger.observations.sorted { $0.species < $1.species }.map { old.tiers[$0.id] }, [[4], [1], [2]])
+            XCTAssertEqual(old.iucn, ["First": "LC", "Third": "VU"])
+        }
         setDefault("rarityPath", tmp().appendingPathComponent("missing.sqlite").path)
         let ledger = Ledger(items: [photo("u1", "2024-05-01", "Plain", region: "XX")])
         let old = assertBook(ledger, nil, "unopenable")
