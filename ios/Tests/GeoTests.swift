@@ -55,11 +55,12 @@ final class GeoTests: XCTestCase {
         }
         return geo.indices.indices.map { j in geo.indices[j].isEmpty ? nil : (0..<12).map { m in Geo.median(perPoint.map { $0[j]![m] }) } }
     }
-    /// Bit for bit (NaN included) and nil in the same places as the reference, on places other than the timing fixtures.
+    /// Bit for bit (NaN included) and nil in the same places as the reference, including the 59-point 美国 timing fixture.
     func testMonthsMatchReference() throws {
         func bits(_ v: [[Double]?]) -> [[UInt64]?] { v.map { $0?.map(\.bitPattern) } }
         let geo = try XCTUnwrap(Geo.shared(Catalogue.shared))
-        for p in [Place(lat:39.0,lon:-75.5,label:"美国 · 特拉华州",source:"region"),   // 8 points: even
+        for p in [Place(lat:39.8,lon:-98.6,label:"美国",source:"region",regionCode:"US"),  // 59 points: 4 median workers
+                  Place(lat:39.0,lon:-75.5,label:"美国 · 特拉华州",source:"region"),   // 8 points: even
                   Place(lat:41.7,lon:-71.5,label:"美国 · 罗得岛州",source:"region"),   // 5 points: odd
                   Place(lat:1.35,lon:103.8,label:"新加坡",source:"region"),            // 2 points
                   Place(lat:-33.9,lon:18.4,label:"Cape Town",source:"map"),           // one point
