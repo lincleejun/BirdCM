@@ -70,7 +70,7 @@ FETCH_HINT = "Mac 应用：在菜单栏的观羽图标里下载模型；从源�
 # What the app does without an optional file (models.toml optional = true).
 OPTIONAL_EFFECT = {"clear": "没有“清楚的鸟”判断：每个检测框都当作鸟来认",
                    "aesthetic": "没有美学分：星级只用其余的信号",
-                   "rarity": "没有本地稀有度和 IUCN 等级：显示“数据不足”",
+                   "rarity": "没有本地稀有度：显示“数据不足”",
                    "rarity-global": "没有全球稀有度表：本地稀有度只覆盖美国、加拿大、中国，其他地方显示“数据不足”"}
 
 

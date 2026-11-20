@@ -38,13 +38,13 @@ CI 不构建 iOS（模型约 0.7 GB，要在本机编译）。流水线发布后
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer V=0.0.2 OUT=ios/build/release-$V
 xcodebuild -project ios/BirdCM.xcodeproj -scheme BirdCM -configuration Release \
-  -destination 'generic/platform=iOS' -derivedDataPath ios/DerivedData-device CODE_SIGNING_ALLOWED=NO BIRDCM_BUNDLE_IUCN=0 build
+  -destination 'generic/platform=iOS' -derivedDataPath ios/DerivedData-device CODE_SIGNING_ALLOWED=NO build
 mkdir -p $OUT/Payload && cp -Rc ios/DerivedData-device/Build/Products/Release-iphoneos/BirdCM.app $OUT/Payload/
 (cd $OUT && zip -qry GuanYu-$V-iOS-unsigned.ipa Payload && shasum -a 256 GuanYu-$V-iOS-unsigned.ipa > GuanYu-$V-iOS-unsigned.ipa.sha256)
 gh release upload release/v$V $OUT/GuanYu-$V-iOS-unsigned.ipa $OUT/GuanYu-$V-iOS-unsigned.ipa.sha256
 ```
 
-公开包用 `BIRDCM_BUNDLE_IUCN=0`（IUCN 再分发许可未定）。它必须作为 xcodebuild 参数传入：放在命令前当环境变量，脚本阶段读不到。发布前核对包内 `Models/iucn-build-flag` 为 0。iOS 版本号在 `ios/project.yml` 与工程文件的 `MARKETING_VERSION`，与 `engine/pyproject.toml` 保持一致。
+公开包带 IUCN 等级（默认 `BIRDCM_BUNDLE_IUCN=1`）：构建时从 `engine/birdcm/data/iucn.csv` 写入包内稀有度表，许可 CC BY 4.0，署名在 About 与 NOTICE.md（依据见 `engine/birdcm/data/iucn-LICENSE.md`；2026-11-19 所有者确认许可依据并要求随工程打包）。要去掉就传 `BIRDCM_BUNDLE_IUCN=0`，它必须作为 xcodebuild 参数传入：放在命令前当环境变量，脚本阶段读不到。发布前核对包内 `Models/iucn-build-flag` 与预期一致。iOS 版本号在 `ios/project.yml` 与工程文件的 `MARKETING_VERSION`，与 `engine/pyproject.toml` 保持一致。
 
 ## 流水线做了什么
 

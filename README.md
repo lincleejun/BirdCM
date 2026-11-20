@@ -13,7 +13,7 @@ A local, private assistant for bird photographers. Your photos never leave your 
 **Mac 版**（网页界面，在本机运行）：一次拍了上千张 RAW，帮你筛片。
 
 - 找鸟、认种（全球 11,000+ 种，按拍摄地点和季节修正），看眼睛和嘴是否清晰、是不是在飞、头部锐度，打星
-- 连拍取一致结果；当地稀有度与 IUCN（数据表暂未发布，见下方许可）
+- 连拍取一致结果；IUCN 受威胁等级；当地稀有度（数据表暂未发布，见下方许可）
 - 鸟种清单、统计、日历、地图；导出 CSV / JSON 和 [eBird 文件](docs/ebird.md)
 - 照片文件夹只读，不改、不上传
 
@@ -61,4 +61,5 @@ iOS 的构建与测试见 [ios/README.md](ios/README.md)；如何发版见 [docs
 代码使用 MIT 许可。模型和数据各有自己的许可，见 [NOTICE.md](NOTICE.md)：
 
 - 眼/喙模型头和飞行模型头**仅限非商业用途**。
+- IUCN 受威胁等级表（`engine/birdcm/data/iucn.csv`）**不属于 MIT**，按 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode) 使用和再分发：来源 IUCN 红色名录 2026-1（经 GBIF 发布，doi:10.15468/0qnb58），我们只保留鸟类的全球等级代码并按学名匹配到 AviList，详见同目录的 [iucn-LICENSE.md](engine/birdcm/data/iucn-LICENSE.md)。
 - 清晰度门槛、美学模型头和稀有度表的数据许可还在确认，暂未发布。

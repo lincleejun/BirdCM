@@ -8,7 +8,7 @@
 Features, 0-1, from the installed GBIF table (rarity.py):
   G  global rarity: the species' share where it is easiest to see this month (any country or division with >= 2000
      records and >= 5 of it), as a frequency
-  C  IUCN (LC 0, NT .25, VU .5, EN .75, CR 1); None in public builds (no IUCN data) -> 0
+  C  IUCN (LC 0, NT .25, VU .5, EN .75, CR 1), from the bundled data/iucn.csv; no category or switched off -> 0
   L  local rarity: the division's (else country's) all-year share, as a frequency
   N  wider rarity: the country's all-year share
   T  season anomaly: how far this month's share falls below the all-year share (log10 ratio / 3)
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 
-from birdcm.rarity import SHOW_IUCN
+from birdcm import rarity
 
 MODEL_VERSION = "bird-value-v1"
 K, C = 3.0, 0.65
@@ -73,11 +73,11 @@ def features(table, sci: str, region: str | None, month: int | None, photo: bool
     `photo`: a sighting, so no records in the region still gets a value (the floor share), marked pending."""
     with table.lock:
         db = table.db
-        sp = db.execute("SELECT id, iucn FROM species WHERE scientific = ?", (sci,)).fetchone()
+        sp = db.execute("SELECT id FROM species WHERE scientific = ?", (sci,)).fetchone()
         if not sp:
             return None
-        s, iucn = sp
-        f = {"C": IUCN.get(iucn or "", 0.0) if SHOW_IUCN else 0.0}
+        s = sp[0]
+        f = {"C": IUCN.get(rarity.iucn(sci) or "", 0.0)}
         best = db.execute("SELECT MAX(1.0 * c.n / m.records) FROM counts c JOIN months m ON m.region_id = c.region_id "
                           "AND m.month = c.month WHERE c.species_id = ? AND c.n >= 5 AND m.records >= 2000"
                           + (" AND c.month = ?" if month else ""), (s, month) if month else (s,)).fetchone()[0]

@@ -1045,8 +1045,7 @@ def names_of(sci: str) -> dict:
 
 def iucn_of(sci: str) -> str | None:
     from birdcm import rarity
-    t = rarity.table()
-    return t.iucn(sci) if t is not None else None
+    return rarity.iucn(sci)
 
 
 _lookup_cache: dict = {}

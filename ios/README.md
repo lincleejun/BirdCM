@@ -20,7 +20,7 @@ ios/tools/fetch_models.sh
 
 `Models/`、下载暂存及编译结果全部被忽略，不加入 Git。脚本用 `xcrun coremlcompiler compile` 编译 BioCLIP/Detector/Heads 为 `.mlmodelc`；工程把整个 `Models` 文件夹作为资源拷入 App。应用启动不会编译或复制模型出 bundle。Xcode 工程已保留；若重新运行 `xcodegen`，`project.yml` 同样包含 Models 和许可证构建步骤。
 
-个人构建默认 `BIRDCM_BUNDLE_IUCN=1`。设为 0 会在 fetch 和 Xcode 的 bundle 构建阶段移除 SQLite 中每个 IUCN 值，并重算校验清单；源表不改动，表结构保留供兼容读取。比如 `xcodebuild ... BIRDCM_BUNDLE_IUCN=0 build`（作为 xcodebuild 参数；放在命令前当环境变量，Xcode 脚本阶段读不到）。IUCN 再分发与 BirdNET 两份许可声明的冲突仍待所有者决定；全部文件归属在 About/NOTICE.md。
+默认 `BIRDCM_BUNDLE_IUCN=1`：Xcode 的 bundle 构建阶段用仓库的 `engine/birdcm/data/iucn.csv`（CC BY 4.0，见同目录 `iucn-LICENSE.md`）重写包内 SQLite 的 IUCN 列，表里原有的值不随包分发。设为 0 会在 fetch 和 bundle 构建阶段移除每个 IUCN 值；两种情况都重算校验清单；源表不改动，表结构保留供兼容读取。比如 `xcodebuild ... BIRDCM_BUNDLE_IUCN=0 build`（作为 xcodebuild 参数；放在命令前当环境变量，Xcode 脚本阶段读不到）。BirdNET 两份许可声明的冲突仍待所有者决定；全部文件归属在 About/NOTICE.md。
 
 开发覆盖仍支持 `-modelDir /absolute/compiled-folder`、`-geoPath /absolute/model.onnx`、`-rarityPath /absolute/rarity-global.sqlite`、`-resourceDir /absolute/json-folder`。modelDir 现在需要 `.mlmodelc`，旧 `.mlpackage` 目录请先经过 fetch/compile；`prepare_models.sh MOBILE_BUILD GEO_ONNX GLOBAL_RARITY_SQLITE` 是兼容包装。覆盖只读取外部目录。
 

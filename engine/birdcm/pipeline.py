@@ -390,8 +390,8 @@ def rarity_for(table, species: dict | None, r: dict) -> dict | None:
     """Rarity of a confirmed species at the photo's place (the prior's point, else the scan's region label) and month."""
     if not species or species.get("level") != "species" or not species.get("label"):
         return None
-    if table is None:                                  # the rarity table is not installed
-        return {"tier": None, "label": "数据不足", "iucn": None, "region": None}
+    if table is None:                                  # the rarity table is not installed: still the IUCN category
+        return {"tier": None, "label": "数据不足", "iucn": rarity_mod.iucn(species["label"]["sci"]), "region": None}
     reg = r.get("region") or {}
     pr = reg.get("prior") or {}                       # no place: still the IUCN category, rarity 数据不足
     label = reg.get("name") if pr.get("source") in (None, "region") else None

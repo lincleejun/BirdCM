@@ -118,7 +118,7 @@ def test_global_lookup_coverage_and_country_fallback(tmp_path):
     assert r.lookup("Ardea alba", 5, 2, None, 1)["label"] == "无记录"         # in the table, no record there
     assert r.lookup("Nope nope", 5, 2, None, 1)["label"] == "未知"
     assert r.lookup("Ardea alba", None, None, None, 1, code="XA")["label"] == "罕见"
-    assert r.lookup("Ardea alba", None, None, None, 1)["iucn"] == "VU"
+    assert r.lookup("Ardea alba", None, None, None, 1)["iucn"] == "LC"         # the bundled iucn.csv, not the table's VU
 
 
 def test_place_region_falls_back_to_bundled_outlines(monkeypatch):
@@ -168,3 +168,15 @@ bytes = {size}
     assert rarity.table_path() == g
     st = models.status()
     assert all(o["role"] != "rarity" for o in st["optional_missing"])        # the old table is not "missing" now
+
+
+def test_iucn_is_the_bundled_table_and_can_be_switched_off(monkeypatch):
+    assert rarity.iucn("Nipponia nippon") == "EN" and rarity.iucn("Passer montanus") == "LC"
+    assert rarity.iucn("Antigone vipio") == "VU"                                # matched through its IUCN name Grus vipio
+    assert rarity.iucn("Nope nope") is None
+    from birdcm import pipeline                                                 # no rarity table installed: still shown
+    sp = {"level": "species", "label": {"sci": "Nipponia nippon"}}
+    assert pipeline.rarity_for(None, sp, {}) == {"tier": None, "label": "数据不足", "iucn": "EN", "region": None}
+    assert set(rarity._iucn().values()) <= {"LC", "NT", "VU", "EN", "CR", "EW", "EX", "DD"}
+    monkeypatch.setattr(rarity, "SHOW_IUCN", False)
+    assert rarity.iucn("Nipponia nippon") is None

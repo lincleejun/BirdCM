@@ -16,7 +16,8 @@ Counts are reports, not abundance: a common but unremarkable bird is under-repor
 place_region() is the ONE point -> (division ISO, country ISO) mapping for the engine (rarity, eBird state / country,
 the life list, evaluation labels).
 
-IUCN categories can be switched off as a whole (SHOW_IUCN, env BIRDCM_IUCN=0): their redistribution terms are unclear.
+IUCN categories come from data/iucn.csv, bundled with the engine (CC BY 4.0, data/iucn-LICENSE.md), not from the table's
+own `species.iucn` column: one source with or without a table. SHOW_IUCN (env BIRDCM_IUCN=0) still hides them everywhere.
 """
 from __future__ import annotations
 
@@ -26,7 +27,8 @@ import sqlite3
 import threading
 from array import array
 from collections import defaultdict
-from functools import lru_cache
+from functools import cache, lru_cache
+from pathlib import Path
 
 from birdcm import geo
 
@@ -34,6 +36,18 @@ TIER_ZH = {0: "无记录", 1: "罕见", 2: "少见", 3: "不常见", 4: "常见"
 SHOW_IUCN = os.environ.get("BIRDCM_IUCN", "1") != "0"
 NEAR = 0.25                     # degrees: rarity_global.NEAR, a point off every polygon but this close to a vertex
 COUNTRY_NOTE = "按全国数据估计"
+
+
+@cache
+def _iucn() -> dict[str, str]:
+    with open(Path(__file__).with_name("data") / "iucn.csv", newline="", encoding="utf-8") as f:
+        return {r["scientific"]: r["category"] for r in csv.DictReader(f)}
+
+
+def iucn(sci: str) -> str | None:
+    """The global IUCN Red List category code of an AviList species (LC NT VU EN CR EW EX DD); None: no matched
+    assessment, or switched off."""
+    return _iucn().get(sci) if SHOW_IUCN else None
 
 
 # ---- ISO codes of our own place list (countries.csv code, regions.csv iso) ----------------------------------------
@@ -182,13 +196,12 @@ class Rarity:
                code: str | None = None) -> dict:
         """{tier: 0-4 | None, label, iucn, region (ISO), coverage, note}; tier None with label 数据不足 / 未知 / 时间未知."""
         region = self.resolve(lat, lon, label, code)
-        sp = (self._rows("SELECT id, iucn FROM species WHERE scientific = ?", (sci,)) or [None])[0]
-        iucn = (sp[1] or None) if sp and SHOW_IUCN else None
-        out = {"tier": None, "label": "数据不足", "iucn": iucn, "region": region, "coverage": None, "note": None}
+        sp = (self._rows("SELECT id FROM species WHERE scientific = ?", (sci,)) or [None])[0]
+        out = {"tier": None, "label": "数据不足", "iucn": iucn(sci), "region": region, "coverage": None, "note": None}
         if region is None:
             return out
         if sp is None:
-            return {**out, "label": "未知", "iucn": None}
+            return {**out, "label": "未知"}
         if not month:
             return {**out, "label": "时间未知"}
         if self.is_global:
@@ -220,12 +233,6 @@ class Rarity:
         """(English, Chinese) name of a region code in this table."""
         r = self._rows("SELECT name_en, name_zh FROM regions WHERE code = ?", (code,))
         return (r[0][0] or code, r[0][1] or r[0][0] or code) if r else None
-
-    def iucn(self, sci: str) -> str | None:
-        if not SHOW_IUCN:
-            return None
-        r = self._rows("SELECT iucn FROM species WHERE scientific = ?", (sci,))
-        return (r[0][0] or None) if r else None
 
 
 # ---- the installed table, opened once (Engine, scheduler, life list) -----------------------------------------------

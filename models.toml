@@ -87,7 +87,7 @@ role    = "rarity"
 url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/rarity-us-ca-cn.sqlite"
 sha256  = "84ca30397294c2862ea71e657062ff19bc18add8f7468c99fc64696850845592"
 bytes   = 6455296
-license = "GBIF.org record counts (cite GBIF.org, accessed 2026-11-17); IUCN Red List categories (terms unclear, can be switched off)"
+license = "GBIF.org record counts (cite GBIF.org, accessed 2026-11-17); IUCN Red List categories (GBIF-published checklist doi:10.15468/0qnb58, CC BY 4.0; column not read, the engine uses birdcm/data/iucn.csv)"
 
 [[file]]
 name    = "rarity-global.sqlite"
@@ -98,4 +98,4 @@ role    = "rarity-global"
 url     = "https://github.com/lincleejun/bioclip-bird/releases/download/v0.1.0/rarity-global.sqlite"
 sha256  = "1ca100562673df5d03a476e6531973b17ac9c8c716f93e66cca61c918adbee68"
 bytes   = 34877440
-license = "GBIF.org record counts (cite GBIF.org, accessed 2026-11-18); IUCN Red List categories (terms unclear, can be switched off); Natural Earth 5.1.1 shapes (public domain)"
+license = "GBIF.org record counts (cite GBIF.org, accessed 2026-11-18); IUCN Red List categories (GBIF-published checklist doi:10.15468/0qnb58, CC BY 4.0; column not read, the engine uses birdcm/data/iucn.csv); Natural Earth 5.1.1 shapes (public domain)"

@@ -734,7 +734,7 @@ const Inspector = forwardRef<HTMLElement, { p: PhotoRow; st: RowState; marks: Ma
               <dt>本地稀有度</dt><dd title={RARITY_NOTE}>{r!.rarity ? <><b>{r!.rarity.label}</b>{r!.rarity.region && <span className="ref"> · {r!.rarity.region}</span>}{r!.rarity.note && <span className="ref">（{r!.rarity.note}）</span>}</> : "—"}
                 <span className="ref" style={{ display: "block" }}>此地此月，按 GBIF 观察记录所占比例；是有多少人报告，不是鸟有多少</span></dd>
               <dt>受威胁等级</dt><dd>{r!.rarity?.iucn ? <b>IUCN {IUCN_ZH[r!.rarity.iucn] ?? r!.rarity.iucn}（{r!.rarity.iucn}）</b> : "—"}
-                <span className="ref" style={{ display: "block" }}>全球受威胁等级（IUCN 红色名录），全球统一，不随地点变化</span></dd>
+                <span className="ref" style={{ display: "block" }}>全球受威胁等级（IUCN 红色名录 2026-1，经 GBIF 发布，CC BY 4.0；按学名匹配，有删减），全球统一，不随地点变化</span></dd>
               {p.quality && <><dt>综合分</dt><dd><b>{p.quality.q.toFixed(2)}</b>
                 <span className="ref" style={{ display: "block" }}>{qParts(p.quality.parts)}</span></dd></>}
               {(p.variants?.length ?? 0) > 0 && <><dt>同一张的其他文件</dt><dd>{p.variants!.map((v) => <div key={v}>{v.split("/").pop()}</div>)}

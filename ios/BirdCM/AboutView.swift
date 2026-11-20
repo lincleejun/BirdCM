@@ -7,7 +7,7 @@ struct AboutView: View {
         Link("github.com/lincleejun/BirdCM",destination:URL(string:"https://github.com/lincleejun/BirdCM")!)
         Text("眼嘴与飞行模型仅限非商业用途。BioCLIP 2.5：MIT；D-FINE nano：Apache-2.0；AviList v2026：CC BY 4.0；文本向量：CC0。")
         Text("中文鸟名：Gill F, D Donsker & P Rasmussen (Eds). 2026. IOC World Bird List v15.2. doi:10.14344/IOC.ML.15.2，CC BY 3.0。多语言表编纂 Peter Kovalik；中文来源与逐行归属见下方完整声明。少数 Wikidata 名称 CC0。")
-        Text("GBIF.org (17 November 2026) GBIF Occurrence Download / search API。观测记录数不是鸟的实际数量。IUCN (2026). The IUCN Red List of Threatened Species. Version 2026-1. doi:10.15468/0qnb58。IUCN 再分发条款尚不明确；构建时 BIRDCM_BUNDLE_IUCN=0 可移除等级数据。")
+        Text("GBIF.org (17 November 2026) GBIF Occurrence Download / search API。观测记录数不是鸟的实际数量。受威胁等级：IUCN (2026). The IUCN Red List of Threatened Species. Version 2026-1. https://www.iucnredlist.org，经 GBIF 发布，doi:10.15468/0qnb58，CC BY 4.0（creativecommons.org/licenses/by/4.0）。有改动：只保留鸟类的全球等级代码，并按学名匹配到 AviList v2026，少数鸟种未能匹配而不显示等级；IUCN 与 GBIF 不为本应用背书。")
         Text("BirdNET+ Geomodel v3.0.4：直接使用官方发布的模型。geomodel 仓库 LICENSE-MODELS.md 写 Apache-2.0，但 birdnet pip README 写 CC BY-NC-SA 4.0，两者冲突，需由所有者决定依据哪项声明。请引用 BirdNET。")
         Text("Clear 门控：CC BY / CC0 训练照片；不含非商用限制，完整训练照片署名与许可说明随 App 提供。")
         NavigationLink("完整模型与数据声明"){ResourceText(name:"NOTICE",ext:"md")}.accessibilityIdentifier("about.licences")
