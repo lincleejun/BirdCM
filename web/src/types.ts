@@ -42,6 +42,7 @@ export interface PhotoResult {
   clear: boolean | null;          // subject passed the clear-bird gate
   sharpness: number | null;       // head sharpness (grad ratio), uncalibrated scale: compare within a batch
   sharpness_region: "eye" | "head" | "box" | null; sharpness_window: Box | null;
+  clip_hi?: number | null; clip_lo?: number | null;   // share of the subject's core blown / crushed (absent before pipeline 10)
   aesthetic: number | null;       // 0-1, whole photo
   rarity: Rarity | null;          // pending
   rejected: boolean; reject_reason: string | null; pending: string[];
