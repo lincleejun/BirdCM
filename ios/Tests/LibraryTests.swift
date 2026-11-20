@@ -433,6 +433,25 @@ final class CrossPlatformTests: XCTestCase {
             }
         }
     }
+    /// Region names are cached by the code's bytes, as SQLite compares them: precomposed and decomposed "US-é" stay two lookups.
+    func testEBirdRegionNameCacheKeysOnBytes() throws {
+        let path = tmp().appendingPathExtension("sqlite"); try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(path.path, &db), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE regions(code TEXT, name_en TEXT); INSERT INTO regions VALUES('US-\u{00E9}', 'Precomposed');", nil, nil, nil), SQLITE_OK)
+        sqlite3_close(db)
+        let rarity = try Rarity(path: path)
+        let items = ["US-\u{00E9}", "US-e\u{0301}"].enumerated().map { i, code in
+            PhotoItem(id: UUID(), hash: "h\(i)", path: nil, missing: false, day: "2024-01-0\(i + 1)", wall: "2024-01-0\(i + 1)T08:00:00", dateSource: "photo", offset: nil, capture: "2024-01-0\(i + 1)T08:00:00",
+                      lat: nil, lon: nil, region: code, placeLabel: nil, placeSource: "region",
+                      subjects: [SubjectItem(id: "s\(i)", ordinal: 0, box: [0.1, 0.1, 0.5, 0.5], crop: nil, level: "species", modelKey: "Ardea alba", state: "", corrected: nil, count: nil, excluded: false)])
+        }
+        let ledger = Ledger(items: items)
+        let new = EBird.checklists(ledger, nil, rarity: rarity), old = Self.referenceChecklists(ledger, nil, rarity: rarity)
+        XCTAssertEqual(new.count, 2)
+        XCTAssertEqual(new.map { [$0.day, $0.name, $0.state, $0.country] }, old.map { [$0.day, $0.name, $0.state, $0.country] })
+        XCTAssertEqual(old.map(\.name), ["Precomposed US", "US-e\u{0301} US"])
+    }
     func testSharedUUIDAndArchiveConventions() throws {
         XCTAssertEqual(Library.stableUUID("abc"), "ba7816bf-8f01-5fea-8141-40de5dae2223")
         let zero = String(repeating: "0", count: 64)

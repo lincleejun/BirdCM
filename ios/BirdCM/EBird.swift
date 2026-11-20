@@ -32,12 +32,14 @@ enum EBird {
         // Each key split once, same split and tuple order as comparing split keys; with two or more keys every key is split
         // (a key without "|" still traps), with one key none is, as the comparator was never called.
         let keys = groups.count < 2 ? Array(groups.keys) : groups.keys.map { k in let x = k.split(separator: "|", maxSplits: 1); return (x[0], x[1], k) }.sorted { ($0.0, $0.1) < ($1.0, $1.1) }.map(\.2)
-        // Region code → English name, this call only; a miss (no row or a failed query) is not kept, so it falls back and asks again.
-        var names = [String: String]()
+        // Region code → English name, this call only, keyed by the code's UTF-8 bytes as SQLite compares them (String == is
+        // canonical equivalence); a miss (no row or a failed query) is not kept, so it falls back and asks again.
+        var names = [[UInt8]: String]()
         func regionName(_ code: String) -> String? {
-            if let hit = names[code] { return hit }
+            let key = Array(code.utf8)
+            if let hit = names[key] { return hit }
             let en = rarity?.rows("SELECT name_en FROM regions WHERE code=?", [code]).first?.first
-            names[code] = en
+            names[key] = en
             return en
         }
         return keys.map { key in
