@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import SQLite3
 @testable import BirdCM
 
 /// docs/design-lifelist.md §10 with synthetic sightings only (invented dates/places; bytes are labels or CC0 fixtures).
@@ -423,4 +424,50 @@ final class CrossPlatformTests: XCTestCase {
         print("PERF observations \(ledger.observations.count) species \(all.species)")
         XCTAssertGreaterThan(all.observations, 1000)
     }
+    /// regionAt equals the reference copy point by point: a global grid (sea, coast, borders) plus the synthetic library's points, on two databases.
+    func testRegionAtMatchesReference() throws {
+        var points = [(Double, Double)]()
+        for lat in stride(from: -88.9, through: 88.9, by: 3.7) { for lon in stride(from: -179.3, through: 179.9, by: 3.7) { points.append((lat, lon)) } }
+        points += (0..<920).map { i -> (Double, Double) in (20 + Double(i % 40) * 0.37, 100 + Double(i % 23) * 0.53) }
+        for (path, minimum) in [(Models.rarityURL, 2000), (fixtures.appendingPathComponent("rarity-global-test.sqlite"), 1000)] {
+            let db = try Rarity(path: path)
+            var found = 0
+            for (lat, lon) in points {
+                let a = db.regionAt(lat: lat, lon: lon), b = referenceRegionAt(db, lat: lat, lon: lon)
+                XCTAssertEqual(a.division, b.division, "\(path.lastPathComponent) \(lat),\(lon)"); XCTAssertEqual(a.country, b.country, "\(path.lastPathComponent) \(lat),\(lon)")
+                if b.country != nil { found += 1 }
+            }
+            XCTAssertGreaterThan(found, minimum, path.lastPathComponent)
+        }
+    }
+}
+
+/// Reference copy of Rarity.regionAt as of 45f524e (original SQL with the correlated area subquery), for equivalence checks.
+func referenceRegionAt(_ db: Rarity, lat: Double, lon: Double) -> (division: String?, country: String?) {
+    let sql = "SELECT r.code,r.level,s.pts,(SELECT sum((maxx-minx)*(maxy-miny)) FROM shapes t WHERE t.region_id=s.region_id) FROM shapes s JOIN regions r ON r.id=s.region_id WHERE minx<=? AND maxx>=? AND miny<=? AND maxy>=?"
+    var stmt: OpaquePointer?
+    guard sqlite3_prepare_v2(db.db, sql, -1, &stmt, nil) == SQLITE_OK else { return (nil, nil) }
+    defer { sqlite3_finalize(stmt) }
+    for (i, v) in [lon + 0.25, lon - 0.25, lat + 0.25, lat - 0.25].enumerated() { sqlite3_bind_double(stmt, Int32(i + 1), v) }
+    var rings = [String: [[Double]]](), areas = [String: Double](), levels = [String: Int]()
+    while sqlite3_step(stmt) == SQLITE_ROW {
+        let code = String(cString: sqlite3_column_text(stmt, 0)), n = Int(sqlite3_column_bytes(stmt, 2)) / 4
+        guard let blob = sqlite3_column_blob(stmt, 2) else { continue }
+        let data = Data(bytes: blob, count: n * 4)
+        let ring = data.withUnsafeBytes { raw in (0..<n).map { Double(Float(bitPattern: UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: $0 * 4, as: UInt32.self)))) } }
+        rings[code, default: []].append(ring); areas[code] = sqlite3_column_double(stmt, 3); levels[code] = Int(sqlite3_column_int(stmt, 1))
+    }
+    var hit = [Int: String](), nearest: (Double, String)?
+    for code in rings.keys.sorted(by: { areas[$0]! > areas[$1]! }) {
+        var inside = false
+        for ring in rings[code]! { if Boundaries.inside(lon, lat, ring) { inside.toggle() } }
+        if inside { hit[levels[code]!] = code }
+        for ring in rings[code]! { for i in stride(from: 0, to: ring.count, by: 2) {
+            let d = pow(ring[i] - lon, 2) + pow(ring[i + 1] - lat, 2)
+            if d <= 0.0625 && (nearest == nil || d < nearest!.0 || (d == nearest!.0 && code < nearest!.1)) { nearest = (d, code) }
+        }}
+    }
+    if hit.isEmpty, let nearest { hit[levels[nearest.1]!] = nearest.1 }
+    if hit[1] != nil && hit[0] == nil { hit[0] = String(hit[1]!.prefix(2)) }
+    return (hit[1], hit[0])
 }
