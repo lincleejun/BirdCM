@@ -516,6 +516,23 @@ final class CrossPlatformTests: XCTestCase {
             XCTAssertGreaterThan(found, minimum, path.lastPathComponent)
         }
     }
+    /// A TEXT box value compares greater than any number in SQL (minx never <=, maxx always >=); regionAt agrees with the original SQL.
+    func testRegionAtTextBoxMatchesReference() throws {
+        let square = "X'00000000000000000000803F000000000000803F0000803F000000000000803F'"   // float32 ring (0,0) (1,0) (1,1) (0,1)
+        for (box, expected) in [("'bad',0,1,1", nil), ("0,0,'bad',1", "XX")] as [(String, String?)] {   // minx,miny,maxx,maxy
+            let path = tmp().appendingPathExtension("sqlite"); try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var db: OpaquePointer?
+            XCTAssertEqual(sqlite3_open(path.path, &db), SQLITE_OK)
+            XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE regions(id INTEGER PRIMARY KEY, code TEXT UNIQUE, country TEXT, level INTEGER, name_en TEXT, name_zh TEXT); CREATE TABLE shapes(region_id INTEGER, minx REAL, miny REAL, maxx REAL, maxy REAL, pts BLOB); INSERT INTO regions VALUES(1,'XX','XX',0,'X','X'); INSERT INTO shapes VALUES(1,\(box),\(square));", nil, nil, nil), SQLITE_OK)
+            sqlite3_close(db)
+            let rarity = try Rarity(path: path)
+            let a = rarity.regionAt(lat: 0.5, lon: 0.5), b = referenceRegionAt(rarity, lat: 0.5, lon: 0.5)
+            XCTAssertEqual(b.country, expected, box)
+            XCTAssertEqual(a.country, b.country, box); XCTAssertEqual(a.division, b.division, box)
+            var s: OpaquePointer?; XCTAssertEqual(sqlite3_prepare_v2(rarity.db, "SELECT 9e999", -1, &s, nil), SQLITE_OK)   // the +Inf the box read relies on
+            XCTAssertEqual(sqlite3_step(s), SQLITE_ROW); XCTAssertEqual(sqlite3_column_double(s, 0), .infinity); sqlite3_finalize(s)
+        }
+    }
 }
 
 /// Reference copy of Rarity.regionAt as of 45f524e (original SQL with the correlated area subquery), for equivalence checks.

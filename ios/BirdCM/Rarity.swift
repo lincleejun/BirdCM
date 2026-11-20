@@ -46,13 +46,37 @@ final class Rarity {
         areaLock.lock(); areaCache[id] = value; areaLock.unlock()
         return value
     }
+    private var boxCache: [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]?
+    private let boxLock = NSLock()
+    /// Every shape's rowid and bounding box, read once per instance (NULL boxes never match in SQL, so they are left out;
+    /// TEXT/BLOB values compare above every number in SQL, so they are read as +Inf). nil when the read fails part way; nothing is kept and the next call reads again.
+    private func boxes() -> [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]? {
+        boxLock.lock(); if let hit = boxCache { boxLock.unlock(); return hit }; boxLock.unlock()
+        var stmt: OpaquePointer?
+        let col = { (c: String) in "CASE WHEN typeof(\(c)) IN ('text','blob') THEN 9e999 ELSE \(c) END" }
+        guard sqlite3_prepare_v2(db, "SELECT rowid,\(["minx", "maxx", "miny", "maxy"].map(col).joined(separator: ",")) FROM shapes WHERE minx IS NOT NULL AND maxx IS NOT NULL AND miny IS NOT NULL AND maxy IS NOT NULL", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        var out = [(id: Int64, minx: Double, maxx: Double, miny: Double, maxy: Double)]()
+        var rc = sqlite3_step(stmt)
+        while rc == SQLITE_ROW {
+            out.append((sqlite3_column_int64(stmt, 0), sqlite3_column_double(stmt, 1), sqlite3_column_double(stmt, 2), sqlite3_column_double(stmt, 3), sqlite3_column_double(stmt, 4)))
+            rc = sqlite3_step(stmt)
+        }
+        guard rc == SQLITE_DONE else { return nil }
+        boxLock.lock(); if boxCache == nil { boxCache = out }; let value = boxCache!; boxLock.unlock()
+        return value
+    }
     /// Port of rarity_global.region_at: ISO codes, even/odd rings, smallest area wins, 0.25° coastal tolerance.
     func regionAt(lat:Double,lon:Double) -> (division:String?,country:String?) {
+        // Same box test as the former SQL (minx<=lon+0.25 AND maxx>=lon-0.25 AND miny<=lat+0.25 AND maxy>=lat-0.25), done in memory; only the hits are read.
+        guard let boxes=boxes() else {return (nil,nil)}
+        let x1=lon+0.25, x0=lon-0.25, y1=lat+0.25, y0=lat-0.25
+        let ids=boxes.filter {$0.minx<=x1 && $0.maxx>=x0 && $0.miny<=y1 && $0.maxy>=y0}.map {String($0.id)}
+        guard !ids.isEmpty else {return (nil,nil)}
         var stmt:OpaquePointer?
-        let sql="SELECT r.code,r.level,s.pts,s.region_id FROM shapes s JOIN regions r ON r.id=s.region_id WHERE minx<=? AND maxx>=? AND miny<=? AND maxy>=?"
+        let sql="SELECT r.code,r.level,s.pts,s.region_id FROM shapes s JOIN regions r ON r.id=s.region_id WHERE s.rowid IN (\(ids.joined(separator:",")))"
         guard sqlite3_prepare_v2(db,sql,-1,&stmt,nil)==SQLITE_OK else {return (nil,nil)}
         defer{sqlite3_finalize(stmt)}
-        for (i,v) in [lon+0.25,lon-0.25,lat+0.25,lat-0.25].enumerated() {sqlite3_bind_double(stmt,Int32(i+1),v)}
         var rings=[String:[[Double]]](), areas=[String:Double](), levels=[String:Int]()
         while sqlite3_step(stmt)==SQLITE_ROW {
             let code=String(cString:sqlite3_column_text(stmt,0)), n=Int(sqlite3_column_bytes(stmt,2))/4
