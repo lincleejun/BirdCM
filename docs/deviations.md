@@ -240,8 +240,10 @@
   `xmpDM:good`，没有 `pick`；ExifTool 论坛的原帖没能读到（站点当天不可用）。
 
 80. **只给 RAW（`.ARW`）写边车，文件名 `<原名去扩展名>.xmp`**（`IMG_0001.ARW` → `IMG_0001.xmp`，不是 `IMG_0001.ARW.xmp`）。
-    已有边车按名字不分大小写找（`IMG_0001.XMP` 就写回它）。**JPEG 和 DNG 跳过**：Lightroom 把它们的元数据写在文件里、不读旁边的 `.xmp`，
-    而观羽不改原片本体；跳过几张和原因在确认框和返回值里列出。HEIC 等格式观羽本来就不扫。
+    已有边车按名字不分大小写找（`IMG_0001.XMP` 就写回它）。**JPEG 和 DNG 跳过**：Adobe 帮助只写了 Lightroom 把它们的元数据
+    *写*在文件里面；「它也不从旁边的 `.xmp` 读」是我们据此推断的，没有找到明说的来源（`create-xmp-acr-files` 页还说边车支持
+    「RAW 和少数非 RAW 格式」，没列是哪些）。要让它们读到就得改原片本体，这违反「不改原片」，所以跳过；跳过几张和原因在确认框和返回值里列出。
+    HEIC 等格式观羽本来就不扫。
 81. **星级 → `xmp:Rating`**（`photo.stars`，含手动星级）：0–3 原样；**淘汰 → `xmp:Rating = -1`，另加 `xmpDM:pick = -1`、`xmpDM:good = false`**
     （-1 是规范里的 rejected；pick / good 是 Lightroom 13.2 起的「拒绝」旗标）。还没评星（`stars` 为空）不写 Rating。
     不是淘汰时不碰 pick / good（用户自己的留用旗标保留），只有上次是我们标的淘汰、这次不是了，才把我们写的 pick / good 去掉。
@@ -262,4 +264,6 @@
 85. **Lightroom 的衍生 DNG（`-Enhanced-NR` 等）不单独写**：它们已并到原 RAW 名下（`decode.py` 的 `pair_variants`，`photo.variants`），
     边车只对应原 RAW（`IMG_0001.xmp`）；衍生 DNG 本身是 DNG，元数据在文件里，Lightroom 也不读它的边车。
 86. **没在 Lightroom 里实测**：Lightroom 是否把 `xmp:Rating = -1` 读成拒绝旗标（还是读成 0 星）、13.2 以前的版本怎样处理 pick、
-    从文件读取元数据后关键字是否正确进到关键字列表，都待主人在 Lightroom Classic 里验证。
+    从文件读取元数据后平级的 `lr:hierarchicalSubject` 关键字是否正确进到关键字列表、JPEG / DNG 旁的 `.xmp` 是否真的被忽略，
+    都待主人在 Lightroom Classic 里验证。测试用的已有边车是手写的，没有拿带蒙版 / AI 调整、带 `.acr` 伴随文件的真实 Lightroom 边车试过。
+    已有的 Lightroom 星级会被观羽的星级替换（0 星也写 `Rating = 0`）；撤回按扫描分，重扫后的新扫描撤不了旧扫描那一批。

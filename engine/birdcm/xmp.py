@@ -16,11 +16,12 @@ from pathlib import Path
 
 from birdcm.decode import safe_arg
 
-SIDECAR_EXT = {".arw"}          # RAW only: Lightroom keeps JPEG / DNG metadata inside the file and reads no sidecar for them
+SIDECAR_EXT = {".arw"}          # RAW only: Lightroom keeps JPEG / DNG metadata inside the file (that it reads no sidecar for
+                                # them is our reading of Adobe's help, not tested: docs/deviations.md 80)
 RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
 KEYWORD_TAGS = ("{http://purl.org/dc/elements/1.1/}subject", "{http://ns.adobe.com/lightroom/1.0/}hierarchicalSubject")
 
-SKIP_FORMAT = "JPEG / DNG：元数据在文件里面，Lightroom 不读旁边的 .xmp，观羽不改原片"
+SKIP_FORMAT = "JPEG / DNG：Lightroom 把它们的元数据写在文件里面，观羽不改原片"
 SKIP_PENDING = "还没识别完"
 SKIP_MISSING = "原片不在了"
 SKIP_ODD = "旁边的 .xmp 不是普通文件（链接或文件夹），没动它"
@@ -46,14 +47,14 @@ def keywords(p: dict) -> list[str]:
     return list(dict.fromkeys(x for x in (lab.get("zh"), lab.get("en"), lab["sci"]) if x))
 
 
-def sidecar(photo: Path) -> Path:
-    """<stem>.xmp in the photo's own folder; an existing one is matched whatever its case (IMG.XMP)."""
-    want = (photo.stem + ".xmp").lower()
-    with contextlib.suppress(OSError):
-        for e in os.scandir(photo.parent):
-            if e.name.lower() == want:
-                return photo.parent / e.name
-    return photo.parent / (photo.stem + ".xmp")
+def sidecar(photo: Path, listing: dict[Path, dict[str, str]]) -> Path:
+    """<stem>.xmp in the photo's own folder; an existing one is matched whatever its case (IMG.XMP). listing: the
+    folder's .xmp names by lower case, read once per folder."""
+    if photo.parent not in listing:
+        listing[photo.parent] = {}
+        with contextlib.suppress(OSError):
+            listing[photo.parent] = {e.name.lower(): e.name for e in os.scandir(photo.parent) if e.name.lower().endswith(".xmp")}
+    return photo.parent / listing[photo.parent].get((photo.stem + ".xmp").lower(), photo.stem + ".xmp")
 
 
 def existing_keywords(data: bytes) -> set[str]:
@@ -63,7 +64,7 @@ def existing_keywords(data: bytes) -> set[str]:
 
 def plan(photos: list[dict]) -> tuple[list[dict], dict[str, int]]:
     """-> ([{photo, path, side, before (bytes | None), stars, keywords}], {skip reason: count}). Reads only."""
-    todo, skipped = [], {}
+    todo, skipped, listing = [], {}, {}
     for p in photos:
         path = Path(p["path"])
         why = None
@@ -74,7 +75,7 @@ def plan(photos: list[dict]) -> tuple[list[dict], dict[str, int]]:
         elif not path.is_file():
             why = SKIP_MISSING
         if why is None:
-            side = sidecar(path)
+            side = sidecar(path, listing)
             kws, stars = keywords(p), p.get("stars")
             before = None
             # same folder, same stem: never anything else (a name from the database must not point elsewhere)
@@ -127,9 +128,8 @@ def place(target: Path, data: bytes) -> None:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())
-        if target.exists():
-            with contextlib.suppress(OSError):
-                os.chmod(tmp, target.stat().st_mode & 0o7777)
+        with contextlib.suppress(OSError):           # mkstemp makes 0600: keep the old sidecar's mode, else rw-r--r--
+            os.chmod(tmp, target.stat().st_mode & 0o7777 if target.exists() else 0o644)
         os.replace(tmp, target)
     except BaseException:
         with contextlib.suppress(OSError):
@@ -148,7 +148,7 @@ def write(store, exif, scan_id: int, photos: list[dict]) -> dict:
                 work.write_bytes(t["before"])
             prev = store.xmp_last(str(t["side"]))
             out = exif.run(args(t, prev, work)).decode(errors="replace")
-            if not work.is_file() or not ("updated" in out or "created" in out or "unchanged" in out):
+            if not work.is_file() or not any(f"1 image files {w}" in out for w in ("updated", "created", "unchanged")):
                 failed["exiftool 没写成"] = failed.get("exiftool 没写成", 0) + 1
                 continue
             after = work.read_bytes()

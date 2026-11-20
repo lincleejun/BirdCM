@@ -77,32 +77,45 @@ export default function ExportDialog({ scanId, photos, view, onClose, saveTable 
   };
 
   // Lightroom: XMP sidecars beside the RAWs, only after the person confirms the counts
-  const [xmp, setXmp] = useState<XmpPlan | null>(null);
-  const [asking, setAsking] = useState(false);
+  // the counts are taken when 写 XMP 边车… is clicked and the write uses those same ids; on open only the last batch (ids: [])
+  const [last, setLast] = useState<XmpPlan["last"]>(null);
+  const [asking, setAsking] = useState<{ plan: XmpPlan; ids: number[] } | null>(null);
+  const [busy, setBusy] = useState(false);
   const [xmpMsg, setXmpMsg] = useState("");
-  const loadXmp = () => post<XmpPlan>(`/api/scans/${scanId}/xmp`, { ids: chosen.map((p) => p.id), dry: true }).then(setXmp)
-    .catch((e) => setErr(String(e.message)));
+  const loadLast = () => post<XmpPlan>(`/api/scans/${scanId}/xmp`, { ids: [], dry: true }).then((x) => setLast(x.last)).catch(() => {});
+  useEffect(() => { loadLast(); }, [scanId]); // eslint-disable-line react-hooks/exhaustive-deps
   const chosenKey = chosen.map((p) => p.id).join(",");
-  useEffect(() => { setAsking(false); loadXmp(); }, [chosenKey, scanId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const writeXmp = async () => {
-    setErr(""); setAsking(false);
+  useEffect(() => { setAsking(null); }, [chosenKey]);
+  const askXmp = async () => {
+    setErr(""); setXmpMsg(""); setBusy(true);
+    const ids = chosen.map((p) => p.id);
     try {
-      const r = await post<XmpDone>(`/api/scans/${scanId}/xmp`, { ids: chosen.map((p) => p.id) });
+      const plan = await post<XmpPlan>(`/api/scans/${scanId}/xmp`, { ids, dry: true });
+      if (plan.create + plan.modify) setAsking({ plan, ids });
+      else setXmpMsg(Object.keys(plan.skipped).length ? `没有可写的：${skips(plan.skipped)}。` : "没有可写的照片。");
+    } catch (e) { setErr(String((e as Error).message)); }
+    setBusy(false);
+  };
+  const writeXmp = async () => {
+    if (!asking) return;
+    setErr(""); setBusy(true);
+    try {
+      const r = await post<XmpDone>(`/api/scans/${scanId}/xmp`, { ids: asking.ids });
       setXmpMsg(`新增 ${r.created} 个、修改 ${r.modified} 个 .xmp${r.unchanged ? `，${r.unchanged} 个已是这些内容` : ""}。`
         + (Object.keys(r.skipped).length ? ` 跳过：${skips(r.skipped)}。` : "") + " 在 Lightroom 里选中这些照片，元数据 › 从文件读取元数据。");
     } catch (e) { setErr(String((e as Error).message)); }
-    loadXmp();
+    setAsking(null); setBusy(false); loadLast();
   };
   const undoXmp = async () => {
-    setErr("");
+    setErr(""); setBusy(true);
     try {
       const r = await post<XmpUndo>(`/api/scans/${scanId}/xmp/undo`);
       setXmpMsg(`已撤回：删掉 ${r.deleted} 个、恢复 ${r.restored} 个。`
         + (r.kept.length ? ` ${r.kept.length} 个没动（${r.kept.map((k) => `${k.file}：${k.reason}`).join("；")}）。` : ""));
     } catch (e) { setErr(String((e as Error).message)); }
-    loadXmp();
+    setBusy(false); loadLast();
   };
-  const xmpN = xmp ? xmp.create + xmp.modify : 0;
+  const xmpN = asking ? asking.plan.create + asking.plan.modify : 0;
 
   return (
     <div className="dlg-body export">
@@ -132,21 +145,21 @@ export default function ExportDialog({ scanId, photos, view, onClose, saveTable 
       <section className="ebird">
         <h4 className="panel-h">写给 Lightroom（XMP 边车）</h4>
         <p className="hint">在每张 RAW 旁边写一个同名 .xmp（IMG_0001.ARW → IMG_0001.xmp）：星级（淘汰 = 拒绝）和鸟种关键字（中文名、英文名、学名，你改过的优先）。
-          原片本身不改；已有的 .xmp 只加改这几项，你自己的关键字和调整都留着。JPEG / DNG 的元数据在文件里面，Lightroom 不读旁边的 .xmp，所以跳过。</p>
-        {xmp && !asking && (
+          原片本身不改；已有的 .xmp 只加改这几项，你自己的关键字和调整都留着。JPEG / DNG 跳过：Lightroom 把它们的元数据写在文件里面，观羽不改原片。</p>
+        {!asking && (
           <div className="row">
-            <button className="btn" disabled={!xmpN} onClick={() => { setXmpMsg(""); setAsking(true); }}>写 XMP 边车…</button>
-            <button className="btn" disabled={!xmp.last} onClick={undoXmp}>撤回上次写入{xmp.last ? `（${xmp.last.files} 个文件）` : ""}</button>
-            {!xmpN && <small>{Object.keys(xmp.skipped).length ? `没有可写的：${skips(xmp.skipped)}` : "没有可写的照片"}</small>}
+            <button className="btn" disabled={busy || !chosen.length} onClick={askXmp}>写 XMP 边车…</button>
+            <button className="btn" disabled={busy || !last} onClick={undoXmp}>撤回上次写入{last ? `（${last.files} 个文件）` : ""}</button>
+            {busy && <small>正在处理…</small>}
           </div>
         )}
-        {xmp && asking && (
+        {asking && (
           <div className="warn" role="alertdialog" aria-label="确认写入 XMP">
-            <p>会在照片文件夹里新增 {xmp.create} 个、修改 {xmp.modify} 个 .xmp 文件，共 {xmpN} 个。原片不动，可以用「撤回上次写入」撤回。
-              {Object.keys(xmp.skipped).length > 0 && ` 跳过：${skips(xmp.skipped)}。`}</p>
+            <p>会在照片文件夹里新增 {asking.plan.create} 个、修改 {asking.plan.modify} 个 .xmp 文件，共 {xmpN} 个。原片不动，可以用「撤回上次写入」撤回。
+              {Object.keys(asking.plan.skipped).length > 0 && ` 跳过：${skips(asking.plan.skipped)}。`}</p>
             <div className="row">
-              <button className="btn primary" onClick={writeXmp}>写入 {xmpN} 个 .xmp</button>
-              <button className="btn link" onClick={() => setAsking(false)}>取消</button>
+              <button className="btn primary" disabled={busy} onClick={writeXmp}>{busy ? "正在写…" : `写入 ${xmpN} 个 .xmp`}</button>
+              <button className="btn link" disabled={busy} onClick={() => setAsking(null)}>取消</button>
             </div>
           </div>
         )}

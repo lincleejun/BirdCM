@@ -114,6 +114,7 @@ def test_write_merge_undo(tmp_path, monkeypatch):
     assert a["Subject"] == ["白头鹎", "Light-vented Bulbul", "Pycnonotus sinensis"]
     assert a["HierarchicalSubject"] == ["白头鹎", "Light-vented Bulbul", "Pycnonotus sinensis"]
     assert "白头鹎".encode() in (folder / "A.xmp").read_bytes()    # UTF-8 on disk, not an escape
+    assert (folder / "A.xmp").stat().st_mode & 0o777 == 0o644      # not mkstemp's 0600
     b, cc = readback(folder / "B.xmp"), readback(folder / "C.XMP")
     assert b["Rating"] == 3 and "白鹭" in b["Subject"] and "Pick" not in b
     assert cc["Rating"] == 2 and "橙嘴凤头燕鸥" in cc["Subject"] and cc["Pick"] == 1      # the person's Pick flag kept
@@ -125,6 +126,10 @@ def test_write_merge_undo(tmp_path, monkeypatch):
             o = {x for _, x in old.get(k, ("", []))[1]}
             assert o <= {x for _, x in new[k][1]}
     assert flat(before["C.XMP"])["{http://ns.adobe.com/xmp/1.0/DynamicMedia/}pick"] == "1"
+    kept = flat((folder / "B.xmp").read_bytes())                   # the comparison is not of two empty dicts
+    assert kept["{http://example.com/ns/custom/1.0/}Note"] == "私有字段 private"
+    assert kept["{http://ns.adobe.com/camera-raw-settings/1.0/}ToneCurvePV2012"] == (RDF + "Seq", [(None, "0, 0"), (None, "64, 58"), (None, "255, 255")])
+    assert kept["{http://ns.adobe.com/xap/1.0/mm/}History"][1][0][1]["{http://ns.adobe.com/xap/1.0/sType/ResourceEvent#}action"] == "saved"
 
     # a second export after a species correction: the old species keywords go, our earlier write stays undoable
     first_a = (folder / "A.xmp").read_bytes()
@@ -166,3 +171,18 @@ def test_refuses_odd_sidecars(tmp_path, monkeypatch):
     assert r["created"] == 1 and r["modified"] == 0
     assert r["skipped"] == {xmp.SKIP_FORMAT: 2, xmp.SKIP_BAD: 1, xmp.SKIP_ODD: 1}
     assert (folder / "B.xmp").read_bytes() == b"<not xml" and not (tmp_path / "elsewhere.xmp").exists()
+
+
+def test_reexport_keeps_a_keyword_the_person_had(tmp_path, monkeypatch):
+    """C.XMP already has the keyword 白头鹎 (the person's). Named 白头鹎, exported, renamed, exported again: it stays."""
+    c, store, sid, folder, ids = setup(tmp_path, monkeypatch)
+    fix = lambda sci: c.post(f"/api/scans/{sid}/corrections", json={"photo_id": ids["C.ARW"], "scope": "one", "sci": sci}, headers=H)
+    fix("Pycnonotus sinensis")
+    c.post(f"/api/scans/{sid}/xmp", json={"ids": [ids["C.ARW"]]}, headers=H)
+    assert set(readback(folder / "C.XMP")["Subject"]) == {"白头鹎", "家附近", "Light-vented Bulbul", "Pycnonotus sinensis"}  # a Bag: no order
+    fix("Egretta garzetta")
+    c.post(f"/api/scans/{sid}/xmp", json={"ids": [ids["C.ARW"]]}, headers=H)
+    assert set(readback(folder / "C.XMP")["Subject"]) == {"白头鹎", "家附近", "白鹭", "Little Egret", "Egretta garzetta"}
+    for _ in range(2):
+        c.post(f"/api/scans/{sid}/xmp/undo", headers=H)
+    assert (folder / "C.XMP").read_bytes() == (FIX / "elem-form.xmp").read_bytes()
