@@ -61,6 +61,11 @@ MSG: dict[str, tuple[str, str]] = {
     "stars.rare": ("当地少见，留作记录", "Uncommon here; kept as a record"),
     "stars.flying_flawed": ("飞版，有瑕疵", "In flight, with flaws"),
     "stars.record": ("留作记录", "Kept as a record"),
+    "stars.clip_hi": ("高光溢出", "blown highlights"),
+    "stars.clip_lo": ("暗部死黑", "crushed shadows"),
+    "stars.expo": ("鸟身上{bad}", "{bad} on the bird"),
+    "stars.expo_malus": ("鸟身上{bad}（扣分）；{r}", "{bad} on the bird (marked down); {r}"),
+    "stars.expo_joined": ("鸟身上{bad}；{r}", "{bad} on the bird; {r}"),
     # ---- stars.py: settings ----
     "stars.v_object": ("星级设置要是一个对象", "The star settings must be an object"),
     "stars.v_strategy": ("strategy 只能是 select 或 quota", "strategy must be select or quota"),

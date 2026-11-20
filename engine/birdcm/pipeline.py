@@ -32,7 +32,7 @@ from birdcm import i18n
 from birdcm.i18n import MSG
 
 SMALL_BOX = 128                 # a subject box shorter than this (2048-frame px) is cropped from the decode resolution
-PIPELINE_VERSION = 9            # bump when any step's output changes: old results stop being reused
+PIPELINE_VERSION = 10           # bump when any step's output changes: old results stop being reused
 SETTINGS = {"frame": decode.FRAME, "embedded_min": decode.EMBEDDED_MIN, "min_crop": geometry.MIN_CROP,
             "context": geometry.CONTEXT, "af_near": geometry.AF_NEAR, "max_boxes": 5}
 DECODE_TIMEOUT = 120.0          # seconds one decode may run before its pool is killed and the file isolated
@@ -448,6 +448,7 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         x0, y0, x1, y1 = s["box"]
         cut = Image.fromarray(d["frame"]).crop((int(x0 * fw), int(y0 * fh), max(int(x0 * fw) + 1, int(x1 * fw)), max(int(y0 * fh) + 1, int(y1 * fh))))
         look = list(cut.convert("L").resize((8, 8), Image.Resampling.BOX).tobytes())
+    clip = clipping(d["frame"], s["box"]) if s else None
     ex = {k: exif.get(k) for k in ("camera", "camera_id", "lens", "focal_mm", "aperture", "shutter", "iso", "ev", "focus_mode", "taken_at", "gps")}
     reason = None if s else MSG["stars.no_clear_bird" if dets else "stars.no_bird"][0]     # stored: Chinese, shown via i18n.text
     return {
@@ -466,10 +467,29 @@ def build(it: dict, d: dict, exif: dict, boxes: list, rects: list, looks: list, 
         "clear": s["clear"] if s else (False if dets else None),
         "sharpness": sharp["score"] if sharp else None, "sharpness_region": sharp["region"] if sharp else None,
         "sharpness_window": sharp["window"] if sharp else None,
+        "clip_hi": clip[0] if clip else None, "clip_lo": clip[1] if clip else None,
         "aesthetic": None, "rarity": None, "look": look,
         "rejected": s is None, "reject_reason": reason,
         "pending": (["aesthetic"] if s else []) + ([] if where else ["geo"]) + ["rarity"],
     }
+
+
+CLIP_HI, CLIP_LO = 254, 3     # a pixel is blown when all three channels are >= CLIP_HI, crushed when all are <= CLIP_LO
+
+
+def clipping(frame: np.ndarray, box: list[float]) -> tuple[float, float]:
+    """(blown, crushed): share of the subject's core that is clipped white / black, on the 2048 frame the detector saw.
+    Core = the box's middle 60 % each way, so the sky or water in its corners counts little. All three channels must
+    clip: a well exposed white bird has up to 7 % of its core at 250-253 but under 2 % at 254-255 (docs/stars.md,
+    曝光检测); a saturated colour clips one channel only. Measured on the camera's JPEG: a highlight the RAW still holds can read as blown here."""
+    fh, fw = frame.shape[:2]
+    x0, y0, x1, y1 = box
+    mx, my = 0.2 * (x1 - x0), 0.2 * (y1 - y0)
+    c = frame[int((y0 + my) * fh):max(int((y0 + my) * fh) + 1, int((y1 - my) * fh)),
+              int((x0 + mx) * fw):max(int((x0 + mx) * fw) + 1, int((x1 - mx) * fw))]
+    if not c.size:
+        return 0.0, 0.0
+    return round(float((c.min(2) >= CLIP_HI).mean()), 4), round(float((c.max(2) <= CLIP_LO).mean()), 4)
 
 
 def head_sharpness_of(gray, det: dict) -> dict:

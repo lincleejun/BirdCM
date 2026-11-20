@@ -1,6 +1,7 @@
 """Stars against the owner's Lightroom keeps. TEST ONLY: nothing is fitted on these photos.
 
   uv run python bench/stars_bench.py 10061114 DB_PATH SCAN_ID         # results from a BirdCM scan (read-only)
+  uv run python bench/stars_bench.py 10061114 RESULTS.jsonl           # ... or from bench/run_files.py over the folder
   uv run python bench/stars_bench.py 10161115 RESULTS.jsonl           # results from bench/run_files.py
 
 Pre-declared grid (fixed before the first run, all of it reported): strategy "quota" with its defaults (30 % / 30 %),
@@ -42,12 +43,18 @@ def load(name: str, src: str, scan: int | None):
         keep = {r["stem"]: r["rating"] > 0 for r in rows}
         gard = {r["stem"]: (r["verdict"] == "pick", r["verdict"] != "reject", r["score"] or 0) for r in rows}
         supk = None
-        db = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
         res = {}
-        for path, result in db.execute("SELECT path, result FROM photo WHERE scan_id = ?", (scan,)):
-            p = Path(path)
-            if p.suffix.lower() == ".arw" and p.stem.lower() in keep:
-                res[p.stem.lower()] = json.loads(result) if result else None
+        if src.endswith(".jsonl"):                                       # bench/run_files.py over the folder
+            for line in open(src):
+                e = json.loads(line)
+                if Path(e["path"]).stem.lower() in keep:
+                    res[Path(e["path"]).stem.lower()] = e["result"]
+        else:
+            db = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
+            for path, result in db.execute("SELECT path, result FROM photo WHERE scan_id = ?", (scan,)):
+                p = Path(path)
+                if p.suffix.lower() == ".arw" and p.stem.lower() in keep:
+                    res[p.stem.lower()] = json.loads(result) if result else None
     stems = sorted(s for s in keep if s in res)
     return stems, keep, res, gard, supk
 
