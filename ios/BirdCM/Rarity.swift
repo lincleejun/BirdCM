@@ -131,6 +131,41 @@ final class Rarity {
         }
         return (out, total, s.coverage)
     }
+    /// RarityBook.compute's read of the monthCounts table: the same source() and rows (text-bound, joined to species), tiers only, by species id.
+    /// A tier stored as an integer is read as one, anything else as Int(text) ?? 0 like monthCounts. nil when the month has no data;
+    /// a failed prepare gives an empty table and a step error part way keeps the rows read so far, as rows() does.
+    func monthTiers(_ code: String, month: Int) -> [Int64: Int]? {
+        guard let src = source(Place(lat: 0, lon: 0, label: "", source: "region", regionCode: code), month: month).source else { return nil }
+        var out = [Int64: Int]()
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT sp.id,c.tier FROM counts c JOIN species sp ON sp.id=c.species_id WHERE c.region_id=? AND c.month=?", -1, &stmt, nil) == SQLITE_OK else { return out }
+        defer { sqlite3_finalize(stmt) }
+        for (i, v) in [src, String(month)].enumerated() { _ = v.withCString { sqlite3_bind_text(stmt, Int32(i + 1), $0, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self)) } }
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            out[sqlite3_column_int64(stmt, 0)] = sqlite3_column_type(stmt, 1) == SQLITE_INTEGER ? Int(sqlite3_column_int64(stmt, 1)) : Int(sqlite3_column_text(stmt, 1).map { String(cString: $0) } ?? "") ?? 0
+        }
+        return out
+    }
+    /// RarityBook.compute's one read of the species table. ids: name → id, the name as rows() reads it (NULL as ""), keyed by Swift String like the
+    /// old Set and month dictionary. iucn: keyed by the name's bytes, as `scientific=?` compares (NULL and BLOB names never match; NULL or empty = none).
+    /// nil when the query can't be prepared, an id isn't an integer, or two rows share a name by Swift equality: the caller then takes the old path.
+    /// Also nil on a step error part way: the old scientific-only read and per-species lookups may not fail where this three-column scan does.
+    func speciesIndex() -> (ids: [String: Int64], iucn: [[UInt8]: String])? {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT id,scientific,iucn FROM species", -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        var ids = [String: Int64](), iucn = [[UInt8]: String]()
+        var rc = sqlite3_step(stmt)
+        while rc == SQLITE_ROW {
+            guard sqlite3_column_type(stmt, 0) == SQLITE_INTEGER else { return nil }
+            let text = sqlite3_column_type(stmt, 1) == SQLITE_TEXT   // before column_text, which converts
+            let p = sqlite3_column_text(stmt, 1)
+            guard ids.updateValue(sqlite3_column_int64(stmt, 0), forKey: p.map { String(cString: $0) } ?? "") == nil else { return nil }
+            if text, let p, let c = sqlite3_column_text(stmt, 2).map({ String(cString: $0) }), !c.isEmpty { iucn[Array(UnsafeBufferPointer(start: p, count: Int(sqlite3_column_bytes(stmt, 1))))] = c }
+            rc = sqlite3_step(stmt)
+        }
+        return rc == SQLITE_DONE ? (ids, iucn) : nil
+    }
     /// The one IUCN read for display: the current table's category for a species (nil when hidden or unknown).
     /// Never the value stored inside an old Identification.
     func iucn(_ sci: String) -> String? {

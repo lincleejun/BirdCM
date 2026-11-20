@@ -10,24 +10,35 @@ struct RarityBook {
     static func compute(_ ledger: Ledger, _ range: (String, String)?) -> RarityBook {
         var book = RarityBook()
         guard let db = try? Rarity(path: Models.rarityURL) else { book.unavailable = Set(ledger.observations.map(\.id)); return book }
+        // Species read once: membership and tiers by name → id (Swift String keys, as before), IUCN by the name's bytes (as `scientific=?`).
+        // A name held twice (Swift-equal) or an unreadable species table: the whole call takes the old per-name path (monthCounts, iucn).
+        let index = db.speciesIndex()
+        let inTable = index == nil ? Set(db.rows("SELECT scientific FROM species", []).map { $0[0] }) : []     // absent = unknown, not 无记录
+        let known: (String) -> Bool = { s in index.map { $0.ids[s] != nil } ?? inTable.contains(s) }
+        let table: (String, Int) -> ((String) -> Int)? = { code, month in
+            if let index { return db.monthTiers(code, month: month).map { t in { index.ids[$0].flatMap { t[$0] } ?? 0 } } }
+            return db.monthCounts(Place(lat: 0, lon: 0, label: "", source: "region", regionCode: code), month: month).map { m in { m.counts[$0]?.tier ?? 0 } }
+        }
         // One GBIF month table per (region, month), read once; species tiers are dictionary lookups (no tier = 无记录).
-        var months = [String: [String: (n: Int, tier: Int)]?]()
-        let inTable = Set(db.rows("SELECT scientific FROM species", []).map { $0[0] })     // absent = unknown, not 无记录
+        var months = [String: ((String) -> Int)?]()
         for o in ledger.observations where Ledger.inRange(o.day, range) {
-            guard let month = Int(o.day.dropFirst(5).prefix(2)), inTable.contains(o.species) else { book.unavailable.insert(o.id); continue }
-            var known = [Int]()
+            guard let month = Int(o.day.dropFirst(5).prefix(2)), known(o.species) else { book.unavailable.insert(o.id); continue }
+            var tiers = [Int]()
             for item in ledger.evidence(o) {
                 // ponytail: region cached per place bucket (≈1 km); region edges inside one bucket are ignored.
                 let r = item.lat.map { db.regionAt(lat: $0, lon: item.lon!, bucket: item.placeKey) }
                 guard let code = item.region ?? r?.division ?? r?.country else { continue }
                 let key = "\(code)|\(month)"
-                if months[key] == nil { months[key] = .some(db.monthCounts(Place(lat: 0, lon: 0, label: "", source: "region", regionCode: code), month: month)?.counts) }
-                if let table = months[key] ?? nil { known.append(table[o.species]?.tier ?? 0) }
+                if months[key] == nil { months[key] = .some(table(code, month)) }
+                if let tier = months[key] ?? nil { tiers.append(tier(o.species)) }
             }
-            if known.isEmpty { book.unavailable.insert(o.id) } else { book.tiers[o.id] = known }
+            if tiers.isEmpty { book.unavailable.insert(o.id) } else { book.tiers[o.id] = tiers }
         }
+        // hideIUCN read once per call (the old path's iucn(k) also reads it per species); the bytes stop at a NUL as the old text binding did.
         if !UserDefaults.standard.bool(forKey: "hideIUCN") {
-            for k in Set(ledger.observations.filter { Ledger.inRange($0.day, range) }.map(\.species)) { if let c = db.iucn(k) { book.iucn[k] = c } }
+            for k in Set(ledger.observations.filter { Ledger.inRange($0.day, range) }.map(\.species)) {
+                if let c = index != nil ? index!.iucn[Array(k.utf8.prefix { $0 != 0 })] : db.iucn(k) { book.iucn[k] = c }
+            }
         }
         return book
     }

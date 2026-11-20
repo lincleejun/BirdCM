@@ -564,3 +564,154 @@ func referenceRegionAt(_ db: Rarity, lat: Double, lon: Double) -> (division: Str
     if hit[1] != nil && hit[0] == nil { hit[0] = String(hit[1]!.prefix(2)) }
     return (hit[1], hit[0])
 }
+
+/// Reference copy of RarityBook.compute as of cd08823, with the Rarity.monthCounts and per-species Rarity.iucn it called inlined verbatim.
+func referenceRarityBook(_ ledger: Ledger, _ range: (String, String)?) -> RarityBook {
+    func monthCounts(_ db: Rarity, _ place: Place, month: Int) -> (counts: [String: (n: Int, tier: Int)], total: Int, coverage: String?)? {
+        let s = db.source(place, month: month)
+        guard let src = s.source else { return nil }
+        var out = [String: (Int, Int)](), total = 0
+        for r in db.rows("SELECT sp.scientific,c.n,c.tier FROM counts c JOIN species sp ON sp.id=c.species_id WHERE c.region_id=? AND c.month=?", [src, String(month)]) {
+            let n = Int(r[1]) ?? 0; out[r[0]] = (n, Int(r[2]) ?? 0); total += n
+        }
+        return (out, total, s.coverage)
+    }
+    func iucn(_ db: Rarity, _ sci: String) -> String? {
+        UserDefaults.standard.bool(forKey:"hideIUCN") ? nil : db.rows("SELECT iucn FROM species WHERE scientific=?",[sci]).first.flatMap{$0[0].isEmpty ? nil:$0[0]}
+    }
+    var book = RarityBook()
+    guard let db = try? Rarity(path: Models.rarityURL) else { book.unavailable = Set(ledger.observations.map(\.id)); return book }
+    var months = [String: [String: (n: Int, tier: Int)]?]()
+    let inTable = Set(db.rows("SELECT scientific FROM species", []).map { $0[0] })
+    for o in ledger.observations where Ledger.inRange(o.day, range) {
+        guard let month = Int(o.day.dropFirst(5).prefix(2)), inTable.contains(o.species) else { book.unavailable.insert(o.id); continue }
+        var known = [Int]()
+        for item in ledger.evidence(o) {
+            let r = item.lat.map { db.regionAt(lat: $0, lon: item.lon!, bucket: item.placeKey) }
+            guard let code = item.region ?? r?.division ?? r?.country else { continue }
+            let key = "\(code)|\(month)"
+            if months[key] == nil { months[key] = .some(monthCounts(db, Place(lat: 0, lon: 0, label: "", source: "region", regionCode: code), month: month)?.counts) }
+            if let table = months[key] ?? nil { known.append(table[o.species]?.tier ?? 0) }
+        }
+        if known.isEmpty { book.unavailable.insert(o.id) } else { book.tiers[o.id] = known }
+    }
+    if !UserDefaults.standard.bool(forKey: "hideIUCN") {
+        for k in Set(ledger.observations.filter { Ledger.inRange($0.day, range) }.map(\.species)) { if let c = iucn(db, k) { book.iucn[k] = c } }
+    }
+    return book
+}
+
+extension CrossPlatformTests {
+    /// Sets a UserDefaults key for this test only; the previous value (or its absence) comes back at teardown.
+    func setDefault(_ key: String, _ value: Any?) {
+        let old = UserDefaults.standard.object(forKey: key)
+        addTeardownBlock { if let old { UserDefaults.standard.set(old, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) } }
+        if let value { UserDefaults.standard.set(value, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+    }
+    func photo(_ hash: String, _ day: String, _ species: String, lat: Double? = nil, lon: Double? = nil, region: String? = nil) -> PhotoItem {
+        PhotoItem(id: UUID(), hash: hash, path: nil, missing: false, day: day, wall: day + "T08:00:00", dateSource: "photo", offset: nil, capture: day + "T08:00:00",
+                  lat: lat, lon: lon, region: region, placeLabel: nil, placeSource: lat == nil ? "region" : "photo",
+                  subjects: [SubjectItem(id: "s" + hash, ordinal: 0, box: [0.1, 0.1, 0.5, 0.5], crop: nil, level: "species", modelKey: species, state: "", corrected: nil, count: nil, excluded: false)])
+    }
+    func assertBook(_ ledger: Ledger, _ range: (String, String)?, _ label: String, file: StaticString = #filePath, line: UInt = #line) -> RarityBook {
+        let new = RarityBook.compute(ledger, range), old = referenceRarityBook(ledger, range)
+        XCTAssertEqual(new.tiers, old.tiers, label, file: file, line: line)
+        XCTAssertEqual(new.unavailable, old.unavailable, label, file: file, line: line)
+        XCTAssertEqual(new.iucn, old.iucn, label, file: file, line: line)
+        return old
+    }
+    /// RarityBook.compute equals the reference copy on every output (tiers in evidence order, unavailable, iucn), IUCN shown and hidden:
+    /// a synthetic library of another size and species set, the desktop fixture, and hand-made observations (several evidence photos, unknown species, bad month).
+    func testRarityBookMatchesReference() throws {
+        let dir = tmp()
+        try Library(dir: dir).seedSynthetic(4_000, species: Array(Catalogue.shared.all.dropFirst(300).prefix(250).map(\.sci)))
+        let synthetic = Ledger(items: try Library(dir: dir).items(), edits: [:], known: Catalogue.shared.contains)
+        let lib = try desktopLibrary()
+        let desktop = Ledger(items: try lib.items(), edits: try lib.groupEdits(), known: Catalogue.shared.contains)
+        // One observation with five photos at one point: explicit regions CN-SX (1), US-AK (2), the point itself (CN-BJ, 4), AS (no source: skipped), BE (3).
+        let made = Ledger(items: [
+            photo("h1", "2024-05-10", "Ardea alba", lat: 40.0, lon: 116.4, region: "CN-SX"), photo("h2", "2024-05-10", "Ardea alba", lat: 40.0, lon: 116.4, region: "US-AK"),
+            photo("h3", "2024-05-10", "Ardea alba", lat: 40.0, lon: 116.4), photo("h4", "2024-05-10", "Ardea alba", lat: 40.0, lon: 116.4, region: "AS"),
+            photo("h5", "2024-05-10", "Ardea alba", lat: 40.0, lon: 116.4, region: "BE"),
+            photo("h6", "2024-05-11", "Ardea alba", region: "AS"),                        // every photo without a source: unavailable
+            photo("h7", "2024-05-11", "Nonexistus fakeus", region: "CN-BJ"),               // not in the species table: unavailable
+            photo("h8", "2024-05-11", "Aptenodytes forsteri", region: "CN-BJ"),            // in the table, not in this month's counts: 0
+            photo("h9", "2024-xx-11", "Ardea alba", region: "CN-BJ"),                      // month not a number: unavailable
+            photo("h10", "2024-05-12", "Ardea alba", region: "ZZ-QQ"),                     // unknown region, fallback to ZZ finds nothing: unavailable
+            photo("h11", "2024-05-12", "Ardea alba"),                                      // no place at all: unavailable
+        ])
+        for hide in [false, true] {
+            setDefault("hideIUCN", hide)
+            for (label, ledger) in [("synthetic", synthetic), ("desktop", desktop), ("made", made)] {
+                for range in [nil, ("2024-01-01", "2024-06-30")] as [(String, String)?] {
+                    let old = assertBook(ledger, range, "\(label) hide \(hide) range \(range != nil)")
+                    if label == "synthetic" && range == nil { XCTAssertGreaterThan(old.tiers.count, 5000); XCTAssertEqual(old.iucn.isEmpty, hide) }
+                    if label == "desktop" && range == nil { XCTAssertGreaterThan(old.tiers.count, 3) }
+                }
+            }
+            let old = referenceRarityBook(made, nil)
+            XCTAssertEqual(made.observations.first { $0.day == "2024-05-10" }.flatMap { old.tiers[$0.id] }, [1, 2, 4, 3])
+            XCTAssertEqual(made.observations.filter { old.unavailable.contains($0.id) }.count, 5)
+            XCTAssertEqual(made.observations.first { $0.species == "Aptenodytes forsteri" }.flatMap { old.tiers[$0.id] }, [0])
+        }
+    }
+    /// Small hand-made rarity databases (rarityPath override): a scientific name stored twice in Unicode-equivalent forms, a decomposed name looked up
+    /// precomposed, a name stored as BLOB (in the table, never matches `scientific=?`), tiers stored as REAL / TEXT / out of range, NULL and empty IUCN, a counts row for a missing species, a NULL and an empty source, fallback to the country; and an unopenable path.
+    func testRarityBookEdgeDatabasesMatchReference() throws {
+        let pre = "Ardea \u{00E9}x", dec = "Ardea e\u{0301}x"
+        let schema = "CREATE TABLE regions(id INTEGER PRIMARY KEY, code TEXT UNIQUE, country TEXT, level INTEGER, name_en TEXT, name_zh TEXT); CREATE TABLE species(id INTEGER PRIMARY KEY, scientific TEXT UNIQUE, iucn TEXT); CREATE TABLE months(region_id INTEGER, month INTEGER, records INTEGER, n_species INTEGER, source_id INTEGER, coverage TEXT, PRIMARY KEY(region_id, month)) WITHOUT ROWID; CREATE TABLE counts(region_id INTEGER, month INTEGER, species_id INTEGER, n INTEGER, tier INTEGER, PRIMARY KEY(region_id, month, species_id)) WITHOUT ROWID; INSERT INTO regions VALUES(1,'XX','XX',0,'X','X'),(2,'YY','YY',0,'Y','Y'),(3,'WW','WW',0,'W','W'); INSERT INTO months VALUES(1,5,10,5,1,'ok'),(2,5,0,0,'','none'),(3,5,0,0,NULL,'none');"
+        let databases = [
+            // Same name twice (Swift-equal, different bytes): only id 1 has counts, so last-wins by name would give 0, the old table gives 2; IUCN by bytes gives id 2's.
+            ("duplicate", "INSERT INTO species VALUES(1,'\(dec)','LC'),(2,'\(pre)','EN'); INSERT INTO counts VALUES(1,5,1,3,2);"),
+            ("duplicate mirrored", "INSERT INTO species VALUES(1,'\(dec)','LC'),(2,'\(pre)','EN'); INSERT INTO counts VALUES(1,5,2,3,2);"),   // only id 2: first-wins by name would give 0
+            ("types", "INSERT INTO species VALUES(1,'\(dec)','VU'),(2,'Real tier','LC'),(3,'Text tier',NULL),(4,'Big tier',''),(5,'Plain','NT'),(6,CAST('Blob name' AS BLOB),'CR'); INSERT INTO counts VALUES(1,5,1,3,2),(1,5,2,3,3.5),(1,5,3,3,'x'),(1,5,4,3,7),(1,5,6,3,1),(1,5,99,3,1);"),
+        ]
+        for (label, rows) in databases {
+            let path = tmp().appendingPathExtension("sqlite"); try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var db: OpaquePointer?
+            XCTAssertEqual(sqlite3_open(path.path, &db), SQLITE_OK)
+            XCTAssertEqual(sqlite3_exec(db, schema + rows, nil, nil, nil), SQLITE_OK, label)
+            sqlite3_close(db)
+            setDefault("rarityPath", path.path)
+            var items = [PhotoItem]()
+            for (i, sp) in [pre, dec, "Real tier", "Text tier", "Big tier", "Plain", "Blob name", "Absent"].enumerated() {
+                for (j, region) in ["XX", "XX-A", "YY", "YY-B", "WW"].enumerated() { items.append(photo("e\(i)-\(j)", "2024-05-0\(j + 1)", sp, region: region)) }
+            }
+            items.append(photo("m1", "2024-05-01", "Plain", region: "XX")); items.append(photo("m2", "2024-05-01", "Plain", region: "XX-A"))   // two photos, one observation per place
+            let ledger = Ledger(items: items)
+            for hide in [false, true] {
+                setDefault("hideIUCN", hide)
+                let old = assertBook(ledger, nil, "\(label) hide \(hide)")
+                XCTAssertGreaterThanOrEqual(old.tiers.count, label.hasPrefix("duplicate") ? 2 : 13, label)
+            }
+            setDefault("hideIUCN", false)
+            let old = referenceRarityBook(ledger, nil)
+            let tier = { (sp: String) in ledger.observations.first { $0.species == sp && $0.place == "r:XX" }.flatMap { old.tiers[$0.id] } }
+            // The ledger itself groups the two spellings into one observation (Swift-equal keys), so XX has two photos.
+            if label.hasPrefix("duplicate") { XCTAssertEqual(tier(pre), [2, 2]); XCTAssertEqual(old.iucn[pre], "EN") }
+            else { XCTAssertEqual([tier(pre), tier("Real tier"), tier("Text tier"), tier("Big tier"), tier("Plain")], [[2, 2], [0], [0], [7], [0, 0]]); XCTAssertNil(old.iucn[pre]); XCTAssertEqual(old.iucn["Plain"], "NT"); XCTAssertNil(old.iucn["Text tier"]); XCTAssertNil(old.iucn["Big tier"]); XCTAssertEqual(tier("Blob name"), [1]); XCTAssertNil(old.iucn["Blob name"]) }
+        }
+        // species as a view whose second row's iucn fails (abs overflow): a scan reading iucn stops part way, the old scientific-only
+        // reads and point lookups of other rows do not, so the whole call must take the old path.
+        do {
+            let path = tmp().appendingPathExtension("sqlite"); try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var db: OpaquePointer?
+            XCTAssertEqual(sqlite3_open(path.path, &db), SQLITE_OK)
+            let view = schema.replacingOccurrences(of: "CREATE TABLE species(id INTEGER PRIMARY KEY, scientific TEXT UNIQUE, iucn TEXT);", with: "CREATE TABLE sp0(id INTEGER PRIMARY KEY, scientific TEXT UNIQUE, iucn TEXT, bad INTEGER); CREATE VIEW species AS SELECT id, scientific, CASE WHEN bad THEN abs(-9223372036854775808) ELSE iucn END AS iucn FROM sp0;")
+            XCTAssertNotEqual(view, schema)
+            XCTAssertEqual(sqlite3_exec(db, view + "INSERT INTO sp0 VALUES(1,'First','LC',0),(2,'Second','NT',1),(3,'Third','VU',0); INSERT INTO counts VALUES(1,5,1,3,4),(1,5,2,3,1),(1,5,3,3,2);", nil, nil, nil), SQLITE_OK)
+            sqlite3_close(db)
+            setDefault("rarityPath", path.path)
+            let ledger = Ledger(items: ["First", "Second", "Third"].enumerated().map { photo("v\($0)", "2024-05-01", $1, region: "XX") })
+            for hide in [false, true] { setDefault("hideIUCN", hide); _ = assertBook(ledger, nil, "view hide \(hide)") }
+            setDefault("hideIUCN", false)
+            let old = referenceRarityBook(ledger, nil)
+            XCTAssertEqual(ledger.observations.sorted { $0.species < $1.species }.map { old.tiers[$0.id] }, [[4], [1], [2]])
+            XCTAssertEqual(old.iucn, ["First": "LC", "Third": "VU"])
+        }
+        setDefault("rarityPath", tmp().appendingPathComponent("missing.sqlite").path)
+        let ledger = Ledger(items: [photo("u1", "2024-05-01", "Plain", region: "XX")])
+        let old = assertBook(ledger, nil, "unopenable")
+        XCTAssertEqual(old.unavailable.count, 1)
+    }
+}
