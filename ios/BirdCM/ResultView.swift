@@ -3,6 +3,12 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
+/// Icon over a one-line title, filling the width it is given: three of these share a row.
+struct StackedLabel: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(spacing:4){configuration.icon.font(.body);configuration.title.lineLimit(1).minimumScaleFactor(0.75)}.frame(maxWidth:.infinity).padding(.vertical,2)
+    }
+}
 struct ResultView: View {
     @Environment(AppModel.self) var model
     var id: UUID?
@@ -196,8 +202,12 @@ struct ResultView: View {
                 Button("更正鸟种",systemImage:"pencil"){correcting=true}.accessibilityIdentifier("result.correctSpecies")
                 Button(e.count.map{"数量 \($0)（已改）"} ?? "数量 1",systemImage:"number"){counting=true}.accessibilityIdentifier("result.count")
                 Button(e.excluded ? "恢复这个主体":"不是鸟 · 排除",systemImage:e.excluded ? "arrow.uturn.backward":"xmark.circle"){if let s=e.subject {model.edit{try $0.exclude(s,!e.excluded)}}}.accessibilityIdentifier("result.exclude")
-            }.buttonStyle(.bordered).controlSize(.large)
-            ViewThatFits(in:.horizontal) {HStack{actions};VStack(alignment:.leading){actions}}.font(.subheadline).disabled(e.subject == nil || model.busy)
+            }.buttonStyle(.bordered)
+            // One row of three equal buttons, icon over title; the largest type sizes stack them with the usual label.
+            Group {
+                if typeSize.isAccessibilitySize {VStack(alignment:.leading){actions}.controlSize(.large)}
+                else {HStack(spacing:8){actions}.labelStyle(StackedLabel())}
+            }.font(.subheadline).disabled(e.subject == nil || model.busy)
             Text("\(model.placeName(r.place) ?? String(localized:"没有地点")) · \(model.items.first{$0.id==r.id}?.day ?? "")").font(.subheadline).monospacedDigit().padding(.top,4)
             if let p=r.place {Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)}
             if let result=e.model {

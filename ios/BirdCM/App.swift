@@ -764,11 +764,13 @@ struct SecondaryActionStyle: ButtonStyle {
     }
 }
 /// Quiet one-line model state on home: 准备中 / 就绪 / 出错 with 重试. Never an overlay, never disables anything.
-/// 就绪 shows for a few seconds, then the line goes (owner 2026-11-19: 不要一直展示); a missing rarity table stays.
+/// 就绪 shows for a few seconds, then the line goes (owner 2026-11-19: 不要一直展示) and does not come back when the
+/// tab is shown again (`announced`); a missing rarity table stays.
 struct ModelStatusLine: View {
     @Environment(AppModel.self) var model
     @State private var readyShown = true
     static let readyFor: Duration = .seconds(3)
+    private static var announced = false      // 就绪 was already shown once since the models loaded
     var body:some View {
         let ready = model.modelReady || model.previewing
         let rarity = FileManager.default.fileExists(atPath:Models.rarityURL.path)
@@ -777,7 +779,7 @@ struct ModelStatusLine: View {
                 Image(systemName:"exclamationmark.triangle").foregroundStyle(Palette.warning)
                 Text(e).lineLimit(2).accessibilityIdentifier("home.modelStatus")
                 Button("重试"){model.retry()}.font(.caption.bold()).frame(minHeight:44).accessibilityIdentifier("home.modelRetry")
-            } else if ready && !readyShown && rarity {
+            } else if ready && (!readyShown || Self.announced) && rarity {
                 EmptyView()
             } else if ready {
                 Image(systemName:"checkmark.circle")
@@ -788,10 +790,14 @@ struct ModelStatusLine: View {
             }
         }.font(.caption).foregroundStyle(Palette.secondary).frame(maxWidth:.infinity)
         .task(id: ready) {
+            guard ready else { Self.announced = false; readyShown = true; return }
+            guard !Self.announced else { return }      // back on this tab: nothing to show, nothing to animate
             readyShown = true
-            guard ready, (try? await Task.sleep(for: Self.readyFor)) != nil else { return }
+            guard (try? await Task.sleep(for: Self.readyFor)) != nil else { return }
+            Self.announced = true
             withAnimation { readyShown = false }
         }
+        .onDisappear { if ready { Self.announced = true } }
     }
 }
 /// The result page while it is being made: the photo at once (no letterbox bars), boxes when detection finishes, then the
