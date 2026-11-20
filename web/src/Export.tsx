@@ -1,6 +1,6 @@
 // The export dialog: choose which birds (species checklist), then a table (CSV / JSON) or an eBird import file.
 import { useEffect, useMemo, useState } from "react";
-import { get, postText } from "./api";
+import { get, post, postText } from "./api";
 import type { PhotoRow } from "./types";
 
 interface PlanSpecies {
@@ -9,7 +9,12 @@ interface PlanSpecies {
 }
 interface Plan { species: PlanSpecies[]; checklists: { key: string; date: string; photos: number }[] }
 
-const NONE = "__none__";                                    // photos without a species (不确定 / 没有鸟)
+interface XmpPlan { create: number; modify: number; skipped: Record<string, number>; last: { id: number; created_at: number; files: number } | null }
+interface XmpDone { created: number; modified: number; unchanged: number; skipped: Record<string, number> }
+interface XmpUndo { batch: number | null; deleted: number; restored: number; kept: { file: string; reason: string }[] }
+
+const NONE = "__none__";
+const skips = (m: Record<string, number>) => Object.entries(m).map(([why, n]) => `${n} 张${why}`).join("；");                                    // photos without a species (不确定 / 没有鸟)
 
 /** The species a row stands for in the checklist: the burst-corrected one (withFix already applied), genus "X sp.". */
 export function speciesOf(p: PhotoRow): string {
@@ -71,6 +76,34 @@ export default function ExportDialog({ scanId, photos, view, onClose, saveTable 
     } catch (e) { setErr(String((e as Error).message)); }
   };
 
+  // Lightroom: XMP sidecars beside the RAWs, only after the person confirms the counts
+  const [xmp, setXmp] = useState<XmpPlan | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [xmpMsg, setXmpMsg] = useState("");
+  const loadXmp = () => post<XmpPlan>(`/api/scans/${scanId}/xmp`, { ids: chosen.map((p) => p.id), dry: true }).then(setXmp)
+    .catch((e) => setErr(String(e.message)));
+  const chosenKey = chosen.map((p) => p.id).join(",");
+  useEffect(() => { setAsking(false); loadXmp(); }, [chosenKey, scanId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const writeXmp = async () => {
+    setErr(""); setAsking(false);
+    try {
+      const r = await post<XmpDone>(`/api/scans/${scanId}/xmp`, { ids: chosen.map((p) => p.id) });
+      setXmpMsg(`新增 ${r.created} 个、修改 ${r.modified} 个 .xmp${r.unchanged ? `，${r.unchanged} 个已是这些内容` : ""}。`
+        + (Object.keys(r.skipped).length ? ` 跳过：${skips(r.skipped)}。` : "") + " 在 Lightroom 里选中这些照片，元数据 › 从文件读取元数据。");
+    } catch (e) { setErr(String((e as Error).message)); }
+    loadXmp();
+  };
+  const undoXmp = async () => {
+    setErr("");
+    try {
+      const r = await post<XmpUndo>(`/api/scans/${scanId}/xmp/undo`);
+      setXmpMsg(`已撤回：删掉 ${r.deleted} 个、恢复 ${r.restored} 个。`
+        + (r.kept.length ? ` ${r.kept.length} 个没动（${r.kept.map((k) => `${k.file}：${k.reason}`).join("；")}）。` : ""));
+    } catch (e) { setErr(String((e as Error).message)); }
+    loadXmp();
+  };
+  const xmpN = xmp ? xmp.create + xmp.modify : 0;
+
   return (
     <div className="dlg-body export">
       <label className="row" style={{ marginBottom: 8 }}><input type="checkbox" checked={onlyView} onChange={(e) => setOnlyView(e.target.checked)} /> 只导出当前筛选出的 {view.length} 张</label>
@@ -96,6 +129,29 @@ export default function ExportDialog({ scanId, photos, view, onClose, saveTable 
         <div className="exp-item"><div className="what">数据（JSON）<small>字段同上，给程序用</small></div>
           <button className="btn" disabled={!chosen.length} onClick={() => saveTable(chosen, "json")}>导出</button></div>
       </div>
+      <section className="ebird">
+        <h4 className="panel-h">写给 Lightroom（XMP 边车）</h4>
+        <p className="hint">在每张 RAW 旁边写一个同名 .xmp（IMG_0001.ARW → IMG_0001.xmp）：星级（淘汰 = 拒绝）和鸟种关键字（中文名、英文名、学名，你改过的优先）。
+          原片本身不改；已有的 .xmp 只加改这几项，你自己的关键字和调整都留着。JPEG / DNG 的元数据在文件里面，Lightroom 不读旁边的 .xmp，所以跳过。</p>
+        {xmp && !asking && (
+          <div className="row">
+            <button className="btn" disabled={!xmpN} onClick={() => { setXmpMsg(""); setAsking(true); }}>写 XMP 边车…</button>
+            <button className="btn" disabled={!xmp.last} onClick={undoXmp}>撤回上次写入{xmp.last ? `（${xmp.last.files} 个文件）` : ""}</button>
+            {!xmpN && <small>{Object.keys(xmp.skipped).length ? `没有可写的：${skips(xmp.skipped)}` : "没有可写的照片"}</small>}
+          </div>
+        )}
+        {xmp && asking && (
+          <div className="warn" role="alertdialog" aria-label="确认写入 XMP">
+            <p>会在照片文件夹里新增 {xmp.create} 个、修改 {xmp.modify} 个 .xmp 文件，共 {xmpN} 个。原片不动，可以用「撤回上次写入」撤回。
+              {Object.keys(xmp.skipped).length > 0 && ` 跳过：${skips(xmp.skipped)}。`}</p>
+            <div className="row">
+              <button className="btn primary" onClick={writeXmp}>写入 {xmpN} 个 .xmp</button>
+              <button className="btn link" onClick={() => setAsking(false)}>取消</button>
+            </div>
+          </div>
+        )}
+        {xmpMsg && <p className="hint" role="status">{xmpMsg}</p>}
+      </section>
       <section className="ebird">
         <h4 className="panel-h">eBird 导入文件（Record Format）</h4>
         <p className="hint">每个鸟种在每个清单里一行；清单 = 一天 × 一个地点。默认按"顺带记录"（Incidental）提交、不是完整清单：照片只说明拍到了什么，不是完整计数。

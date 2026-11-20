@@ -213,3 +213,53 @@
 79. **计算单元按模型（检测 / BioCLIP / 小头）分别设置，默认都是 `all`**，在 设置 → 诊断 里可改，重新打开 App 后生效；
     默认值等真机“性能自测”结果再定（模拟器只有 CPU）。同一张照片有多只鸟时，选片后仍先只识别第一只；
     `identify(boxes:)` 用 Core ML 批量接口，但模型 batch 固定为 1，实测不比逐只调用快。
+
+## 桌面端：XMP 边车（R1，主人定的做法 A）
+
+导出框里「写 XMP 边车」：默认不做，点了先列出要新增 / 修改几个 `.xmp`、跳过几张及原因，确认后才写；可撤回。代码 `engine/birdcm/xmp.py`，
+接口 `POST /api/scans/{id}/xmp`（`{ids, dry}`）和 `POST /api/scans/{id}/xmp/undo`，测试 `engine/tests/test_xmp.py`。依据（2026-11-19 查）：
+
+- XMP 规范 Part 1（ISO 16684-1，§8.4）：`xmp:Rating` 取 -1 或 0–5，「-1 表示 rejected，0 表示 unrated；没有这项按 0」。
+  §8.3：`dc:subject` 是关键字的无序数组，`dc:title` / `dc:description` 是多语言单值。
+  [XMPSpecificationPart1.pdf](https://github.com/adobe/XMP-Toolkit-SDK/blob/main/docs/XMPSpecificationPart1.pdf)
+- XMP 规范 Part 3（Storage in Files，引言里的「External storage of metadata」）：边车「在同一目录、与主文件同名但扩展名是 .xmp」。
+  [XMPSpecificationPart3.pdf](https://github.com/adobe/XMP-Toolkit-SDK/blob/main/docs/XMPSpecificationPart3.pdf)；
+  ExifTool 的边车写法也是 `%d%f.xmp`（去掉原扩展名），[Metadata Sidecar Files](https://exiftool.org/metafiles.html)。
+- Lightroom Classic 帮助「Metadata basics and actions」：专有 RAW 的 XMP 存在边车里；「JPEG、TIFF、PSD、DNG」的 XMP 写在文件里面。
+  「Advanced metadata actions」：RAW 存到边车，其他格式存在文件本身；外部改过的元数据用「元数据 › 从文件读取元数据」读进来。
+  「Flag, label, and rate photos」：评星 0–5；「LrC 13.2 起旗标存进 XMP」。（helpx.adobe.com 对脚本返回 403，读的是
+  [web.archive.org 的 2026-01 存档](https://web.archive.org/web/2026/https://helpx.adobe.com/lightroom-classic/help/metadata-basics-actions.html)、
+  [advanced-metadata-actions](https://web.archive.org/web/2025/https://helpx.adobe.com/lightroom-classic/help/advanced-metadata-actions.html)、
+  [flag-label-rate-photos](https://web.archive.org/web/2025/https://helpx.adobe.com/lightroom-classic/help/flag-label-rate-photos.html)。）
+- IPTC Photo Metadata 2025.1：标题 = `dc:title`，说明 = `dc:description`，关键字 = `dc:subject`。
+  [IPTC-PhotoMetadata](https://www.iptc.org/std/photometadata/specification/IPTC-PhotoMetadata)
+- ExifTool XMP 标签表：`lr:hierarchicalSubject`（Lightroom 命名空间）、`xmpDM:pick`（整数）、`xmpDM:good`（布尔）、`xmp:Rating`
+  「0–5，或 -1 表示 rejected」。[XMP Tags](https://exiftool.org/TagNames/XMP.html)
+- 旗标的取值只有社区来源：Lightroom 13.2 用 `xmpDM:pick` = 1 留用 / -1 拒绝 / 0 无旗标，配 `xmpDM:good` = true / false
+  （[digiKam 邮件列表 2024-09](https://mail.kde.org/pipermail/digikam-users/2024-September/036504.html)）。Adobe 的 XMP 规范 Part 2 里只有
+  `xmpDM:good`，没有 `pick`；ExifTool 论坛的原帖没能读到（站点当天不可用）。
+
+80. **只给 RAW（`.ARW`）写边车，文件名 `<原名去扩展名>.xmp`**（`IMG_0001.ARW` → `IMG_0001.xmp`，不是 `IMG_0001.ARW.xmp`）。
+    已有边车按名字不分大小写找（`IMG_0001.XMP` 就写回它）。**JPEG 和 DNG 跳过**：Lightroom 把它们的元数据写在文件里、不读旁边的 `.xmp`，
+    而观羽不改原片本体；跳过几张和原因在确认框和返回值里列出。HEIC 等格式观羽本来就不扫。
+81. **星级 → `xmp:Rating`**（`photo.stars`，含手动星级）：0–3 原样；**淘汰 → `xmp:Rating = -1`，另加 `xmpDM:pick = -1`、`xmpDM:good = false`**
+    （-1 是规范里的 rejected；pick / good 是 Lightroom 13.2 起的「拒绝」旗标）。还没评星（`stars` 为空）不写 Rating。
+    不是淘汰时不碰 pick / good（用户自己的留用旗标保留），只有上次是我们标的淘汰、这次不是了，才把我们写的 pick / good 去掉。
+82. **鸟种只写成关键字**：`dc:subject` 和 `lr:hierarchicalSubject` 各加中文名、英文名、学名三个平级关键字（界面显示的名字，人工更正 /
+    连拍组修正优先，同 eBird 导出）；只到属写「<属名> 属」和属名；不确定、没有鸟不写鸟种。**不写 `dc:title` / `dc:description`**：
+    它们是单值，写了就会盖掉主人自己的标题、说明；关键字是加法，合并和撤回都干净。**不写 `xmp:Label`**（色标留给主人自己用）。
+    同一张再导出（比如改了鸟种）时，先去掉上次我们加的鸟种关键字再加新的；主人原本就有的同名关键字不算我们加的，不会被去掉。
+83. **合并交给 exiftool，但它不碰照片文件夹**：把现有边车复制到系统临时目录，用 exiftool 在副本上改我们的字段（-= 再 +=，关键字不重复），
+    读出结果后在照片目录里写一个隐藏临时文件、fsync、`os.replace` 换上，出错就删掉临时文件。写之前确认目标就在原片所在目录、
+    与原片同名；边车是链接或文件夹、或者不是有效 XML 时跳过不动。原片本体从不打开写。用 ElementTree 逐项比对过两种写法
+    （属性形式 `xap:Rating="5"`、非标准前缀 `lightroom:` / `camera:`、xpacket 包装、`xmpMM:History` 结构、`crs:ToneCurvePV2012` 序列、
+    `dc:title`、自定义命名空间；元素形式的 `xmp:Rating`、`crs:Look`、`xmpDM:pick`），我们字段以外逐项不变。exiftool 会重排 XML
+    （拆成每个命名空间一个 `rdf:Description`、改 `x:xmptk`），字节不同但内容相同。
+84. **撤回记在观羽自己的数据库里**（`xmp_batch`、`xmp_file`：边车路径、写入前的完整字节（没有文件为空）、我们写出内容的 sha256、
+    我们加的关键字和是否标了淘汰），不在照片文件夹里留任何记录。「撤回上次写入」撤这次扫描最近一批：现在的内容与我们写出的一致时，
+    原先没有的删掉、原先有的字节级恢复；**写入后又被改过的（Lightroom 开了自动写入 XMP、或主人自己改的）不动，列在返回值里**，
+    已被删掉的也只报告。再点一次撤回上一批。一批里所有文件都写失败时不留记录。
+85. **Lightroom 的衍生 DNG（`-Enhanced-NR` 等）不单独写**：它们已并到原 RAW 名下（`decode.py` 的 `pair_variants`，`photo.variants`），
+    边车只对应原 RAW（`IMG_0001.xmp`）；衍生 DNG 本身是 DNG，元数据在文件里，Lightroom 也不读它的边车。
+86. **没在 Lightroom 里实测**：Lightroom 是否把 `xmp:Rating = -1` 读成拒绝旗标（还是读成 0 星）、13.2 以前的版本怎样处理 pick、
+    从文件读取元数据后关键字是否正确进到关键字列表，都待主人在 Lightroom Classic 里验证。

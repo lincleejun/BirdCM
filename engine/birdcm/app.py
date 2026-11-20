@@ -177,6 +177,11 @@ class StarFix(BaseModel):
     stars: int | None = None                  # -1 淘汰, 0-3; None = back to the computed stars
 
 
+class XmpBody(BaseModel):
+    ids: list[int] | None = None              # the dialog's photos (the chosen birds / the current filter); None = all
+    dry: bool = False                         # only count: what a write would create, change and skip
+
+
 class SingleCorrection(BaseModel):
     sci: str | None = None
     undo: bool = False
@@ -558,6 +563,37 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
         store.set_star_fixes(sorted(ids), body.stars)
         sched.rerate_now(sid)
         return {"ok": True, "photos": len(ids)}
+
+    xmp_lock = threading.Lock()
+
+    @api.post("/api/scans/{sid}/xmp")
+    def xmp_write(sid: int, body: XmpBody):
+        """Stars and species into <stem>.xmp beside each RAW (only on this explicit request; the original is never
+        written). dry: the counts for the confirmation. Undo: POST .../xmp/undo."""
+        from birdcm import xmp
+        get_scan(sid)
+        photos = store.snapshot(sid)["photos"]
+        if body.ids is not None:
+            keep = set(body.ids)
+            photos = [p for p in photos if p["id"] in keep]
+        last = store.xmp_batch(sid)
+        last = last and {"id": last["id"], "created_at": last["created_at"], "files": len(last["files"])}
+        if body.dry:
+            todo, skipped = xmp.plan(photos)
+            return {"create": sum(t["before"] is None for t in todo), "modify": sum(t["before"] is not None for t in todo),
+                    "skipped": skipped, "last": last}
+        with xmp_lock:
+            try:
+                return xmp.write(store, exif, sid, photos)
+            except (RuntimeError, TimeoutError) as e:
+                raise HTTPException(503, str(e)) from None
+
+    @api.post("/api/scans/{sid}/xmp/undo")
+    def xmp_undo(sid: int):
+        from birdcm import xmp
+        get_scan(sid)
+        with xmp_lock:
+            return xmp.undo(store, sid)
 
     @api.post("/api/singles/{sid}/correct")
     def correct_single(sid: int, body: SingleCorrection):

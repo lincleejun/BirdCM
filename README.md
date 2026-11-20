@@ -14,8 +14,8 @@ A local, private assistant for bird photographers. Your photos never leave your 
 
 - 找鸟、认种（全球 11,000+ 种，按拍摄地点和季节修正），看眼睛和嘴是否清晰、是不是在飞、头部锐度，打星
 - 连拍取一致结果；IUCN 受威胁等级；当地稀有度（数据表暂未发布，见下方许可）
-- 鸟种清单、统计、日历、地图；导出 CSV / JSON 和 [eBird 文件](docs/ebird.md)
-- 照片文件夹只读，不改、不上传
+- 鸟种清单、统计、日历、地图；导出 CSV / JSON、[eBird 文件](docs/ebird.md)，以及给 Lightroom 的 XMP 边车（星级、鸟种关键字）
+- 不改原片、不上传；只有你在导出框里点了「写 XMP 边车」，才在 RAW 旁写同名 `.xmp`，可撤回
 
 **iPhone 版**（iOS 17+）：单张照片离线识别。
 

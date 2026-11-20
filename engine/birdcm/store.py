@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS star_fix (
 CREATE TABLE IF NOT EXISTS single (
   id INTEGER PRIMARY KEY, stored TEXT NOT NULL, name TEXT NOT NULL, created_at REAL NOT NULL, region TEXT,
   boxes TEXT, subject INTEGER, result TEXT, error TEXT, fp TEXT, correction TEXT);
+CREATE TABLE IF NOT EXISTS xmp_batch (id INTEGER PRIMARY KEY, scan_id INTEGER NOT NULL, created_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS xmp_file (
+  batch_id INTEGER NOT NULL REFERENCES xmp_batch(id), path TEXT NOT NULL, before BLOB, after_sha TEXT NOT NULL, ours TEXT NOT NULL,
+  PRIMARY KEY (batch_id, path));
 CREATE TABLE IF NOT EXISTS place_name (key TEXT PRIMARY KEY, label TEXT, fetched REAL NOT NULL);
 """
 # scan.state: queued -> running -> stopping -> paused -> finalizing -> completed; failed = fatal engine error
@@ -389,6 +393,38 @@ class Store:
         return {r[0]: r[1] for r in self._db().execute(
             "SELECT p.id, f.stars FROM photo p JOIN star_fix f ON f.path = p.path AND f.size = p.size "
             "AND f.mtime_ns = p.mtime_ns WHERE p.scan_id = ?", (scan_id,))}
+
+    # ---- XMP sidecars we wrote (xmp.py): before = the sidecar's bytes before our write (NULL: there was none) ---------
+
+    def xmp_record(self, scan_id: int, files: list[dict]) -> int:
+        def go(db):
+            bid = db.execute("INSERT INTO xmp_batch (scan_id, created_at) VALUES (?, ?)", (scan_id, time.time())).lastrowid
+            db.executemany("INSERT INTO xmp_file (batch_id, path, before, after_sha, ours) VALUES (?,?,?,?,?)",
+                           [(bid, f["path"], f["before"], f["after_sha"], json.dumps(f["ours"], ensure_ascii=False)) for f in files])
+            return bid
+        return self._write(go)
+
+    def xmp_forget(self, batch_id: int, path: str) -> None:
+        self._write(lambda db: db.execute("DELETE FROM xmp_file WHERE batch_id = ? AND path = ?", (batch_id, path)))
+
+    def xmp_drop(self, batch_id: int) -> None:
+        def go(db):
+            db.execute("DELETE FROM xmp_file WHERE batch_id = ?", (batch_id,))
+            db.execute("DELETE FROM xmp_batch WHERE id = ?", (batch_id,))
+        self._write(go)
+
+    def xmp_last(self, path: str) -> dict | None:
+        """What our latest write to this sidecar added ({keywords, pick}), whichever scan wrote it."""
+        r = self._db().execute("SELECT ours FROM xmp_file WHERE path = ? ORDER BY batch_id DESC LIMIT 1", (path,)).fetchone()
+        return json.loads(r[0]) if r else None
+
+    def xmp_batch(self, scan_id: int) -> dict | None:
+        """This scan's latest batch: {id, created_at, files: [{path, before, after_sha}]}."""
+        b = self._db().execute("SELECT id, created_at FROM xmp_batch WHERE scan_id = ? ORDER BY id DESC LIMIT 1", (scan_id,)).fetchone()
+        if not b:
+            return None
+        files = [dict(r) for r in self._db().execute("SELECT path, before, after_sha FROM xmp_file WHERE batch_id = ?", (b[0],))]
+        return {"id": b[0], "created_at": b[1], "files": files}
 
     def all_corrections(self) -> list[dict]:
         return [dict(r) for r in self._db().execute("SELECT path, species, scope, app, created_at FROM correction ORDER BY created_at")]
