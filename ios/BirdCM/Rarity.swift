@@ -1,7 +1,9 @@
 import Foundation
 import SQLite3
 
-struct RarityValue: Codable { var label: String; var iucn: String?; var region: String? }
+struct RarityValue: Codable { var label: String; var iucn: String?; var region: String?
+    /// Bird Value 1–10 (docs/bird-value.md) and its status: estimated | pending (no local record yet) | nil (insufficient data).
+    var value: Double? = nil; var valueStatus: String? = nil }
 final class Rarity {
     var db: OpaquePointer?
     init(path: URL) throws {
@@ -222,10 +224,75 @@ final class Rarity {
         if source == nil && global && code.contains("-") {source=rows("SELECT m.source_id FROM months m JOIN regions r ON r.id=m.region_id WHERE r.code=? AND m.month=?",[String(code.prefix(2)),String(month)]).first?.first}
         guard let source,!source.isEmpty else {return RarityValue(label:"数据不足",iucn:iucn,region:code)}
         let t=rows("SELECT tier FROM counts WHERE region_id=? AND month=? AND species_id=?",[source,String(month),sp[0]]).first?.first.flatMap(Int.init) ?? 0
-        return RarityValue(label:["无记录","罕见","少见","不常见","常见"][max(0,min(4,t))],iucn:iucn,region:code)
+        var out=RarityValue(label:["无记录","罕见","少见","不常见","常见"][max(0,min(4,t))],iucn:iucn,region:code)
+        // The photo's own point (not a chosen region's representative point) reads the 0.5° grid.
+        let point:(lat:Double,lon:Double)? = place.regionCode == nil && place.source != "region" ? (place.lat,place.lon):nil
+        if global, let v=birdValue(sci,code:code,month:month,point:point,iucn:sp[1].isEmpty ? nil:sp[1]) {out.value=v.value;out.valueStatus=v.status}
+        return out
     }
     static func iucnLabel(_ value: String?) -> String {
         guard let value else { return "数据不足" }
         return ["LC":"无危","NT":"近危","VU":"易危","EN":"濒危","CR":"极危","DD":"数据缺乏","NE":"未评估","EX":"灭绝","EW":"野外灭绝"][value].map {"\($0) · \(value)"} ?? value
+    }
+}
+
+/// Bird Value, the owner's design fitted to the owner's cases: a port of engine/birdcm/value.py (keep the two in step;
+/// LogicTests.testBirdValueMatchesEngine holds the engine's numbers).
+enum BirdValue {
+    static let k = 3.0, c = 0.30, wC = 0.4, toFreq = 100.0, floor = 1e-5
+    static let iucnWeight: [String: Double] = ["LC": 0, "NT": 0.25, "VU": 0.5, "EN": 0.75, "CR": 1]
+    static let cnProtection: [Int: Double] = [1: 1.0, 2: 0.5]
+    static func clamp(_ x: Double) -> Double { max(0, min(1, x)) }
+    static func tanhScore(_ q: Double) -> Double {
+        let lo = tanh(-k * c), hi = tanh(k * (1 - c))
+        return 1 + 9 * (tanh(k * (clamp(q) - c)) - lo) / (hi - lo)
+    }
+    static func scarcity(_ share: Double) -> Double { clamp(-log10(max(min(1, toFreq * share), floor)) / 5) }
+    /// (species base, regional value or nil). f: G, C and all or none of L, N, T, H.
+    static func score(_ f: [String: Double]) -> (base: Double, regional: Double?) {
+        let baseRaw = (1 - wC) * clamp(f["G"] ?? 0) + wC * clamp(f["C"] ?? 0)
+        guard let l = f["L"] else { return (tanhScore(baseRaw), nil) }
+        let r = 0.75 * clamp(l) + 0.10 * clamp(f["N"] ?? 0) + 0.05 * clamp(f["T"] ?? 0) + 0.10 * clamp(f["H"] ?? 0)
+        return (tanhScore(baseRaw), tanhScore(max(0.95 * r + 0.05 * baseRaw, 0.90 * baseRaw + 0.10 * r)))
+    }
+    static func cellID(lat: Double, lon: Double) -> Int { Int((lat + 90) * 2) * 720 + Int((lon + 180) * 2) }
+}
+
+extension Rarity {
+    private func int(_ sql: String, _ values: [String]) -> Int { rows(sql, values).first.flatMap { Int($0[0]) } ?? 0 }
+    private func share(_ region: String, _ species: String, months: [Int]) -> (n: Int, total: Int) {
+        let q = months.map(String.init).joined(separator: ",")
+        return (int("SELECT SUM(n) FROM counts WHERE region_id=? AND species_id=? AND month IN (\(q))", [region, species]),
+                int("SELECT SUM(records) FROM months WHERE region_id=? AND month IN (\(q))", [region]))
+    }
+    /// Bird Value of a photographed species at a region (ISO code) and month; `point` uses the 0.5° grid when the table has it.
+    /// A photo with no local record is valued at one record and marked pending (engine value.features with photo=True).
+    func birdValue(_ sci: String, code: String, month: Int, point: (lat: Double, lon: Double)?, iucn: String?) -> (value: Double, status: String)? {
+        guard let sid = rows("SELECT id FROM species WHERE scientific=?", [sci]).first?[0] else { return nil }
+        var f = ["C": BirdValue.iucnWeight[iucn ?? ""] ?? 0]
+        let best = rows("SELECT MAX(1.0*c.n/m.records) FROM counts c JOIN months m ON m.region_id=c.region_id AND m.month=c.month WHERE c.species_id=? AND c.n>=5 AND m.records>=2000 AND c.month=?", [sid, String(month)]).first.flatMap { Double($0[0]) }
+        f["G"] = best.map(BirdValue.scarcity) ?? 1
+        if code.hasPrefix("CN"), let g = rows("SELECT grade FROM cn_protected WHERE scientific=?", [sci]).first.flatMap({ Int($0[0]) }) {
+            f["C"] = max(f["C"]!, BirdValue.cnProtection[g] ?? 0)
+        }
+        let ids = Dictionary(rows("SELECT code,id FROM regions WHERE code IN (?,?)", [code, String(code.prefix(2))]).map { ($0[0], $0[1]) }, uniquingKeysWith: { a, _ in a })
+        guard let rid = ids[code] else { return nil }
+        let year = Array(1...12)
+        let (ny, ty) = share(rid, sid, months: year), (nm, tm) = share(rid, sid, months: [month])
+        let (cn, ct) = share(ids[String(code.prefix(2))] ?? rid, sid, months: year)
+        var local = (ny, ty), wider = (cn, ct)
+        if let point, !rows("SELECT 1 FROM sqlite_master WHERE name='grid'", []).isEmpty {
+            let cell = String(BirdValue.cellID(lat: point.lat, lon: point.lon))
+            let tot = int("SELECT records FROM grid WHERE cell=?", [cell])
+            if tot >= 2000 { local = (int("SELECT n FROM grid_counts WHERE cell=? AND species_id=?", [cell, sid]), tot); wider = (ny, ty) }
+        }
+        guard local.1 >= 2000 else { return nil }
+        let sy = ty > 0 ? Double(max(ny, 1)) / Double(ty) : 0, sm = tm > 0 ? Double(nm) / Double(tm) : 0
+        f["L"] = BirdValue.scarcity(Double(max(local.0, 1)) / Double(local.1))
+        f["N"] = wider.1 > 0 ? BirdValue.scarcity(Double(max(wider.0, 1)) / Double(wider.1)) : f["L"]
+        f["T"] = ty > 0 ? BirdValue.clamp(log10((sy + 1e-7) / (sm + 1e-7)) / 3) : 0
+        f["H"] = BirdValue.clamp(1 - log10(Double(local.0) + 1) / 4)
+        guard let v = BirdValue.score(f).regional else { return nil }
+        return (v, local.0 == 0 ? "pending" : "estimated")
     }
 }

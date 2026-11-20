@@ -78,6 +78,12 @@ k = 3 不变，结构和其他权重不变。
 - 名录里 54 种鸟和稀有度表的学名没对上（例如黄胸鹀在表里没有）。
 - 只覆盖美国和中国的网格，其他国家退回州、省或国家级。
 
+## 手机端
+
+- Swift 移植在 `ios/BirdCM/Rarity.swift`（`BirdValue`、`Rarity.birdValue`），`LogicTests.testBirdValueMatchesEngine` 用引擎算出的数核对。
+- 识别结果的"本地"标签旁边显示"价值 x.xx"，6 分以上加重，没有当地记录时标"待核实"；候选详情里也有一行。用的是照片自己的经纬度和月份；选的是地区时不用网格。
+- 稀有度表换成带网格的新表（55 MB），另加 `cn_protected` 表（名录 339 种），`models.toml` 和 `ios/tools/fetch_models.py` 的校验值一起更新。
+
 ## 不做的部分
 
-主人只要价值函数：PostgreSQL、API、`value_event`、Bird Heat、手机端和界面都不做。
+PostgreSQL、API、`value_event`、Bird Heat。

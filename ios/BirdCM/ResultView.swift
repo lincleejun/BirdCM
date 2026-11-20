@@ -102,6 +102,7 @@ struct ResultView: View {
                     Text("候选把握 \(c.value.p.formatted(.percent.precision(.fractionLength(1))))")
                     let rarity=model.localRarity(c.value.scientific,r)
                     Text("当地当月：\(rarity.label)")
+                    if let v=rarity.value {Text("价值：\(v.formatted(.number.precision(.fractionLength(2))))"+(rarity.valueStatus=="pending" ? "（待核实）":""))}
                     if !UserDefaults.standard.bool(forKey:"hideIUCN") {if let code=model.iucn(c.value.scientific) {IUCNChip(code:code)} else {Text("IUCN：数据不足")}}
                     Text("候选并非已确认鉴定。当地频次来自观测记录，不代表实际种群数量。").foregroundStyle(Palette.secondary)
                 }.fixedSize(horizontal:false,vertical:true).padding().accessibilityIdentifier("candidate.details")}.toolbar{Button("完成"){candidate=nil}.accessibilityIdentifier("candidate.done")}}.presentationDetents([.medium,.large])
@@ -136,6 +137,9 @@ struct ResultView: View {
             // GBIF reporting tier at this photo's place and month (read now, not stored). Neutral text; 罕见 / 少见 on their pair.
             StateTag(text:"本地："+value.label,state:ThemeContrast.rarity[value.label] ?? ThemeContrast.unavailable,strong:["罕见","少见"].contains(value.label))
                 .accessibilityIdentifier("result.localRarity").accessibilityValue(value.label)
+            // Bird Value 1–10 (docs/bird-value.md): 6+ good, 9+ a mega; 待核实 while no local record backs it.
+            if let v=value.value {StateTag(text:"价值 "+v.formatted(.number.precision(.fractionLength(2)))+(value.valueStatus=="pending" ? " · 待核实":""),state:v >= 9 ? ThemeContrast.rarity["罕见"] ?? ThemeContrast.unavailable:v >= 6 ? ThemeContrast.rarity["少见"] ?? ThemeContrast.unavailable:ThemeContrast.unavailable,strong:v >= 6)
+                .accessibilityIdentifier("result.birdValue").accessibilityValue(String(format:"%.2f",v))}
             if let code=model.iucn(key) {IUCNChip(code:code)}
         }
         if e.state=="none",let m=e.model,m.level != "species" || m.reason != nil {Text("近似种请核对").font(.subheadline).foregroundStyle(Palette.warning)}
