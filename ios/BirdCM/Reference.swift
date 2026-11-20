@@ -20,7 +20,7 @@ enum Reference {
     static let cacheCap = 200 << 20                                                // iOS budget (desktop engine: 500 MiB)
     static let maxJSON = 1 << 20, maxImage = 2 << 20
     static let bySA = "https://creativecommons.org/licenses/by-sa/4.0/"
-    static let disclosure = "在线资料会把你打开的鸟种对应的 Wikipedia 条目名、Wikidata 编号和 Commons 文件名发送给 Wikipedia / Wikimedia，只在打开物种页时发送；列表里的物种缩略图会把该鸟种的 iNaturalist 分类编号发送给 iNaturalist。不会发送你的照片、拍摄信息、观察记录、位置或输入的搜索词。网站也会接收到网络连接所需的 IP 地址等信息。关闭后仍可离线搜索、查看自己的记录和已经缓存的资料；可在“设置”里删除网络缓存。"
+    static let disclosure = String(localized: "在线资料会把你打开的鸟种对应的 Wikipedia 条目名、Wikidata 编号和 Commons 文件名发送给 Wikipedia / Wikimedia，只在打开物种页时发送；列表里的物种缩略图会把该鸟种的 iNaturalist 分类编号发送给 iNaturalist。不会发送你的照片、拍摄信息、观察记录、位置或输入的搜索词。网站也会接收到网络连接所需的 IP 地址等信息。关闭后仍可离线搜索、查看自己的记录和已经缓存的资料；可在“设置”里删除网络缓存。")
 
     // MARK: settings (this device only)
     /// On by default (owner 2026-11-18). UI and unit tests read off unless they pass -referenceOnline YES.
@@ -54,12 +54,12 @@ enum Reference {
         guard let m else { return [] }
         var out = [(name: String, url: String)]()
         if accept.contains(m.s) {
-            for (lang, name) in [("zh", "维基百科（中文）"), ("en", "Wikipedia (English)")] {
+            for (lang, name) in [("zh", String(localized: "维基百科（中文）")), ("en", "Wikipedia (English)")] {
                 if let t = m.article(lang) { out.append((name, articleURL(lang, t))) }
             }
             if let q = m.q { out.append(("Wikidata", "https://www.wikidata.org/wiki/\(q)")) }
         } else if let q = m.q {
-            out.append(("Wikidata（来源分类与 AviList 不同）", "https://www.wikidata.org/wiki/\(q)"))
+            out.append((String(localized: "Wikidata（来源分类与 AviList 不同）"), "https://www.wikidata.org/wiki/\(q)"))
         }
         if let i = m.i { out.append(("iNaturalist", "https://www.inaturalist.org/taxa/\(i)")) }
         if let g = m.g { out.append(("GBIF", "https://www.gbif.org/species/\(g)")) }
@@ -105,15 +105,15 @@ enum Reference {
     /// unknown, version-less, non-free, restricted, being deleted, or (unless CC0) without a reliable author do not.
     static func licence(_ meta: [String: String]) -> Gate {
         let code = (meta["License"] ?? "").trimmingCharacters(in: .whitespaces).lowercased()
-        if ["true", "1"].contains((meta["NonFree"] ?? "").lowercased()) { return .refused("非自由文件") }
-        if !(meta["DeletionReason"] ?? "").trimmingCharacters(in: .whitespaces).isEmpty { return .refused("文件正在删除讨论中") }
-        if !plain(meta["Restrictions"]).isEmpty { return .refused("文件带额外限制") }
+        if ["true", "1"].contains((meta["NonFree"] ?? "").lowercased()) { return .refused(String(localized: "非自由文件")) }
+        if !(meta["DeletionReason"] ?? "").trimmingCharacters(in: .whitespaces).isEmpty { return .refused(String(localized: "文件正在删除讨论中")) }
+        if !plain(meta["Restrictions"]).isEmpty { return .refused(String(localized: "文件带额外限制")) }
         let who = author(meta), url = (meta["LicenseUrl"] ?? "").trimmingCharacters(in: .whitespaces)
         if code == "cc0" { return .ok(Licence(licence: "CC0 1.0", url: url.isEmpty ? "https://creativecommons.org/publicdomain/zero/1.0/" : url, nc: false, author: who)) }
-        guard let who else { return .refused("缺可靠的作者署名") }
+        guard let who else { return .refused(String(localized: "缺可靠的作者署名")) }
         guard let m = code.wholeMatch(of: cc), !code.contains("-nd") else {
             let short = meta["LicenseShortName"] ?? ""
-            return .refused("许可不在白名单：\(short.isEmpty ? (code.isEmpty ? "未知" : code) : short)")
+            return .refused(String(localized: "许可不在白名单：\(short.isEmpty ? (code.isEmpty ? String(localized: "未知") : code) : short)"))
         }
         let nc = m.output[1].substring != nil, sa = m.output[2].substring != nil, v = String(m.output[3].substring!)
         let name = "CC BY" + (nc ? "-NC" : "") + (sa ? "-SA" : "") + " \(v)", path = "by" + (nc ? "-nc" : "") + (sa ? "-sa" : "")
@@ -271,9 +271,9 @@ enum Reference {
         /// The card from the cache, refreshed from the source when network is allowed and the entry is missing or stale
         /// (or force: a person's retry, which also skips the one-day negative cache). Errors become states.
         func card(_ kind: String, _ sci: String, network: Bool, force: Bool = false) async -> Card {
-            guard let m = mapping(sci) else { return Card(state: "unmapped", why: "资料未对应：没有映射数据") }
+            guard let m = mapping(sci) else { return Card(state: "unmapped", why: String(localized: "资料未对应：没有映射数据")) }
             guard Reference.accept.contains(m.s) else {
-                return Card(state: "unmapped", why: ["broader", "narrower", "split-lump"].contains(m.s) ? "来源分类与 AviList 不同（\(m.n ?? m.s)），不显示在线资料" : "资料未对应：映射里没有这个物种的已核验条目")
+                return Card(state: "unmapped", why: ["broader", "narrower", "split-lump"].contains(m.s) ? String(localized: "来源分类与 AviList 不同（\(m.n ?? m.s)），不显示在线资料") : String(localized: "资料未对应：映射里没有这个物种的已核验条目"))
             }
             let key = kind + "|" + sci
             if let t = inflight[key] { return await t.value }       // one fetch per species and kind
@@ -293,7 +293,7 @@ enum Reference {
                     let (entry, blob) = kind == "summary" ? (try await summary(m), nil) : try await image(m)
                     cache.write(kind, sci, entry, blob: blob); e = entry; age = 0
                 } catch NetError.notFound {                               // e.g. the file's rendition is gone: absent for a day
-                    let x = Card(state: "none", why: "来源上已没有这个文件", fetched: now()); cache.write(kind, sci, x); e = x; age = 0
+                    let x = Card(state: "none", why: String(localized: "来源上已没有这个文件"), fetched: now()); cache.write(kind, sci, x); e = x; age = 0
                 } catch NetError.busy {
                     return shown(e, age, "busy")
                 } catch {
@@ -311,7 +311,7 @@ enum Reference {
             out.cachedAt = f.string(from: Date(timeIntervalSince1970: e!.fetched ?? 0)); out.fetched = nil
             if out.state == "ok", let age, age > Reference.fresh { out.state = "stale" }
             if e!.state == "ok", out.text != nil, let age, age > Reference.textMax {
-                return Card(state: "stale", why: "缓存的简介已超过 180 天，只保留来源链接", cachedAt: out.cachedAt, sourceURL: out.sourceURL)
+                return Card(state: "stale", why: String(localized: "缓存的简介已超过 180 天，只保留来源链接"), cachedAt: out.cachedAt, sourceURL: out.sourceURL)
             }
             if let problem {
                 out.problem = problem
@@ -323,31 +323,31 @@ enum Reference {
         /// zh article first (its simplified variant), then en; no translation. A disambiguation page or one whose
         /// Wikidata item is not the mapped QID is not this species' summary.
         func summary(_ m: Mapping) async throws -> Card {
-            var why = "维基百科没有这个物种的中文或英文条目"
+            var why = String(localized: "维基百科没有这个物种的中文或英文条目")
             for lang in ["zh", "en"] {
                 guard let title = m.article(lang) else { continue }
                 let url = "https://\(lang).wikipedia.org/api/rest_v1/page/summary/" + Reference.quote(title.replacingOccurrences(of: " ", with: "_"))
                 let body: Data
                 do { body = try await net.get(url, limit: Reference.maxJSON, headers: lang == "zh" ? ["Accept-Language": "zh-cn"] : [:]).0 }
-                catch NetError.notFound { why = "\(lang) 条目已不存在"; continue }
+                catch NetError.notFound { why = String(localized: "\(lang) 条目已不存在"); continue }
                 guard let s = try? JSONSerialization.jsonObject(with: body) as? [String: Any], let extract = s["extract"] as? String else { throw NetError.offline("malformed summary") }
                 let text = extract.trimmingCharacters(in: .whitespacesAndNewlines)
                 if s["type"] as? String == "disambiguation" || s["wikibase_item"] as? String != m.q || text.isEmpty {
-                    why = "\(lang) 条目与这个物种不对应（消歧义或 Wikidata 条目不符）"; continue
+                    why = String(localized: "\(lang) 条目与这个物种不对应（消歧义或 Wikidata 条目不符）"); continue
                 }
                 let page = ((s["content_urls"] as? [String: Any])?["desktop"] as? [String: Any]) ?? [:]
                 let shownTitle = Reference.plain(s["displaytitle"] as? String)
                 return Card(state: "ok", fetched: now(), lang: lang, title: shownTitle.isEmpty ? (s["title"] as? String ?? title) : shownTitle, text: text,
                             sourceURL: page["page"] as? String ?? Reference.articleURL(lang, title), historyURL: page["revisions"] as? String,
                             revision: s["revision"].map { "\($0)" }, licence: "CC BY-SA 4.0", licenceURL: Reference.bySA,
-                            credit: "维基百科贡献者", changes: "原文摘录" + (lang == "zh" ? "；简体由维基百科自动转换" : ""))
+                            credit: String(localized: "维基百科贡献者"), changes: lang == "zh" ? String(localized: "原文摘录；简体由维基百科自动转换") : String(localized: "原文摘录"))
             }
             return Card(state: "none", why: why, fetched: now())
         }
 
         /// The Commons file the build chose (Wikidata P18), its metadata, the licence gate, then the 640 px rendition.
         func image(_ m: Mapping) async throws -> (Card, Data?) {
-            guard let f = m.f else { return (Card(state: "none", why: "Wikidata 没有这个物种的图片", fetched: now()), nil) }
+            guard let f = m.f else { return (Card(state: "none", why: String(localized: "Wikidata 没有这个物种的图片"), fetched: now()), nil) }
             let q = Reference.form([("action", "query"), ("prop", "imageinfo"), ("titles", "File:\(f)"), ("format", "json"), ("formatversion", "2"),
                                     ("iiprop", "url|extmetadata|sha1|mime|size"), ("iiurlwidth", "640"),
                                     ("iiextmetadatafilter", "Artist|Credit|Attribution|LicenseShortName|License|LicenseUrl|UsageTerms|Restrictions|NonFree|DeletionReason|ObjectName")])
@@ -355,7 +355,7 @@ enum Reference {
             guard let root = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
                   let page = ((root["query"] as? [String: Any])?["pages"] as? [[String: Any]])?.first,
                   let info = (page["imageinfo"] as? [[String: Any]])?.first else {
-                return (Card(state: "none", why: "Commons 上找不到这个文件", fetched: now()), nil)
+                return (Card(state: "none", why: String(localized: "Commons 上找不到这个文件"), fetched: now()), nil)
             }
             var meta = [String: String]()
             for (k, v) in info["extmetadata"] as? [String: Any] ?? [:] {
@@ -364,17 +364,17 @@ enum Reference {
             }
             let source = info["descriptionurl"] as? String
             guard case .ok(let lic) = Reference.licence(meta) else {
-                if case .refused(let why) = Reference.licence(meta) { return (Card(state: "none", why: "暂无可用的授权参考图（\(why)）", fetched: now(), sourceURL: source), nil) }
+                if case .refused(let why) = Reference.licence(meta) { return (Card(state: "none", why: String(localized: "暂无可用的授权参考图（\(why)）"), fetched: now(), sourceURL: source), nil) }
                 return (Card(state: "none", fetched: now()), nil)
             }
             let thumb = info["thumburl"] as? String ?? ""
             guard (info["mime"] as? String ?? "").hasPrefix("image/"), let h = URL(string: thumb)?.host, Reference.hosts.contains(h) else {
-                return (Card(state: "none", why: "暂无可用的授权参考图（不是图片）", fetched: now()), nil)
+                return (Card(state: "none", why: String(localized: "暂无可用的授权参考图（不是图片）"), fetched: now()), nil)
             }
             let (blob, headers) = try await net.get(thumb, limit: Reference.maxImage, accept: "image/*")
             guard (headers["content-type"] ?? "").hasPrefix("image/") else { throw NetError.offline("not an image") }
             return (Card(state: "ok", fetched: now(), meta: meta, sourceURL: source, licence: lic.licence, licenceURL: lic.url,
-                         credit: Reference.plain(meta["Credit"]), changes: "缩放为 640 px 宽", author: lic.author, nc: lic.nc,
+                         credit: Reference.plain(meta["Credit"]), changes: String(localized: "缩放为 640 px 宽"), author: lic.author, nc: lic.nc,
                          attribution: Reference.plain(meta["Attribution"]), file: f, mime: headers["content-type"],
                          width: info["thumbwidth"] as? Int, height: info["thumbheight"] as? Int), blob)
         }

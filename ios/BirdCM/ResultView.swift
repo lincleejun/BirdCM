@@ -50,7 +50,7 @@ struct ResultView: View {
                             ForEach(["相机","镜头","焦距","光圈","快门","ISO","曝光补偿"],id:\.self) { key in
                                 if let value=r.shooting.fields[key] { LabeledContent(LocalizedStringKey(key)){Text(value).monospacedDigit().fixedSize(horizontal:false,vertical:true)} }
                             }
-                            LabeledContent("统计日期"){Text(item.map{$0.dateSource=="photo" || $0.dateSource=="user" ? $0.wall.replacingOccurrences(of:"T",with:" "):$0.day} ?? "未知").monospacedDigit().accessibilityIdentifier("result.date")}
+                            LabeledContent("统计日期"){Text(item.map{$0.dateSource=="photo" || $0.dateSource=="user" ? $0.wall.replacingOccurrences(of:"T",with:" "):$0.day} ?? String(localized:"未知")).monospacedDigit().accessibilityIdentifier("result.date")}
                             if let item {Text(Self.dateNote(item)).font(.caption).foregroundStyle(Palette.secondary)}
                             Button(item?.dateSource=="user" ? "修改日期（已改过）":"修改日期",systemImage:"calendar"){dating=true}.accessibilityIdentifier("result.editDate").frame(minHeight:44)
                         }.font(.subheadline).fixedSize(horizontal:false,vertical:true)
@@ -59,7 +59,7 @@ struct ResultView: View {
                             Text("拍摄地点").font(.headline).accessibilityIdentifier("result.place")
                             if let p=r.place {
                                 // A region choice is an area, never a pin (its lat/lon is only a representative point).
-                                if p.source=="region" {Text(p.label);Text("按地区统计，不是具体坐标。").font(.caption).foregroundStyle(Palette.secondary)}
+                                if p.source=="region" {Text(Place.display(p.label));Text("按地区统计，不是具体坐标。").font(.caption).foregroundStyle(Palette.secondary)}
                                 else {PlaceSnapshot(points:[CLLocationCoordinate2D(latitude:p.lat,longitude:p.lon)],label:model.placeName(p) ?? p.name).id("\(p.lat),\(p.lon)")}
                                 Text(p.sourceLabel).font(.caption).foregroundStyle(Palette.secondary)
                             } else {Text("没有地点，当前仅按图像识别；统计时同日地点未知的记录合并。") .foregroundStyle(Palette.secondary)}
@@ -101,7 +101,7 @@ struct ResultView: View {
                     SpeciesName(key:c.value.scientific,size:.hero)
                     Text("候选把握 \(c.value.p.formatted(.percent.precision(.fractionLength(1))))")
                     let rarity=model.localRarity(c.value.scientific,r)
-                    Text("当地当月：\(rarity.label)")
+                    Text("当地当月：\(loc(rarity.label))")
                     if !UserDefaults.standard.bool(forKey:"hideIUCN") {if let code=model.iucn(c.value.scientific) {IUCNChip(code:code)} else {Text("IUCN：数据不足")}}
                     Text("候选并非已确认鉴定。当地频次来自观测记录，不代表实际种群数量。").foregroundStyle(Palette.secondary)
                 }.fixedSize(horizontal:false,vertical:true).padding().accessibilityIdentifier("candidate.details")}.toolbar{Button("完成"){candidate=nil}.accessibilityIdentifier("candidate.done")}}.presentationDetents([.medium,.large])
@@ -134,8 +134,8 @@ struct ResultView: View {
         if let key=e.key {
             let value=model.localRarity(key,r)
             // GBIF reporting tier at this photo's place and month (read now, not stored). Neutral text; 罕见 / 少见 on their pair.
-            StateTag(text:"本地："+value.label,state:ThemeContrast.rarity[value.label] ?? ThemeContrast.unavailable,strong:["罕见","少见"].contains(value.label))
-                .accessibilityIdentifier("result.localRarity").accessibilityValue(value.label)
+            StateTag(text:String(localized:"本地：\(loc(value.label))"),state:ThemeContrast.rarity[value.label] ?? ThemeContrast.unavailable,strong:["罕见","少见"].contains(value.label))
+                .accessibilityIdentifier("result.localRarity").accessibilityValue(loc(value.label))
             if let code=model.iucn(key) {IUCNChip(code:code)}
         }
         if e.state=="none",let m=e.model,m.level != "species" || m.reason != nil {Text("近似种请核对").font(.subheadline).foregroundStyle(Palette.warning)}
@@ -237,7 +237,7 @@ struct IUCNChip: View {
     let code:String
     var small=false
     var body:some View {
-        StateTag(text:"IUCN："+Rarity.iucnLabel(code),state:ThemeContrast.iucn[code] ?? ThemeContrast.unavailable,
+        StateTag(text:String(localized:"IUCN：\(Rarity.iucnLabel(code))"),state:ThemeContrast.iucn[code] ?? ThemeContrast.unavailable,
                  strong:["VU","EN","CR","EW","EX"].contains(code),small:small).accessibilityIdentifier("iucn.\(code)")
     }
 }
@@ -258,11 +258,11 @@ struct PlacePicker: View {
             List {
                 if query.isEmpty {
                     Section {PlacePickerActions(initial:model.current?.place ?? model.homePlace,onChoose:use)}
-                    if !recent.isEmpty {Section("最近地点") {ForEach(recent,id:\.stableCode) {p in Button(p.label){use(p)}.accessibilityIdentifier("place.recent."+p.stableCode).frame(minHeight:44)}}}
+                    if !recent.isEmpty {Section("最近地点") {ForEach(recent,id:\.stableCode) {p in Button(Place.display(p.label)){use(p)}.accessibilityIdentifier("place.recent."+p.stableCode).frame(minHeight:44)}}}
                 }
                 Section(query.isEmpty ? "离线选择国家或地区" : "匹配的地区") {
                     ForEach(Place.choices(query:query,recent:recent.map(\.label)),id:\.label) {p in
-                        Button(p.label){use(p)}.accessibilityIdentifier("place.region."+p.stableCode).frame(minHeight:44)
+                        Button(Place.display(p.label)){use(p)}.accessibilityIdentifier("place.region."+p.stableCode).frame(minHeight:44)
                     }
                 }
             }
@@ -311,8 +311,8 @@ struct MapPlacePicker: View {
         search?.cancel()
         let request=MKLocalSearch.Request();request.naturalLanguageQuery=query
         let job=MKLocalSearch(request:request);search=job
-        do {results=try await job.start().mapItems;error=results.isEmpty ? "没有找到，试试离线地区列表。":""}
-        catch {self.error="无法搜索，可移动地图选点或使用离线地区列表。"}
+        do {results=try await job.start().mapItems;error=results.isEmpty ? String(localized:"没有找到，试试离线地区列表。"):""}
+        catch {self.error=String(localized:"无法搜索，可移动地图选点或使用离线地区列表。")}
     }
     var body:some View {
         NavigationStack {
@@ -325,7 +325,7 @@ struct MapPlacePicker: View {
                 if !error.isEmpty {Text(error).font(.footnote)}
                 if !results.isEmpty {
                     ScrollView {VStack {ForEach(Array(results.enumerated()),id:\.offset) {i,item in
-                        Button(item.name ?? "地点") {
+                        Button(item.name ?? String(localized:"地点")) {
                             pin=item.placemark.coordinate;label=item.name ?? query
                             results=[];searchFocused=false
                         }.frame(maxWidth:.infinity,minHeight:44,alignment:.leading).accessibilityIdentifier("place.mapResult.\(i)")
@@ -361,8 +361,8 @@ struct PlaceSnapshot: View {
     @State private var image:UIImage?
     @State private var failed=false
     @State private var full=false
-    var coordinates:String {points.map{String(format:"%.4f, %.4f",$0.latitude,$0.longitude)}.joined(separator:"；")}
-    var caption:String {points.count>3 ? points.prefix(3).map{String(format:"%.4f, %.4f",$0.latitude,$0.longitude)}.joined(separator:"；")+" …":coordinates}
+    var coordinates:String {points.map{String(format:"%.4f, %.4f",$0.latitude,$0.longitude)}.joined(separator:String(localized:"；"))}
+    var caption:String {points.count>3 ? points.prefix(3).map{String(format:"%.4f, %.4f",$0.latitude,$0.longitude)}.joined(separator:String(localized:"；"))+" …":coordinates}
     var region:MKCoordinateRegion {
         let lats=points.map(\.latitude),lons=points.map(\.longitude)
         return MKCoordinateRegion(center:CLLocationCoordinate2D(latitude:(lats.max()!+lats.min()!)/2,longitude:(lons.max()!+lons.min()!)/2),
@@ -430,8 +430,8 @@ struct PlaceMap:UIViewRepresentable {
     func updateUIView(_ map:MKMapView,context:Context) {
         context.coordinator.parent=self
         if abs(map.centerCoordinate.latitude-pin.latitude)>0.0001 || abs(map.centerCoordinate.longitude-pin.longitude)>0.0001 {map.setCenter(pin,animated:false)}
-        if let marker=map.annotations.first as? MKPointAnnotation {marker.coordinate=pin;marker.title=label}
-        else {let marker=MKPointAnnotation();marker.coordinate=pin;marker.title=label;map.addAnnotation(marker)}
+        if let marker=map.annotations.first as? MKPointAnnotation {marker.coordinate=pin;marker.title=Place.display(label)}
+        else {let marker=MKPointAnnotation();marker.coordinate=pin;marker.title=Place.display(label);map.addAnnotation(marker)}
         if let circle=map.overlays.first as? MKCircle,abs(circle.coordinate.latitude-pin.latitude)<0.0001 && abs(circle.coordinate.longitude-pin.longitude)<0.0001 {return}
         map.removeOverlays(map.overlays);map.addOverlay(MKCircle(center:pin,radius:25000))
     }

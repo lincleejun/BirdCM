@@ -80,4 +80,5 @@ targets:
 schemes:
   BirdCM:
     build: { targets: { BirdCM: all, BirdCMTests: [test], BirdCMUITests: [test] } }
-    test: { targets: [BirdCMTests, BirdCMUITests] }
+    # Tests assert the Chinese UI; the simulator's own language (often en) would otherwise pick the en strings.
+    test: { targets: [BirdCMTests, BirdCMUITests], language: zh-Hans }

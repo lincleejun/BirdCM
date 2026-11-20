@@ -58,7 +58,7 @@ struct SpeciesReferenceSection: View {
                 credit(image).font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("reference.imageCredit")
             }
         } else if let image {
-            problem(image, what: "可用的授权参考图") { await refresh("image", force: true) }.accessibilityIdentifier("reference.imageState")
+            problem(image, what: String(localized: "可用的授权参考图")) { await refresh("image", force: true) }.accessibilityIdentifier("reference.imageState")
         } else {
             Text("正在读取…").font(.footnote).foregroundStyle(Palette.secondary)
         }
@@ -69,14 +69,14 @@ struct SpeciesReferenceSection: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text("照片：")
-                link(c.author ?? "作者见 Commons 文件页", c.sourceURL)
+                link(c.author ?? String(localized: "作者见 Commons 文件页"), c.sourceURL)
                 Text("·")
                 link(c.licence ?? "", c.licenceURL)
                 if c.nc == true { Text("非商业许可（NC）").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2).overlay(Capsule().stroke(Palette.warning)).foregroundStyle(Palette.warning) }
             }
             if let credit = c.credit, !credit.isEmpty, credit != c.author, credit.lowercased() != "own work" { Text("出处 \(credit)") }
-            HStack(spacing: 4) { Text("来源"); link("Wikimedia Commons 文件页", c.sourceURL) }
-            Text([c.changes, c.cachedAt.map { "缓存于 \($0)" + (c.state == "stale" ? "（离线显示缓存）" : "") }].compactMap { $0 }.joined(separator: " · "))
+            HStack(spacing: 4) { Text("来源"); link(String(localized: "Wikimedia Commons 文件页"), c.sourceURL) }
+            Text([c.changes, c.cachedAt.map { String(localized: "缓存于 \($0)") + (c.state == "stale" ? String(localized: "（离线显示缓存）") : "") }].compactMap { $0 }.joined(separator: " · "))
         }
     }
 
@@ -93,13 +93,13 @@ struct SpeciesReferenceSection: View {
                     Text([s.credit, s.changes].compactMap { $0 }.joined(separator: " · "))
                     HStack(spacing: 4) {
                         link(s.licence ?? "", s.licenceURL); Text("·")
-                        link("原文「\(s.title ?? "")」", s.sourceURL)
-                        if s.historyURL != nil { Text("/"); link("历史", s.historyURL) }
+                        link(String(localized: "原文「\(s.title ?? "")」"), s.sourceURL)
+                        if s.historyURL != nil { Text("/"); link(String(localized: "历史"), s.historyURL) }
                     }
-                    Text([s.revision.map { "修订 \($0)" }, s.cachedAt.map { "缓存于 \($0)" + (s.state == "stale" ? "（离线显示缓存）" : "") }].compactMap { $0 }.joined(separator: " · "))
+                    Text([s.revision.map { String(localized: "修订 \($0)") }, s.cachedAt.map { String(localized: "缓存于 \($0)") + (s.state == "stale" ? String(localized: "（离线显示缓存）") : "") }].compactMap { $0 }.joined(separator: " · "))
                 }.font(.caption).foregroundStyle(Palette.secondary).accessibilityIdentifier("reference.summaryCredit")
             } else if let s = summary {
-                problem(s, what: "简介") { await refresh("summary", force: true) }.accessibilityIdentifier("reference.summaryState")
+                problem(s, what: String(localized: "简介")) { await refresh("summary", force: true) }.accessibilityIdentifier("reference.summaryState")
             } else {
                 Text("正在读取…").font(.footnote).foregroundStyle(Palette.secondary)
             }
@@ -114,16 +114,16 @@ struct SpeciesReferenceSection: View {
     func problem(_ c: Reference.Card, what: String, retry: @escaping () async -> Void) -> some View {
         let state = c.state == "missing" && !enabled ? "off" : c.state
         let text = switch state {
-        case "unmapped": c.why ?? "资料未对应"
-        case "none": c.why ?? "暂无\(what)"
-        case "off": "在线资料已关闭；打开后才会联网取"
-        case "missing": "正在取在线资料…"
-        case "stale" where c.text == nil && c.licence == nil: c.why ?? "在线资料暂不可用（可能离线）"
-        default: state == "busy" || c.problem == "busy" ? "来源请求较多，稍后可重试" : "在线资料暂不可用（可能离线）"
+        case "unmapped": c.why ?? String(localized: "资料未对应")
+        case "none": c.why ?? String(localized: "暂无\(what)")
+        case "off": String(localized: "在线资料已关闭；打开后才会联网取")
+        case "missing": String(localized: "正在取在线资料…")
+        case "stale" where c.text == nil && c.licence == nil: c.why ?? String(localized: "在线资料暂不可用（可能离线）")
+        default: state == "busy" || c.problem == "busy" ? String(localized: "来源请求较多，稍后可重试") : String(localized: "在线资料暂不可用（可能离线）")
         }
         let again = ["unavailable", "busy", "none"].contains(state) || c.problem != nil
         return HStack(alignment: .firstTextBaseline) {
-            Text(text + (c.cachedAt != nil && state != "none" ? "（显示 \(c.cachedAt!) 的缓存）" : "")).font(.footnote).foregroundStyle(Palette.secondary)
+            Text(text + (c.cachedAt != nil && state != "none" ? String(localized: "（显示 \(c.cachedAt!) 的缓存）") : "")).font(.footnote).foregroundStyle(Palette.secondary)
             if again && enabled { Button("重试") { Task { await retry() } }.font(.footnote) }
         }
     }
@@ -167,7 +167,7 @@ struct ReferenceSettingsSection: View {
         Section {
             Toggle("在线物种资料（Wikipedia / Wikimedia / iNaturalist）", isOn: $enabled).accessibilityIdentifier("settings.referenceOnline")
                 .onChange(of: enabled) { _, v in Reference.enabled = v; Reference.disclosed = true }
-            Button("删除网络缓存" + (size.map { "（\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))）" } ?? "")) {
+            Button(size.map { String(localized: "删除网络缓存（\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))）") } ?? String(localized: "删除网络缓存")) {
                 Reference.shared.cache.clear(); SpeciesThumb.memory.removeAllObjects(); size = 0
             }.disabled(size == 0).accessibilityIdentifier("settings.referenceClear")
         } header: { Text("物种参考") } footer: { Text(Reference.disclosure) }

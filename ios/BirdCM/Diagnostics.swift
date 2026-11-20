@@ -35,7 +35,7 @@ enum Diagnostics {
     }
     static var compute: String {
         #if targetEnvironment(simulator)
-        return "cpuOnly（模拟器）"
+        return String(localized: "cpuOnly（模拟器）")
         #else
         return models.map { $0 + " " + unitName($0) }.joined(separator: " · ")
         #endif

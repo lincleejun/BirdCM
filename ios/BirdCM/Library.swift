@@ -191,14 +191,14 @@ final class Library {
         db = try SQL(dir.appendingPathComponent("library.sqlite").path)
         try db.exec("PRAGMA journal_mode=WAL;PRAGMA foreign_keys=ON")
         let version = try db.rows("PRAGMA user_version")[0].n(0) ?? 0
-        guard version <= 1 else { throw StoreError(message: "这份记录由更新版本的观羽创建。请安装新版，当前版本不会改动它。") }
+        guard version <= 1 else { throw StoreError(message: String(localized: "这份记录由更新版本的观羽创建。请安装新版，当前版本不会改动它。")) }
         if try db.rows("SELECT 1 FROM sqlite_master WHERE name='ll_meta'").isEmpty {
             try db.transaction {
                 try db.exec(Self.ddl)
                 try db.run("INSERT INTO ll_meta VALUES('format','birdcm-local-ios'),('library_id',?)", [UUID().uuidString.lowercased()])
             }
         }
-        guard try db.rows("SELECT value FROM ll_meta WHERE key='format'").first?.s(0) == "birdcm-local-ios" else { throw StoreError(message: "记录库格式无法识别，未做任何改动。") }
+        guard try db.rows("SELECT value FROM ll_meta WHERE key='format'").first?.s(0) == "birdcm-local-ios" else { throw StoreError(message: String(localized: "记录库格式无法识别，未做任何改动。")) }
         // Device-local UI state (最近查看): outside the archive schema, never exported, no revision or statistics change.
         try db.exec("CREATE TABLE IF NOT EXISTS ll_view(record_id TEXT PRIMARY KEY, viewed_utc TEXT NOT NULL)")
         // Reverse-geocoded names per ~1 km cell: a device-local cache, never exported.
@@ -270,7 +270,7 @@ final class Library {
         if FileManager.default.fileExists(atPath: final.path) { return rel }
         let staging = dir.appendingPathComponent("assets/.staging-\(UUID().uuidString)")
         try data.write(to: staging, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        guard try Models.digest(staging) == hash else { try? FileManager.default.removeItem(at: staging); throw StoreError(message: "写入原图校验失败") }
+        guard try Models.digest(staging) == hash else { try? FileManager.default.removeItem(at: staging); throw StoreError(message: String(localized: "写入原图校验失败")) }
         try FileManager.default.moveItem(at: staging, to: final)
         return rel
     }
@@ -337,7 +337,7 @@ final class Library {
         for (i, box) in r.boxes.enumerated() {
             guard box.count == 4, 0 <= box[0], box[0] < box[2], box[2] <= 1, 0 <= box[1], box[1] < box[3], box[3] <= 1 else {
                 // Invalid legacy boxes stay in the raw payload and the recovery list; never clamped into evidence.
-                try db.run("INSERT OR REPLACE INTO ll_legacy_issue VALUES(?,NULL,NULL,?)", ["\(issue ?? rid)#box\(i)", "无效框 \(box)"]); continue
+                try db.run("INSERT OR REPLACE INTO ll_legacy_issue VALUES(?,NULL,NULL,?)", ["\(issue ?? rid)#box\(i)", String(localized: "无效框 \(box.description)")]); continue
             }
             let model = r.results[String(i)] ?? (i == r.selected ? r.result : nil)
             let (level, key) = Self.modelColumns(model)
@@ -381,11 +381,11 @@ final class Library {
                         try insertAsset(h, path: rel, missing: false, shooting: r.shooting, file: dir.appendingPathComponent(rel))
                     }
                 }
-                guard let hash else { throw StoreError(message: "缺少原图，无法保存这条记录") }
+                guard let hash else { throw StoreError(message: String(localized: "缺少原图，无法保存这条记录")) }
                 // A record imported from the desktop keeps its own payload; only the column edits (species, count, exclusion, date) apply.
                 if exists, data == nil, let p = try db.rows("SELECT payload_json FROM ll_record WHERE id=?", [r.id.uuidString.lowercased()]).first?.s(0),
                    (try? JSONDecoder().decode(Record.self, from: Data(p.utf8))) == nil {
-                    throw StoreError(message: "这条记录来自电脑版，在手机上只能更正鸟种、数量、排除和日期")
+                    throw StoreError(message: String(localized: "这条记录来自电脑版，在手机上只能更正鸟种、数量、排除和日期"))
                 }
                 try writeRecord(r, hash: hash, insert: !exists, now: now, zone: zone)
                 try syncSubjects(r, now: now)
@@ -440,8 +440,8 @@ final class Library {
                 }
                 let migrated = try db.rows("SELECT count(*) FROM ll_record WHERE legacy_json IS NOT NULL")[0].n(0)!
                 let broken = try db.rows("SELECT count(*) FROM ll_legacy_issue WHERE raw_json IS NOT NULL")[0].n(0)!
-                guard migrated + broken == jsons.count else { throw StoreError(message: "旧记录核对不一致：\(jsons.count) 个文件，\(migrated) 条记录，\(broken) 个待修复") }
-                guard try db.rows("PRAGMA integrity_check").first?.s(0) == "ok", try db.rows("PRAGMA foreign_key_check").isEmpty else { throw StoreError(message: "记录库完整性检查失败") }
+                guard migrated + broken == jsons.count else { throw StoreError(message: String(localized: "旧记录核对不一致：\(jsons.count) 个文件，\(migrated) 条记录，\(broken) 个待修复")) }
+                guard try db.rows("PRAGMA integrity_check").first?.s(0) == "ok", try db.rows("PRAGMA foreign_key_check").isEmpty else { throw StoreError(message: String(localized: "记录库完整性检查失败")) }
                 try db.run("INSERT OR REPLACE INTO ll_meta VALUES('migrated_utc',?)", [Self.utc(Date())])
                 try db.exec("PRAGMA user_version=1")
             }; needsMigration = false }
@@ -559,30 +559,30 @@ final class Library {
     private func editSubject(_ subject: String, _ sql: String, _ values: [Any?], now: Date) throws {
         try locked {
             try db.transaction {
-                guard try db.run("UPDATE ll_subject SET \(sql),updated_utc=? WHERE id=? AND retired=0", values + [Self.utc(now), subject]) == 1 else { throw StoreError(message: "找不到这个主体，请重新打开记录") }
+                guard try db.run("UPDATE ll_subject SET \(sql),updated_utc=? WHERE id=? AND retired=0", values + [Self.utc(now), subject]) == 1 else { throw StoreError(message: String(localized: "找不到这个主体，请重新打开记录")) }
                 try touch(subject: subject, now: now)
             }
         }
     }
     /// state: species (exact catalogue key) / uncertain / none (= restore the model's answer; never re-runs the model).
     func correct(_ subject: String, state: String, key: String? = nil, now: Date = Date()) throws {
-        guard ["species", "uncertain", "none"].contains(state), (state == "species") == (key != nil) else { throw StoreError(message: "更正无效") }
+        guard ["species", "uncertain", "none"].contains(state), (state == "species") == (key != nil) else { throw StoreError(message: String(localized: "更正无效")) }
         try editSubject(subject, "correction_state=?,corrected_key=?,corrected_utc=?", [state, key, state == "none" ? nil : Self.utc(now)], now: now)
     }
     func setCount(_ subject: String, _ n: Int?, now: Date = Date()) throws {
-        guard n.map({ (1...999998).contains($0) }) ?? true else { throw StoreError(message: "数量须为 1–999998") }
+        guard n.map({ (1...999998).contains($0) }) ?? true else { throw StoreError(message: String(localized: "数量须为 1–999998")) }
         // 1 is the automatic estimate; stored as no edit (shared archive convention).
         try editSubject(subject, "count_edit=?", [n == 1 ? nil : n], now: now)
     }
     func exclude(_ subject: String, _ on: Bool, now: Date = Date()) throws { try editSubject(subject, "excluded=?", [on], now: now) }
     /// wall nil resets to photo metadata / the frozen fallback. Affects the whole logical photo.
     func setDate(_ id: UUID, wall: String?, offset: Int?, now: Date = Date()) throws {
-        if let wall { guard Self.validWall(wall) == wall else { throw StoreError(message: "日期无效") } }
-        guard offset.map({ (-840...840).contains($0) }) ?? true else { throw StoreError(message: "时区无效") }
+        if let wall { guard Self.validWall(wall) == wall else { throw StoreError(message: String(localized: "日期无效")) } }
+        guard offset.map({ (-840...840).contains($0) }) ?? true else { throw StoreError(message: String(localized: "时区无效")) }
         try locked {
             try db.transaction {
                 let rid = id.uuidString.lowercased()
-                guard let row = try db.rows("SELECT payload_json,fallback_wall,legacy_json IS NOT NULL FROM ll_record WHERE id=?", [rid]).first, let r = try? JSONDecoder().decode(Record.self, from: Data(row.s(0)!.utf8)) else { throw StoreError(message: "找不到记录") }
+                guard let row = try db.rows("SELECT payload_json,fallback_wall,legacy_json IS NOT NULL FROM ll_record WHERE id=?", [rid]).first, let r = try? JSONDecoder().decode(Record.self, from: Data(row.s(0)!.utf8)) else { throw StoreError(message: String(localized: "找不到记录")) }
                 let edit = try wall.map { w -> String in
                     struct E: Encodable { let wall: String; let offset_min: Int? }
                     return try Self.json(E(wall: w, offset_min: offset))
@@ -594,7 +594,7 @@ final class Library {
         }
     }
     func setGroupCount(_ key: String, _ n: Int?, now: Date = Date()) throws {
-        guard n.map({ (1...999998).contains($0) }) ?? true else { throw StoreError(message: "数量须为 1–999998") }
+        guard n.map({ (1...999998).contains($0) }) ?? true else { throw StoreError(message: String(localized: "数量须为 1–999998")) }
         _ = try locked {
             if let n { try db.run("INSERT OR REPLACE INTO ll_group_edit VALUES(?,?,?)", [key, n, Self.utc(now)]) } else { try db.run("DELETE FROM ll_group_edit WHERE group_key=?", [key]) }
         }
@@ -632,16 +632,16 @@ final class Library {
             """)
             for row in try reader.rows("SELECT hash,relative_path,byte_count FROM main.ll_asset WHERE missing=0") {
                 let hash = row.s(0)!, file = dir.appendingPathComponent(row.s(1) ?? "")
-                guard let handle = try? FileHandle(forReadingFrom: file) else { throw StoreError(message: "原图缺失：\(hash.prefix(12))") }
+                guard let handle = try? FileHandle(forReadingFrom: file) else { throw StoreError(message: String(localized: "原图缺失：\(hash.prefix(12))")) }
                 defer { try? handle.close() }
                 try reader.run("INSERT INTO a.archive_blob VALUES(?,zeroblob(?))", [hash, row.n(2)!])
                 var digest = SHA256()
                 try reader.streamBlob(db: "a", table: "archive_blob", column: "original", row: sqlite3_last_insert_rowid(reader.handle), write: true) { buffer, _ in
                     let part = try handle.read(upToCount: buffer.count) ?? Data()
-                    guard part.count == buffer.count else { throw StoreError(message: "原图大小变化：\(hash.prefix(12))") }
+                    guard part.count == buffer.count else { throw StoreError(message: String(localized: "原图大小变化：\(hash.prefix(12))")) }
                     buffer = part; digest.update(data: part)
                 }
-                guard digest.finalize().map({ String(format: "%02x", $0) }).joined() == hash else { throw StoreError(message: "原图校验失败：\(hash.prefix(12))") }
+                guard digest.finalize().map({ String(format: "%02x", $0) }).joined() == hash else { throw StoreError(message: String(localized: "原图校验失败：\(hash.prefix(12))")) }
             }
             let counts = try reader.rows("SELECT (SELECT count(*) FROM a.ll_record),(SELECT count(*) FROM a.ll_asset),(SELECT count(*) FROM a.ll_subject),(SELECT value FROM main.ll_meta WHERE key='library_id')")[0]
             let meta: [(String, String)] = [("format", "birdcm-archive"), ("version", "1"), ("archive_id", UUID().uuidString.lowercased()), ("library_id", counts.s(3) ?? ""), ("created_utc", Self.utc(now)), ("producer", "ios"), ("taxonomy", "avilist-2026"), ("scope", "full"),
@@ -656,22 +656,22 @@ final class Library {
     static func inspect(_ url: URL) throws -> ArchiveInfo {
         let a = try SQL(url.path, readOnly: true)
         try? a.exec("PRAGMA trusted_schema=OFF")
-        guard try a.rows("PRAGMA application_id").first?.n(0) == applicationID, try a.rows("PRAGMA user_version").first?.n(0) == 1 else { throw StoreError(message: "不是观羽备份文件，或版本过新") }
+        guard try a.rows("PRAGMA application_id").first?.n(0) == applicationID, try a.rows("PRAGMA user_version").first?.n(0) == 1 else { throw StoreError(message: String(localized: "不是观羽备份文件，或版本过新")) }
         let expected = try expectedSchema()
         let found = try a.rows("SELECT name,sql,type FROM sqlite_master")
         for row in found where !(row.s(0)!.hasPrefix("sqlite_autoindex_") && row.s(1) == nil) {
-            guard expected[row.s(0)!] == row.s(1) else { throw StoreError(message: "备份文件含有未知结构：\(row.s(0)!)") }
+            guard expected[row.s(0)!] == row.s(1) else { throw StoreError(message: String(localized: "备份文件含有未知结构：\(row.s(0)!)")) }
         }
-        guard Set(found.compactMap { $0.s(0) }).isSuperset(of: expected.keys) else { throw StoreError(message: "备份文件缺少数据表") }
-        guard try a.rows("PRAGMA integrity_check").first?.s(0) == "ok", try a.rows("PRAGMA foreign_key_check").isEmpty else { throw StoreError(message: "备份文件已损坏") }
+        guard Set(found.compactMap { $0.s(0) }).isSuperset(of: expected.keys) else { throw StoreError(message: String(localized: "备份文件缺少数据表")) }
+        guard try a.rows("PRAGMA integrity_check").first?.s(0) == "ok", try a.rows("PRAGMA foreign_key_check").isEmpty else { throw StoreError(message: String(localized: "备份文件已损坏")) }
         let meta = Dictionary(uniqueKeysWithValues: try a.rows("SELECT key,value FROM archive_meta").map { ($0.s(0)!, $0.s(1)!) })
-        guard meta["format"] == "birdcm-archive", meta["version"] == "1" else { throw StoreError(message: "备份格式无法识别") }
-        guard try a.rows("SELECT 1 FROM ll_asset s LEFT JOIN archive_blob b ON b.hash=s.hash WHERE (s.missing=0) != (b.hash IS NOT NULL)").isEmpty else { throw StoreError(message: "备份中的原图与清单不符") }
+        guard meta["format"] == "birdcm-archive", meta["version"] == "1" else { throw StoreError(message: String(localized: "备份格式无法识别")) }
+        guard try a.rows("SELECT 1 FROM ll_asset s LEFT JOIN archive_blob b ON b.hash=s.hash WHERE (s.missing=0) != (b.hash IS NOT NULL)").isEmpty else { throw StoreError(message: String(localized: "备份中的原图与清单不符")) }
         var info = ArchiveInfo(created: meta["created_utc"] ?? "")
         for row in try a.rows("SELECT b.rowid,b.hash,s.byte_count FROM archive_blob b JOIN ll_asset s ON s.hash=b.hash") {
             var digest = SHA256(), size = 0
             try a.streamBlob(db: "main", table: "archive_blob", column: "original", row: Int64(row.n(0)!), write: false) { buffer, _ in digest.update(data: buffer); size += buffer.count }
-            guard size == row.n(2)!, digest.finalize().map({ String(format: "%02x", $0) }).joined() == row.s(1)! else { throw StoreError(message: "备份中的原图校验失败") }
+            guard size == row.n(2)!, digest.finalize().map({ String(format: "%02x", $0) }).joined() == row.s(1)! else { throw StoreError(message: String(localized: "备份中的原图校验失败")) }
             info.bytes += size
         }
         let c = try a.rows("SELECT (SELECT count(*) FROM ll_record WHERE canonical=1 AND deleted_utc IS NULL),(SELECT count(*) FROM ll_asset),(SELECT count(*) FROM ll_subject)")[0]
@@ -694,7 +694,7 @@ final class Library {
                     let handle = try FileHandle(forWritingTo: staging)
                     try a.streamBlob(db: "main", table: "archive_blob", column: "original", row: Int64(row.n(0)!), write: false) { buffer, _ in try handle.write(contentsOf: buffer) }
                     try handle.close()
-                    guard try Models.digest(staging) == hash else { throw StoreError(message: "写入原图校验失败") }
+                    guard try Models.digest(staging) == hash else { throw StoreError(message: String(localized: "写入原图校验失败")) }
                     try FileManager.default.moveItem(at: staging, to: final); written.append(final)
                 }
                 try db.run("ATTACH DATABASE ? AS a", [url.path])
@@ -713,7 +713,7 @@ final class Library {
                     """)
                     let added = try db.rows("SELECT count(*) FROM temp.fresh")[0].n(0)!
                     try db.exec("DROP TABLE temp.fresh")
-                    guard try db.rows("PRAGMA foreign_key_check").isEmpty else { throw StoreError(message: "导入后引用不一致，已撤销") }
+                    guard try db.rows("PRAGMA foreign_key_check").isEmpty else { throw StoreError(message: String(localized: "导入后引用不一致，已撤销")) }
                     return added
                 }
             } catch {

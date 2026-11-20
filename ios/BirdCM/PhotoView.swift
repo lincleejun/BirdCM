@@ -63,7 +63,7 @@ final class ZoomPhoto: UIScrollView,UIScrollViewDelegate,UIGestureRecognizerDele
         let double=UITapGestureRecognizer(target:self,action:#selector(zoom(_:)));double.numberOfTapsRequired=2;canvas.addGestureRecognizer(double);tap.require(toFail:double)
 
         canvas.addGestureRecognizer(manual);manual.isEnabled=false
-        canvas.accessibilityIdentifier="result.canvas";canvas.isAccessibilityElement=true;canvas.accessibilityLabel="鸟的照片";canvas.accessibilityHint="双击放大，主体切换和画框按钮在照片下方"
+        canvas.accessibilityIdentifier="result.canvas";canvas.isAccessibilityElement=true;canvas.accessibilityLabel=String(localized:"鸟的照片");canvas.accessibilityHint=String(localized:"双击放大，主体切换和画框按钮在照片下方")
         canvas.isUserInteractionEnabled=true
     }
     required init?(coder:NSCoder){fatalError()}
@@ -72,8 +72,8 @@ final class ZoomPhoto: UIScrollView,UIScrollViewDelegate,UIGestureRecognizerDele
         canvas.image=image;canvas.record=record;canvas.marks=marks;self.drawing=drawing;manual.isEnabled=drawing
         panGestureRecognizer.isEnabled = !drawing && zoomScale>1
         canvas.setNeedsDisplay();setNeedsLayout()
-        canvas.accessibilityCustomActions=[UIAccessibilityCustomAction(name:"放大或还原照片",actionHandler:{[weak self] _ in guard let self else{return false};self.setZoomScale(self.zoomScale>1 ? 1:2,animated:true);return true})]
-            + (onTap == nil ? []:[UIAccessibilityCustomAction(name:"查看大图",actionHandler:{[weak self] _ in self?.onTap?();return true})])
+        canvas.accessibilityCustomActions=[UIAccessibilityCustomAction(name:String(localized:"放大或还原照片"),actionHandler:{[weak self] _ in guard let self else{return false};self.setZoomScale(self.zoomScale>1 ? 1:2,animated:true);return true})]
+            + (onTap == nil ? []:[UIAccessibilityCustomAction(name:String(localized:"查看大图"),actionHandler:{[weak self] _ in self?.onTap?();return true})])
     }
     /// The canvas is the image aspect-fitted in the bounds and kept centred, so a full-screen viewer zooms the whole photo
     /// (callers that already size the view to the image's aspect see no change).
