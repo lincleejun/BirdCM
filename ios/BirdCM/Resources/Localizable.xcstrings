@@ -449,6 +449,22 @@
         }
       }
     },
+    "%lld 张 → %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld selected → %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 张 → %@"
+          }
+        }
+      }
+    },
     "%lld 月": {
       "localizations": {
         "en": {
@@ -1765,6 +1781,22 @@
         }
       }
     },
+    "全选": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select All"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全选"
+          }
+        }
+      }
+    },
     "全部": {
       "localizations": {
         "en": {
@@ -2181,6 +2213,22 @@
         }
       }
     },
+    "删除 %lld 张": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除 %lld 张"
+          }
+        }
+      }
+    },
     "删除副本": {
       "localizations": {
         "en": {
@@ -2209,6 +2257,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "删除失败：%@"
+          }
+        }
+      }
+    },
+    "删除所选 %lld 张照片的记录？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the records of the selected photos (%lld)?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除所选 %lld 张照片的记录？"
           }
         }
       }
@@ -2677,6 +2741,22 @@
         }
       }
     },
+    "取消全选": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deselect All"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消全选"
+          }
+        }
+      }
+    },
     "取消画框": {
       "localizations": {
         "en": {
@@ -2721,6 +2801,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "另有 %lld 个旧识别版本：同一照片，只统计一次。"
+          }
+        }
+      }
+    },
+    "另有 %lld 张没有找到鸟，不改。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos without a bird, left unchanged: %lld."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另有 %lld 张没有找到鸟，不改。"
           }
         }
       }
@@ -4487,6 +4583,22 @@
         }
       }
     },
+    "已选 %lld 张": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Selected"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已选 %lld 张"
+          }
+        }
+      }
+    },
     "常见": {
       "localizations": {
         "en": {
@@ -5641,6 +5753,22 @@
         }
       }
     },
+    "改所选 %lld 张照片的鸟 1，与在每张结果页里更正相同。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes bird 1 in each selected photo (%lld), the same as correcting it on each result page."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改所选 %lld 张照片的鸟 1，与在每张结果页里更正相同。"
+          }
+        }
+      }
+    },
     "改的是整张照片的日期，照片里的每只鸟都按新日期统计。时区沿用照片记录（没有就留空）。": {
       "localizations": {
         "en": {
@@ -5653,6 +5781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "改的是整张照片的日期，照片里的每只鸟都按新日期统计。时区沿用照片记录（没有就留空）。"
+          }
+        }
+      }
+    },
+    "改鸟种": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Species"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改鸟种"
           }
         }
       }
@@ -10155,6 +10299,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "这里这个月可能见到的鸟 · %lld"
+          }
+        }
+      }
+    },
+    "选择": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择"
           }
         }
       }
