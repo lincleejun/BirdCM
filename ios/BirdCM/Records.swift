@@ -12,6 +12,13 @@ struct RecordsView: View {
     /// 鸟种 order: 最近识别 (default; owner 2026-11-18: a bird just identified comes first), 最近见到, 首次见到, 名称.
     @State private var sort = "identified"
     @State private var deleting: PhotoItem?
+    /// 照片 multi-select (系统惯例: 选择 → checkmarks → bottom bar 改鸟种 / 删除). Acts only on selected rows still shown.
+    @State private var selecting: Bool
+    @State private var selected: Set<UUID>
+    @State private var batchCorrecting = false
+    @State private var batchDeleting = false
+    init(selecting: Bool = false, selected: Set<UUID> = []) { _selecting = State(initialValue: selecting); _selected = State(initialValue: selected) }
+    var chosen: [PhotoItem] { photos.filter { selected.contains($0.id) } }
     var species: [SpeciesStat] {
         let all = Array(model.ledger.allTime.values)
         switch sort {
@@ -49,6 +56,33 @@ struct RecordsView: View {
             Button("删除", role: .destructive) { if let d = deleting { model.delete(d.id) } }.accessibilityIdentifier("history.confirmDelete")
             Button("取消", role: .cancel) {}
         } message: { Text("只从观羽的记录与统计中移除；相册或文件里的原图不受影响。") }
+        .confirmationDialog("删除所选 \(chosen.count) 张照片的记录？", isPresented: $batchDeleting, titleVisibility: .visible) {
+            Button("删除 \(chosen.count) 张", role: .destructive) { model.delete(chosen.map(\.id)); selected = []; selecting = false }.accessibilityIdentifier("history.confirmBatchDelete")
+            Button("取消", role: .cancel) {}
+        } message: { Text("只从观羽的记录与统计中移除；相册或文件里的原图不受影响。") }
+        .sheet(isPresented: $batchCorrecting, onDismiss: { selected = []; selecting = false }) { CorrectionSheet(batch: chosen).debugAppearance() }
+        .toolbar {
+            if model.recordsMode == "photos" && !model.items.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(selecting ? "完成" : "选择") { selecting.toggle(); selected = [] }.accessibilityIdentifier("history.select")
+                }
+                if selecting {
+                    ToolbarItem(placement: .topBarLeading) {
+                        let all = !photos.isEmpty && chosen.count == photos.count
+                        Button(all ? "取消全选" : "全选") { selected = all ? [] : Set(photos.map(\.id)) }.accessibilityIdentifier("history.selectAll")
+                    }
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        Button("改鸟种") { batchCorrecting = true }.disabled(!chosen.contains { !$0.subjects.isEmpty }).accessibilityIdentifier("history.batchCorrect")
+                        Spacer()
+                        Text("已选 \(chosen.count) 张").font(.footnote).monospacedDigit().accessibilityIdentifier("history.selectedCount")
+                        Spacer()
+                        Button("删除", role: .destructive) { batchDeleting = true }.disabled(chosen.isEmpty).accessibilityIdentifier("history.batchDelete")
+                    }
+                }
+            }
+        }
+        .toolbar(selecting ? .hidden : .automatic, for: .tabBar)
+        .onChange(of: model.recordsMode) { selecting = false; selected = [] }
     }
     /// Part of each list's scrolling content (owner 2026-11-18: a scrolled root keeps only its title).
     var modePicker: some View {
@@ -82,7 +116,7 @@ struct RecordsView: View {
         }.accessibilityIdentifier("records.empty")
     }
     var photoList: some View {
-        List {
+        List(selection: $selected) {
             modePicker.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
             Section {
                 TextField("搜索鸟名、地点或日期", text: $search, prompt: Text("搜索鸟名、地点或日期").foregroundColor(Palette.secondary)).accessibilityIdentifier("history.search").frame(minHeight: 44)
@@ -97,10 +131,14 @@ struct RecordsView: View {
                 ContentUnavailableView { Label("没有匹配的记录", systemImage: "magnifyingglass") } description: { Text("试试中文名、英文名、学名、地点或日期。") } actions: { Button("清除搜索") { search = "" } }
             }
             ForEach(photos) { r in
-                Button { model.open(r.id) } label: { HistoryRow(item: r) }.buttonStyle(.plain).accessibilityIdentifier("history.item.\(r.id)").listRowBackground(Palette.surface)
-                    .swipeActions { Button("删除", role: .destructive) { deleting = r }.accessibilityIdentifier("history.delete.\(r.id)") }
+                if selecting {
+                    HistoryRow(item: r).accessibilityIdentifier("history.item.\(r.id)").listRowBackground(Palette.surface)
+                } else {
+                    Button { model.open(r.id) } label: { HistoryRow(item: r) }.buttonStyle(.plain).accessibilityIdentifier("history.item.\(r.id)").listRowBackground(Palette.surface)
+                        .swipeActions { Button("删除", role: .destructive) { deleting = r }.accessibilityIdentifier("history.delete.\(r.id)") }
+                }
             }
-        }.scrollContentBackground(.hidden).contentMargins(.top, 4, for: .scrollContent)   // the picker follows the title, like 统计
+        }.environment(\.editMode, .constant(selecting ? .active : .inactive)).scrollContentBackground(.hidden).contentMargins(.top, 4, for: .scrollContent)   // the picker follows the title, like 统计
     }
     var pendingList: some View {
         let pending = model.ledger.pending

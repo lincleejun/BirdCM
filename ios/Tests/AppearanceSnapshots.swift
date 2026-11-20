@@ -122,6 +122,24 @@ final class AppearanceSnapshots: SnapshotCase {
         let loading = model("loading"); loading.paths[.identify] = [.identifying]
         try await shot("loading-preview", nil, wait: 0.5, RootView().environment(loading))
     }
+    /// 记录 → 照片 in 选择 mode (two rows ticked, bottom bar) and the batch 更正鸟种 sheet, Chinese and English. The test
+    /// host runs zh-Hans: `\.locale` switches the Text keys; String(localized:) values stay Chinese.
+    @MainActor func testRecordsSelection() async throws {
+        let d = UserDefaults.standard
+        d.set(fixtures.appendingPathComponent("photo-0.jpg").path, forKey: "fixtureImage"); d.set("photo-gps", forKey: "fixtureState"); d.set(3, forKey: "historyFixtureCount")
+        let m = model(nil)
+        await m.pickFixture(); m.showing = false
+        await until { m.items.count == 3 }
+        m.recordsMode = "photos"
+        let two = Array(m.items.prefix(2))
+        for lang in ["zh-Hans", "en"] {
+            let locale = Locale(identifier: lang)
+            try await shot("records-select-\(lang)", SnapshotCase.light, test: "testRecordsSelection",
+                           NavigationStack { RecordsView(selecting: true, selected: Set(two.map(\.id))) }.environment(m).tint(Palette.accent).environment(\.locale, locale))
+            try await shot("records-batch-correct-\(lang)", SnapshotCase.light, test: "testRecordsSelection",
+                           sheet(m, CorrectionSheet(batch: two).environment(\.locale, locale)).environment(\.locale, locale))
+        }
+    }
     /// Species page (当地可能性 + 分布图) for an unseen species, so the new sections are on screen; 探索 rows at the same
     /// place; the result page's link to the species page. Light and dark. (Its own method: the matrix above takes ~80 s.)
     @MainActor func testSpeciesDetail() async throws {

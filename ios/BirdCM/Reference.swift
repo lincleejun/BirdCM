@@ -417,3 +417,78 @@ enum Reference {
     static let debugTransport: Transport? = nil
     #endif
 }
+
+/// Update check, the iOS port of engine/birdcm/update.py: off by default (UserDefaults "updateCheck", like the other
+/// network switches). When on, at most one GET a day to GitHub's public API for the latest release tag; the request
+/// carries nothing about the person or this install (ephemeral session: no cookie, cache or credential; no current
+/// version; the fixed User-Agent of Reference). Redirects are not followed. Any failure is silent and counts as the
+/// day's check. Settings links to the Releases page; nothing is downloaded or installed.
+enum Update {
+    static let latest = URL(string: "https://api.github.com/repos/lincleejun/BirdCM/releases/latest")!
+    static let releases = URL(string: "https://github.com/lincleejun/BirdCM/releases")!
+    static let day = 86400.0
+    static var current: String? { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String }
+
+    /// "release/vX.Y.Z" -> "X.Y.Z"; anything else (v1.2.3, release/v1.2.3-beta) is no answer.
+    static func version(tag: String?) -> String? {
+        guard let m = tag?.wholeMatch(of: /release\/v(\d+)\.(\d+)\.(\d+)/) else { return nil }
+        return "\(m.1).\(m.2).\(m.3)"
+    }
+    /// latest is a release x.y.z; cur may be a prerelease (0.0.2b0, 0.0.2-beta), which is older than the same x.y.z.
+    static func newer(_ latest: String?, _ cur: String?) -> Bool {
+        func parse(_ s: String?) -> (Int, Int, Int, Int)? {        // the last field: 1 for a release, 0 for a prerelease
+            guard let m = s?.wholeMatch(of: /(\d+)\.(\d+)\.(\d+)(.*)/), let x = Int(m.1), let y = Int(m.2), let z = Int(m.3) else { return nil }
+            return (x, y, z, m.4.isEmpty ? 1 : 0)
+        }
+        guard let a = parse(latest), a.3 == 1, let b = parse(cur) else { return false }
+        return a > b
+    }
+    /// Off asks nothing; on asks when there is no check yet or the last one is not within the past day.
+    static func due(enabled: Bool, checked: Double?, now: Double) -> Bool {
+        guard enabled else { return false }
+        guard let checked else { return true }
+        return !(0..<day).contains(now - checked)
+    }
+    static var request: URLRequest {
+        var r = URLRequest(url: latest)
+        r.setValue(Reference.userAgent, forHTTPHeaderField: "User-Agent")
+        r.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        r.setValue("en", forHTTPHeaderField: "Accept-Language")   // fixed: CFNetwork would otherwise send the device's languages
+        return r
+    }
+    /// The latest release's version, nil on any failure (offline, rate limit, 404, a 3xx, a body we cannot read).
+    static func ask(_ transport: Reference.Transport) async -> String? {
+        guard let (data, r) = try? await transport(request, Reference.maxJSON), r.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return version(tag: json["tag_name"] as? String)
+    }
+    /// The newer version to offer, or nil. Asks the network only when `due`; the stamp is written before the request,
+    /// so overlapping calls send one, and a failure counts as checked.
+    static func check(_ d: UserDefaults = .standard, now: Double = Date().timeIntervalSince1970, current: String? = Update.current,
+                      transport: Reference.Transport = Update.transport) async -> String? {
+        let enabled = d.bool(forKey: "updateCheck")
+        if due(enabled: enabled, checked: d.object(forKey: "updateChecked") as? Double, now: now) {
+            d.set(now, forKey: "updateChecked")
+            let v = await ask(transport)
+            if let v { d.set(v, forKey: "updateLatest") } else { d.removeObject(forKey: "updateLatest") }
+        }
+        let v = d.string(forKey: "updateLatest")
+        return enabled && newer(v, current) ? v : nil
+    }
+    /// Ephemeral: no cookie, URL cache or stored credential; short timeouts; a redirect is not followed (the 3xx is a failure).
+    static let session: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.timeoutIntervalForRequest = 3; c.timeoutIntervalForResource = 8
+        c.httpCookieStorage = nil; c.httpShouldSetCookies = false; c.urlCredentialStorage = nil
+        c.urlCache = nil; c.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: c, delegate: NoRedirect(), delegateQueue: nil)
+    }()
+    final class NoRedirect: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest) async -> URLRequest? { nil }
+    }
+    static let transport: Reference.Transport = { req, limit in
+        let (data, resp) = try await session.data(for: req)
+        guard let r = resp as? HTTPURLResponse, data.count <= limit else { throw URLError(.badServerResponse) }
+        return (data, r)
+    }
+}

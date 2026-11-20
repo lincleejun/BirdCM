@@ -308,3 +308,87 @@ final class ReferenceTests: XCTestCase {
         XCTAssertGreaterThan(cache.clear(), 0); XCTAssertNil(cache.read("summary", sci))
     }
 }
+
+/// Update check (Update in BirdCM/Reference.swift), engine/tests/test_update.py case for case; no live network.
+final class UpdateTests: XCTestCase {
+    final class Stub: @unchecked Sendable {
+        enum Answer { case json(Any), bytes(Data), status(Int), error(Error) }
+        var answer = Answer.json(["tag_name": "release/v9.0.0"]), reqs = [URLRequest]()
+        @Sendable func transport(_ req: URLRequest, _ limit: Int) async throws -> (Data, HTTPURLResponse) {
+            reqs.append(req)
+            func http(_ s: Int) -> HTTPURLResponse { HTTPURLResponse(url: req.url!, statusCode: s, httpVersion: nil, headerFields: nil)! }
+            switch answer {
+            case .json(let o): return (try JSONSerialization.data(withJSONObject: o), http(200))
+            case .bytes(let d): return (d, http(200))
+            case .status(let s): return (Data("{\"tag_name\":\"release/v9.0.0\"}".utf8), http(s))
+            case .error(let e): throw e
+            }
+        }
+    }
+    func defaults() -> UserDefaults {
+        let name = "UpdateTests-\(UUID().uuidString)", d = UserDefaults(suiteName: name)!
+        addTeardownBlock { d.removePersistentDomain(forName: name) }
+        return d
+    }
+
+    func testNewer() {
+        let cases: [(String?, String?, Bool)] = [
+            ("0.0.3", "0.0.2", true), ("0.1.0", "0.0.9", true), ("0.0.10", "0.0.9", true), ("0.0.2", "0.0.2", false),
+            ("0.0.2", "0.0.3", false), ("0.0.2", "0.0.2b0", true), ("0.0.2", "0.0.2rc1", true), ("0.0.1", "0.0.2b0", false),
+            ("0.0.3b0", "0.0.2", false), (nil, "0.0.2", false), ("0.0.3", nil, false), ("x", "0.0.2", false),
+            ("0.0.2", "0.0.2-beta", true)]
+        for (latest, cur, yes) in cases { XCTAssertEqual(Update.newer(latest, cur), yes, "\(latest ?? "nil") vs \(cur ?? "nil")") }
+    }
+    func testTag() {
+        XCTAssertEqual(Update.version(tag: "release/v9.0.0"), "9.0.0")
+        XCTAssertEqual(Update.version(tag: "release/v0.0.10"), "0.0.10")
+        for t in ["release/v9.0.0-beta", "v9.0.0", "release/9.0.0", "xrelease/v9.0.0", "release/v9.0", nil] as [String?] { XCTAssertNil(Update.version(tag: t), t ?? "nil") }
+    }
+    func testDue() {
+        XCTAssertFalse(Update.due(enabled: false, checked: nil, now: 1000))
+        XCTAssertTrue(Update.due(enabled: true, checked: nil, now: 1000))
+        XCTAssertFalse(Update.due(enabled: true, checked: 1000, now: 1000 + Update.day - 1))
+        XCTAssertTrue(Update.due(enabled: true, checked: 1000, now: 1000 + Update.day))
+        XCTAssertTrue(Update.due(enabled: true, checked: 1000 + Update.day, now: 1000), "a stamp in the future (clock moved back) is not trusted")
+    }
+    func testOffByDefaultAsksNothing() async {
+        let d = defaults(), stub = Stub()
+        let v = await Update.check(d, now: 1000, current: "0.0.2", transport: stub.transport)
+        XCTAssertNil(v); XCTAssertTrue(stub.reqs.isEmpty)
+    }
+    func testOnAsksOnceADayAndSendsNothingAboutUs() async {
+        let d = defaults(), stub = Stub(); d.set(true, forKey: "updateCheck")
+        var v = await Update.check(d, now: 1000, current: "0.0.2", transport: stub.transport)
+        XCTAssertEqual(v, "9.0.0"); XCTAssertEqual(stub.reqs.count, 1)
+        let req = stub.reqs[0]
+        XCTAssertEqual(req.url, Update.latest); XCTAssertEqual(req.httpMethod, "GET"); XCTAssertNil(req.httpBody)
+        XCTAssertEqual(req.allHTTPHeaderFields, ["User-Agent": Reference.userAgent, "Accept": "application/vnd.github+json", "Accept-Language": "en"])
+        XCTAssertFalse(Reference.userAgent.contains(Update.current ?? "-"), "no current version in the request")
+        v = await Update.check(d, now: 1000 + 3600, current: "0.0.2", transport: stub.transport)
+        XCTAssertEqual(v, "9.0.0"); XCTAssertEqual(stub.reqs.count, 1, "cached")
+        _ = await Update.check(d, now: 1000 + Update.day + 1, current: "0.0.2", transport: stub.transport)
+        XCTAssertEqual(stub.reqs.count, 2)
+        d.set(false, forKey: "updateCheck")
+        v = await Update.check(d, now: 1000 + 3 * Update.day, current: "0.0.2", transport: stub.transport)
+        XCTAssertNil(v, "off: no notice, even with a newer version cached"); XCTAssertEqual(stub.reqs.count, 2)
+    }
+    func testFailureIsSilentAndNotRetriedAtOnce() async {
+        let answers: [Stub.Answer] = [.error(URLError(.notConnectedToInternet)), .status(403), .status(404), .status(302), .error(URLError(.timedOut)),
+                                      .bytes(Data("<html>".utf8)), .json(["message": "x"]), .json(["tag_name": "release/v9.0.0-beta"]),
+                                      .json(["tag_name": "v9.0.0"]), .json(["tag_name": NSNull()])]
+        for a in answers {
+            let d = defaults(), stub = Stub(); d.set(true, forKey: "updateCheck"); stub.answer = a
+            let first = await Update.check(d, now: 1000, current: "0.0.2", transport: stub.transport)
+            let second = await Update.check(d, now: 1001, current: "0.0.2", transport: stub.transport)
+            XCTAssertNil(first); XCTAssertNil(second); XCTAssertEqual(stub.reqs.count, 1, "\(a)")
+            XCTAssertNil(d.string(forKey: "updateLatest"))
+        }
+    }
+    /// The live session: ephemeral, nothing stored, short timeouts, no redirect.
+    func testSessionStoresNothing() {
+        let c = Update.session.configuration
+        XCTAssertNil(c.httpCookieStorage); XCTAssertFalse(c.httpShouldSetCookies); XCTAssertNil(c.urlCredentialStorage); XCTAssertNil(c.urlCache)
+        XCTAssertLessThanOrEqual(c.timeoutIntervalForResource, 8)
+        XCTAssertTrue(Update.session.delegate is Update.NoRedirect)
+    }
+}

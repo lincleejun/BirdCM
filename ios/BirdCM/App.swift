@@ -306,13 +306,14 @@ func title(_ r: Identification) -> String {
     }
     @ObservationIgnored private var refreshes=0
     /// One shared commit path for every edit: write, reload the open record, refresh counts. False leaves the editor open.
-    @discardableResult func edit(_ body:(Library) throws -> Void) -> Bool {
+    /// `viewing: false` (记录 multi-select) leaves the open photo's 最近查看 alone; the body marks what it edits.
+    @discardableResult func edit(viewing:Bool=true,_ body:(Library) throws -> Void) -> Bool {
         guard let library else{return false}
         guard migration == nil else {self.error=String(localized:"旧记录还在整理，完成后再修改。");return false}
         do {
             try body(library)
             // A correction (or any edit) of the open photo counts as identifying it now: first in 记录 and 最近记录.
-            if let id=current?.id {viewed(id)}
+            if viewing,let id=current?.id {viewed(id)}
             if let id=current?.id,let r=try library.record(id) {var v=r;v.selected=current?.selected ?? r.selected;if let s=v.results[String(v.selected)] {v.result=s};current=v}
             refresh();UINotificationFeedbackGenerator().notificationOccurred(.success);return true
         } catch {self.error=String(localized:"保存失败：\(error.localizedDescription)");return false}
@@ -553,8 +554,10 @@ func title(_ r: Identification) -> String {
         guard let library else {current=r;return}
         do { current=try library.save(r); refresh() } catch { self.error=String(localized:"保存失败：\(error.localizedDescription)") }
     }
-    func delete(_ id: UUID) {
-        do { try library?.delete(id); if current?.id==id { showing=false;current=nil;photo=nil;preview=nil };refresh() }
+    func delete(_ id: UUID) { delete([id]) }
+    /// One write per photo, one refresh for all of them.
+    func delete(_ ids: [UUID]) {
+        do { try library?.delete(ids); if let id=current?.id,ids.contains(id) { showing=false;current=nil;photo=nil;preview=nil };refresh() }
         catch { self.error=String(localized:"删除失败：\(error.localizedDescription)") }
     }
 }

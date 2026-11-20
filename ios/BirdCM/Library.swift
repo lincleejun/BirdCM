@@ -569,6 +569,11 @@ final class Library {
         guard ["species", "uncertain", "none"].contains(state), (state == "species") == (key != nil) else { throw StoreError(message: String(localized: "更正无效")) }
         try editSubject(subject, "correction_state=?,corrected_key=?,corrected_utc=?", [state, key, state == "none" ? nil : Self.utc(now)], now: now)
     }
+    /// 记录 → 照片 multi-select: each photo's 鸟 1 (the subject its row shows) gets exactly the result page's 更正鸟种,
+    /// one photo after another, and counts as identified now like that correction does; photos without a bird are skipped.
+    func correct(photos: [PhotoItem], state: String, key: String? = nil, now: Date = Date()) throws {
+        for p in photos { guard let s = p.subjects.first else { continue }; try correct(s.id, state: state, key: key, now: now); try markViewed(p.id, now: now) }
+    }
     func setCount(_ subject: String, _ n: Int?, now: Date = Date()) throws {
         guard n.map({ (1...999998).contains($0) }) ?? true else { throw StoreError(message: String(localized: "数量须为 1–999998")) }
         // 1 is the automatic estimate; stored as no edit (shared archive convention).
@@ -605,6 +610,7 @@ final class Library {
             try db.run("UPDATE ll_record SET deleted_utc=?,revision=revision+1,updated_utc=? WHERE deleted_utc IS NULL AND asset_hash=(SELECT asset_hash FROM ll_record WHERE id=?)", [Self.utc(now), Self.utc(now), id.uuidString.lowercased()])
         }
     }
+    func delete(_ ids: [UUID], now: Date = Date()) throws { for id in ids { try delete(id, now: now) } }
     func deleteAll(now: Date = Date()) throws {
         _ = try locked { try db.run("UPDATE ll_record SET deleted_utc=?,revision=revision+1,updated_utc=? WHERE deleted_utc IS NULL", [Self.utc(now), Self.utc(now)]) }
     }
