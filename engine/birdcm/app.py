@@ -172,6 +172,11 @@ class Correction(BaseModel):
     undo: bool = False                        # remove the corrections of this scope instead
 
 
+class StarFix(BaseModel):
+    photo_ids: list[int]                      # one photo, or many in one request (multi-select)
+    stars: int | None = None                  # -1 淘汰, 0-3; None = back to the computed stars
+
+
 class SingleCorrection(BaseModel):
     sci: str | None = None
     undo: bool = False
@@ -533,6 +538,24 @@ def create_app(port: int = 8765, token: str | None = None, store: Store | None =
             store.clear_corrections(ids)
         else:
             store.set_corrections(ids, body.sci, body.scope)
+        sched.rerate_now(sid)
+        return {"ok": True, "photos": len(ids)}
+
+    @api.post("/api/scans/{sid}/stars")
+    def set_stars(sid: int, body: StarFix):
+        """The person's stars for these photos (None: back to the computed ones). Stored per file signature like the
+        corrections (survive re-scans and settings changes); laid over the rating, so no other photo changes."""
+        get_scan(sid)
+        if body.stars is not None and body.stars not in (-1, 0, 1, 2, 3):
+            raise HTTPException(400, "星级只能是 -1（淘汰）、0、1、2、3")
+        ids = set(body.photo_ids)
+        if not ids:
+            raise HTTPException(400, "没有选照片")
+        have = {r[0] for r in store._db().execute(
+            f"SELECT id FROM photo WHERE scan_id = ? AND id IN ({','.join('?' * len(ids))})", (sid, *ids))}
+        if have != ids:
+            raise HTTPException(404, "这次扫描里没有这张照片")
+        store.set_star_fixes(sorted(ids), body.stars)
         sched.rerate_now(sid)
         return {"ok": True, "photos": len(ids)}
 

@@ -54,6 +54,7 @@ export interface PhotoRow {
   result: PhotoResult | null; error: string | null; reused: number;
   // per scan (stars.py); null = 待定
   stars: number | null; star_reason: string | null; burst_group: number | null; burst_rank: number | null; burst_size: number | null;
+  star_auto?: { stars: number | null; reason: string | null } | null;   // set: the stars are the person's; this is what was computed
   species_fix: Species | null;    // the burst's majority species, when it differs from this frame's own
   quality?: { q: number; parts: Record<string, number | null> | null } | null;   // stars.py "select": Q and its parts
   variants?: string[];            // Lightroom derivatives of this shot (e.g. -Enhanced-NR.dng): listed, never rated
