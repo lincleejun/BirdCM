@@ -33,7 +33,7 @@ home page shows its text mark instead.
 | `Resources/engine/models.toml` | the model manifest | |
 | `Resources/licenses` | MIT licence, NOTICE.md, Python / ExifTool licences, THIRD-PARTY.md | |
 
-dmg ≈ 215 MB, installed ≈ 1.2 GB, models downloaded on first use ≈ 0.83 GB (three files not released yet).
+dmg ≈ 215 MB, installed ≈ 1.2 GB, models downloaded on first use ≈ 0.83 GB (four files not released yet: `released = false` in `models.toml`).
 
 Why a bundled Python and not "uv + lockfile, environment built on first launch": that option makes a ~50 MB app but
 then downloads ~265 MB of wheels plus a Python at first launch (1.0 GB installed either way), needs the network for

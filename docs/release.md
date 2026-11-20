@@ -44,7 +44,7 @@ mkdir -p $OUT/Payload && cp -Rc ios/DerivedData-device/Build/Products/Release-ip
 gh release upload release/v$V $OUT/GuanYu-$V-iOS-unsigned.ipa $OUT/GuanYu-$V-iOS-unsigned.ipa.sha256
 ```
 
-公开包带 IUCN 等级（默认 `BIRDCM_BUNDLE_IUCN=1`）：构建时从 `engine/birdcm/data/iucn.csv` 写入包内稀有度表，许可 CC BY 4.0，署名在 About 与 NOTICE.md（依据见 `engine/birdcm/data/iucn-LICENSE.md`；2026-11-19 所有者确认许可依据并要求随工程打包）。要去掉就传 `BIRDCM_BUNDLE_IUCN=0`，它必须作为 xcodebuild 参数传入：放在命令前当环境变量，脚本阶段读不到。发布前核对包内 `Models/iucn-build-flag` 与预期一致。iOS 版本号在 `ios/project.yml` 与工程文件的 `MARKETING_VERSION`，与 `engine/pyproject.toml` 保持一致。
+公开包带 IUCN 等级（默认 `BIRDCM_BUNDLE_IUCN=1`）：构建时从 `engine/birdcm/data/iucn.csv` 写入包内稀有度表，许可 CC BY 4.0，署名在 About 与 NOTICE.md（依据见 `engine/birdcm/data/iucn-LICENSE.md`；2026-11-19 所有者确认许可依据并要求随工程打包）。要去掉就传 `BIRDCM_BUNDLE_IUCN=0`，它必须作为 xcodebuild 参数传入：放在命令前当环境变量，脚本阶段读不到。发布前核对包内 `Models/iucn-build-flag` 与预期一致。（0.0.2 的 ipa 是在打包 IUCN 之前用 `BIRDCM_BUNDLE_IUCN=0` 构建的，不含 IUCN，它的发布说明也这样写。）iOS 版本号在 `ios/project.yml` 与工程文件的 `MARKETING_VERSION`，与 `engine/pyproject.toml` 保持一致。
 
 ## 流水线做了什么
 
@@ -59,7 +59,7 @@ gh release upload release/v$V $OUT/GuanYu-$V-iOS-unsigned.ipa $OUT/GuanYu-$V-iOS
    保存的文件名 → 发布草稿。
 
 发布说明 = 固定的中英文须知（只支持 Apple Silicon + macOS 15+；未公证，第一次怎么打开；模型首次使用时下载；
-iOS 不分发；许可）+ 自上一个 `release/v*` tag 以来的提交（不含 merge 提交；正式版从上一个正式版算起，
+iOS 未签名 ipa 怎么装、包内带 IUCN；许可）+ 自上一个 `release/v*` tag 以来的提交（不含 merge 提交；正式版从上一个正式版算起，
 跳过中间的 beta/rc；第一个版本列出全部提交）。本地预览：`.github/release-notes.sh 0.0.1`。
 
 ### 中文文件名
@@ -122,6 +122,6 @@ workflow 文件进了 main 之后，GitHub → Actions → **release** → **Run
 - **没有 Intel 版**：`build.sh` 只构建 arm64（PyTorch 和打包的 Python 都是 arm64）。
 - **不打包模型**：模型约 0.8 GB，各有许可，首次使用时从 bioclip-bird / bioclip-bird-heads 的 Releases（和 BirdNET
   地理模型的发布页）下载并校验 sha256；还没发布的几个文件（见 `models.toml` 里 `released = false`）用户暂时拿不到。
-- **iOS 版不分发**：只有免费签名，这样的安装包不能分享给别人安装。
+- **iOS 版只发未签名 ipa，CI 不构建**：没有付费开发者账号，免费签名的安装包不能分享给别人安装，所以上传的是未签名 ipa（见上文「iOS 安装包」），用户用 AltStore / Sideloadly 以自己的 Apple ID 签名后安装。
 - **作者自己的照片**（`docs/prototype/img/`、`web/public/hero.jpg`）不在仓库里，CI 构建的 app 首页没有示例照片，
   只显示文字标志。
