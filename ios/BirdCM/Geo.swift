@@ -117,14 +117,24 @@ extension Geo {
             }
             if let failure { throw failure }
         }
-        var out = [[Double]?]()
-        for j in indices.indices {
-            guard !indices[j].isEmpty else { out.append(nil); continue }
-            out.append((0..<12).map { m in
-                let lo = (j * 12 + m) * n, mid = lo + n / 2
-                values[lo..<lo + n].sort()
-                return n == 0 ? .nan : n % 2 == 0 ? (values[mid - 1] + values[mid]) / 2 : values[mid]
-            })
+        // Median per (species, month), sorted in place; workers take contiguous runs of species and write their own slots.
+        var out = [[Double]?](repeating: nil, count: indices.count)
+        values.withUnsafeMutableBufferPointer { buffer in
+            out.withUnsafeMutableBufferPointer { result in
+                let v = buffer, o = result, count = indices.count
+                func species(_ j: Int) {
+                    guard !indices[j].isEmpty else { return }
+                    o[j] = (0..<12).map { m in
+                        let lo = (j * 12 + m) * n, mid = lo + n / 2
+                        var run = UnsafeMutableBufferPointer(rebasing: v[lo..<lo + n]); run.sort()
+                        return n == 0 ? .nan : n % 2 == 0 ? (v[mid - 1] + v[mid]) / 2 : v[mid]
+                    }
+                }
+                if workers <= 1 { for j in 0..<count { species(j) }; return }
+                DispatchQueue.concurrentPerform(iterations: workers) { w in
+                    for j in count * w / workers..<count * (w + 1) / workers { species(j) }
+                }
+            }
         }
         return out
     }
