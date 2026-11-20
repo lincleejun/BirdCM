@@ -5,7 +5,7 @@
 `.github/release-notes.sh`（生成发布说明）。
 
 平时的检查在 `.github/workflows/ci.yml`：每次推送分支和每个 PR 都跑引擎 `uv run --locked pytest`（`macos-15`，没有模型，
-模型相关的几项跳过）和网页 `npm run typecheck`、`npm run build`（`ubuntu-latest`）；任何一步失败 CI 就是红的。iOS 不在里面。
+模型相关的几项跳过）和网页 `npm run typecheck`、`npm test`（vitest，结果页的筛选、排序、设星、多选，见 `web/src/*.test.ts*`）、`npm run build`（`ubuntu-latest`）；任何一步失败 CI 就是红的。iOS 不在里面。
 
 ## 版本号
 

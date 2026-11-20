@@ -1,4 +1,4 @@
-# Checks on every branch push and pull request: engine pytest, web typecheck + build. iOS is not built here. docs/release.md
+# Checks on every branch push and pull request: engine pytest, web typecheck + tests + build. iOS is not built here. docs/release.md
 # Tag pushes are left to release.yml (branches: '**' matches no tag).
 name: ci
 
@@ -59,5 +59,7 @@ jobs:
         run: npm ci --no-audit --no-fund
       - working-directory: web
         run: npm run typecheck
+      - working-directory: web
+        run: npm test
       - working-directory: web
         run: npm run build

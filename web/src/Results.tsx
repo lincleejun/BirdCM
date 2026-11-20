@@ -6,9 +6,9 @@ import CorrectPanel, { type Pick, type Scope } from "./Correct";
 import ExportDialog from "./Export";
 import KeepControl, { KeepButton, keepOf, type KeepSetting } from "./Keep";
 import LocationPicker, { type Country, PlaceName, PlaceOf } from "./Location";
-import { select, starOf } from "./look";
+import { confirmed, listView, nameOf, select, speciesKey, starOf } from "./look";
 import { Candidates, MarkControls, type MarkSet, named, SpName, useMarks, Verdict } from "./names";
-import type { Exif, PhotoResult, PhotoRow, Place, Scan, Snapshot } from "./types";
+import type { Exif, PhotoRow, Place, Scan, Snapshot } from "./types";
 import { Marks, StarSet, Viewer } from "./Viewer";
 
 export const STATE_LABEL: Record<string, string> = { queued: "排队中", running: "扫描中", stopping: "正在停止", paused: "已停止",
@@ -27,8 +27,6 @@ const sharpTxt = (v: number | null | undefined) => (v == null ? "—" : v.toFixe
 const REGION: Record<string, string> = { eye: "眼睛周围", head: "头部", box: "整个鸟框" };
 const RARITY_NOTE = "按 GBIF 观察记录在当地当月所占比例分级：常见 ≥0.2%，不常见 ≥0.02%，少见 ≥0.002%，更低为罕见。记录多少反映的是有多少人报告，不是鸟有多少。";
 const IUCN_ZH: Record<string, string> = { LC: "无危", NT: "近危", VU: "易危", EN: "濒危", CR: "极危", DD: "数据缺乏", EX: "灭绝", EW: "野外灭绝", NE: "未评估" };
-// rarer first: 罕见 1, 少见 2, 不常见 3, 常见 4; 无记录 (0) counts as rarest, unknown last
-const rank = (p: PhotoRow) => { const t = p.result?.rarity?.tier; return t == null ? 9 : t === 0 ? 0.5 : t; };
 const Q_LABEL: Record<string, string> = { sharp_burst: "组内清晰度", sharp_species: "同种清晰度", eye: "眼睛", size: "鸟的大小",
   focus: "对焦", aesthetic: "美学", detection: "检测把握", burst_length: "连拍长度", fly: "飞版加分", rare: "稀有加分" };
 function qParts(parts: Record<string, number | null> | null | undefined): string {
@@ -38,18 +36,6 @@ function qParts(parts: Record<string, number | null> | null | undefined): string
 }
 const PRIOR_SRC: Record<string, string> = { photo: "照片 GPS", map: "地图选点", device: "本机定位", region: "地区中心点" };
 const fmtTime = (t: string | null | undefined) => (t ? t.slice(0, 19).replace("T", " ") : "时间未知");
-
-export function nameOf(r: PhotoResult): string {
-  if (r.rejected) return r.reject_reason || "没有找到鸟";
-  const s = r.species;
-  if (!s || s.level === "uncertain" || !s.label) return "不确定";
-  if (s.level === "genus") return `${s.label.sci.replace(/ sp\.$/, "")} 属`;
-  return s.label.zh || s.label.en || s.label.sci;
-}
-const confirmed = (r: PhotoResult | null) => !!r && !r.rejected && r.species?.level === "species" && !!r.species.label;
-// the species a photo is about, rejected or not (a rejected photo still names its bird)
-const named_ = (r: PhotoResult | null) => !!r && r.species?.level === "species" && !!r.species.label;
-const speciesKey = (r: PhotoResult | null) => (named_(r) ? r!.species!.label!.sci : "");
 
 function Settings({ e }: { e: Partial<Exif> | null | undefined }) {
   if (!e) return <div className="settings"><span>读取拍摄信息…</span></div>;
@@ -373,47 +359,8 @@ export default function Results({ scanId, onBack, onOpen, catalogue, brand, nav 
   // "只看这一组": the list shows one burst, whatever the other filters say (they are kept, and come back on clearing)
   const [groupOnly, setGroupOnly] = useState<number | null>(null);
   const [fold, setFold] = useState(false);              // 连拍折叠: one row per burst, its best frame
-  const view = useMemo(() => {
-    const usesResults = fsp || ffly !== "all" || frar !== "0";
-    // filters first, then (folded) one row per burst: its best-ranked frame AMONG the matches (Codex I8)
-    const matches = (p: PhotoRow) => {
-      if (onlyIds) return onlyIds.ids.has(p.id);
-      if (groupOnly !== null) return p.burst_group === groupOnly;
-      const r = p.result;
-      if (starsReady && fs !== "all") {
-        if (fs === "drop" ? !(p.stars != null && p.stars <= 0) : p.stars !== +fs) return false;
-      } else if (usesResults && r?.rejected) return false;     // rejected photos show only with 淘汰 / 不留
-      if (!usesResults) return true;
-      if (!r) return false;
-      const t = r.rarity?.tier;
-      return (!fsp || (fsp === "unsure" ? !confirmed(r) && !r.rejected : speciesKey(r) === fsp)) && (ffly === "all" || (ffly === "fly") === !!r.flying)
-        && (frar === "0" || (t != null && t <= +frar));
-    };
-    let v = photos.filter(matches);
-    if (fold && groupOnly === null && !onlyIds) {
-      const best = new Map<number, PhotoRow>();
-      for (const p of v) {
-        const g = p.burst_group ?? -p.id;
-        const cur = best.get(g);
-        if (!cur || (p.burst_rank ?? 99) < (cur.burst_rank ?? 99)) best.set(g, p);
-      }
-      const keep = new Set([...best.values()].map((p) => p.id));
-      v = v.filter((p) => keep.has(p.id));
-    }
-    const ready = (p: PhotoRow) => (p.result ? 1 : 0);
-    const cmp: Record<string, (a: PhotoRow, b: PhotoRow) => number> = {
-      queue: (a, b) => a.seq - b.seq,
-      time: (a, b) => (a.result?.exif.taken_at ?? "~").localeCompare(b.result?.exif.taken_at ?? "~") || a.seq - b.seq,
-      star: (a, b) => (b.stars ?? -2) - (a.stars ?? -2) || (b.quality?.q ?? -1) - (a.quality?.q ?? -1) || a.seq - b.seq,
-      species: (a, b) => nameOf(a.result!).localeCompare(nameOf(b.result!), "zh-CN") || a.seq - b.seq,
-      fly: (a, b) => (b.result?.p_fly ?? 0) - (a.result?.p_fly ?? 0),
-      eye: (a, b) => (b.result?.sharpness ?? -1) - (a.result?.sharpness ?? -1),
-      rar: (a, b) => rank(a) - rank(b) || (b.stars ?? -2) - (a.stars ?? -2) || a.seq - b.seq,
-    };
-    // finished photos first in the chosen order; the ones still waiting stay behind them in queue order
-    v.sort((a, b) => ready(b) - ready(a) || (ready(a) && ready(b) ? cmp[sort](a, b) : a.seq - b.seq));
-    return v;
-  }, [photos, fs, fsp, ffly, frar, sort, starsReady, groupOnly, onlyIds, fold]);
+  const view = useMemo(() => listView(photos, { fs, fsp, ffly, frar, sort, starsReady, fold, groupOnly, onlyIds: onlyIds?.ids ?? null }),
+    [photos, fs, fsp, ffly, frar, sort, starsReady, groupOnly, onlyIds, fold]);
 
   // a photo picked from the burst strip may be outside the filtered list: it is still the one shown
   const current = view.find((p) => p.id === selected) ?? (selected !== null ? photos.find((p) => p.id === selected) : undefined) ?? view[0] ?? null;
