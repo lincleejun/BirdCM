@@ -1,6 +1,44 @@
 import XCTest
+import CryptoKit
 @testable import BirdCM
 final class GeoTests: XCTestCase {
+    static func sha(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
+    static func sha(rows v: [[Float]]) -> String { sha(Data(v.flatMap { $0.flatMap { x in withUnsafeBytes(of: x.bitPattern.littleEndian, Array.init) } })) }
+    /// Bit patterns of the real model's outputs, recorded before activations were released early (E007): the global range
+    /// of a species other than the timing fixture's, 48 full-head weeks at one point, and a few columns at scattered points.
+    func testForwardDigests() throws {
+        let catalogue = Catalogue.shared, geo = try XCTUnwrap(Geo.shared(catalogue))
+        let j = try XCTUnwrap(catalogue.all.firstIndex { $0.sci == "Erithacus rubecula" })
+        let range = try XCTUnwrap(geo.range(j, sci: "Erithacus rubecula", cache: false))
+        XCTAssertEqual(range.count, 69_120)
+        XCTAssertEqual(Self.sha(Data(range)), "fd57f9f84f4002e5821e4443752223d7ad66fdd4e39c761d38b83fd1574d492c")
+        let lima = try geo.network.predict((1...48).map { [Float(-12.05), Float(-77.05), Float($0)] })
+        XCTAssertEqual(lima.count, 48); XCTAssertEqual(lima[0].count, 14_082)
+        XCTAssertEqual(Self.sha(rows: lima), "cdebc9d0cd5b76391e7fabd829b91358fa2dc9642bdfab021d126c4e08e09691")
+        let pts: [[Float]] = [[-12.05, -77.05, 10], [35.7, 139.7, 22], [-1.3, 36.8, 40], [64.1, -21.9, 3], [-54.8, -68.3, 47]]
+        XCTAssertEqual(Self.sha(rows: try geo.network.predict(pts, columns: [3, 777, 5000, 9999, 14081])), "ac878ecac40df0bfc6a9f2e657abf91b8bc1ca967b0f2b59f3f460997ada111b")
+    }
+    /// A tiny inline graph with what the real one lacks: one name used twice by a node, an alias (Unsqueeze), an output
+    /// never used, one Split half unused, and `probabilities` read again by a later node. A missing name still throws.
+    func testGraphEdgeCases() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("geo-e007-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        func net(_ nodes: [(String, [String], [String])]) throws -> GeoNetwork {
+            let graph: [String: Any] = ["initial": ["zero": ["shape": [1], "values": [0]]],
+                                        "nodes": nodes.map { ["op": $0.0, "inputs": $0.1, "outputs": $0.2, "epsilon": 0] }]
+            let url = dir.appendingPathComponent("\(UUID().uuidString).json")
+            try JSONSerialization.data(withJSONObject: graph).write(to: url)
+            return try GeoNetwork(weights: Models.geoURL, graphURL: url)
+        }
+        let g = try net([("Gather", ["input", "zero"], ["a"]), ("Unsqueeze", ["a"], ["u"]), ("Sin", ["a"], ["unused"]),
+                         ("Mul", ["u", "u"], ["sq"]), ("Concat", ["a", "sq"], ["cat"]), ("Split", ["cat"], ["s0", "s1"]),
+                         ("Add", ["s0", "sq"], ["probabilities"]), ("Cos", ["probabilities"], ["after"])])
+        let xs: [Float] = [0.5, -3, 7.25]
+        let out = try g.predict(xs.map { [$0, 1, 2] })
+        XCTAssertEqual(out.map { $0.map(\.bitPattern) }, xs.map { [($0 + $0 * $0).bitPattern] })
+        XCTAssertThrowsError(try net([("Gather", ["input", "zero"], ["a"]), ("Sin", ["nope"], ["probabilities"])]).predict([[1, 2, 3]]))
+    }
     func testNativeGeoAgainstONNX() throws {
         let path=ProcessInfo.processInfo.environment["GEOMODEL"] ?? Models.geoURL.path
         let net=try GeoNetwork(weights:URL(fileURLWithPath:path),graphURL:Bundle.main.url(forResource:"geo-graph",withExtension:"json")!)
