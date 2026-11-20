@@ -38,6 +38,8 @@ jobs:
           save-cache: ${{ env.SAVE_CACHE }}
           cache-dependency-glob: engine/uv.lock
           cache-suffix: ci
+      - name: exiftool (the XMP sidecar tests skip without it)
+        run: brew install exiftool
       - name: engine tests (model tests skip, no model files on the runner)
         working-directory: engine
         run: uv run --locked pytest -rs
