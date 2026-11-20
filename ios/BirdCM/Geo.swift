@@ -79,12 +79,32 @@ extension Geo {
     /// (like `typical`). nil for a species the model does not have (never 0). One 48-week batch per point.
     func months(at p: Place) throws -> [[Double]?] {
         let pts = p.source == "region" ? cover(p) : [Self.snap([p.lat, p.lon])]
-        var perPoint = [[[Double]?]]()
-        for pt in pts {
+        let n = pts.count
+        // values[(j*12+m)*n + point]: one flat buffer, not arrays per point, species and week. Same arithmetic as
+        // `monthly` (0 + four weeks in order, / 4) and `median` (sorted in place, the same sort as `sorted()`).
+        var values = [Double](repeating: 0, count: indices.count * 12 * n), sums = [Double](repeating: 0, count: indices.count * 12)
+        for (k, pt) in pts.enumerated() {
             let q = try network.predict((1...48).map { [Float(pt[0]), Float(pt[1]), Float($0)] })
-            perPoint.append(indices.map { ids in ids.isEmpty ? nil : Self.monthly(q.map { row in Double(ids.map { row[$0] }.max()!) }) })
+            for i in sums.indices { sums[i] = 0 }
+            for (w, row) in q.enumerated() {
+                for (j, ids) in indices.enumerated() where !ids.isEmpty {
+                    var best = row[ids[0]]
+                    for i in ids.dropFirst() where best < row[i] { best = row[i] }   // as Array.max(): first wins ties and NaN
+                    sums[j * 12 + w / 4] += Double(best)
+                }
+            }
+            for i in sums.indices { values[i * n + k] = sums[i] / 4 }
         }
-        return indices.indices.map { j in indices[j].isEmpty ? nil : (0..<12).map { m in Self.median(perPoint.map { $0[j]![m] }) } }
+        var out = [[Double]?]()
+        for j in indices.indices {
+            guard !indices[j].isEmpty else { out.append(nil); continue }
+            out.append((0..<12).map { m in
+                let lo = (j * 12 + m) * n, mid = lo + n / 2
+                values[lo..<lo + n].sort()
+                return n == 0 ? .nan : n % 2 == 0 ? (values[mid - 1] + values[mid]) / 2 : values[mid]
+            })
+        }
+        return out
     }
 
     // MARK: range map
