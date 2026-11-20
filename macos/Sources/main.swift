@@ -32,6 +32,9 @@ func decode<T: Decodable>(_ t: T.Type, _ line: String) -> T? {
     d.keyDecodingStrategy = .convertFromSnakeCase
     return try? d.decode(t, from: Data(line.utf8))
 }
+/// The menu, windows and dialogs follow the system language: Chinese when it is Chinese, English otherwise.
+let chinese = Locale.preferredLanguages.first?.hasPrefix("zh") ?? true
+func L(_ zh: String, _ en: String) -> String { chinese ? zh : en }
 func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, countStyle: .file) }
 
 // ---- the engine ------------------------------------------------------------------------------------------------------
@@ -49,7 +52,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
     /// Testing: the menu's status lines as text (BIRDCM_SNAPSHOT=dir), since a menu cannot be captured.
     private func snapshot() {
         guard let dir = ProcessInfo.processInfo.environment["BIRDCM_SNAPSHOT"] else { return }
-        let text = [statusLine, modelsLine] + (suggestPort.map { ["改用端口 \($0) 启动"] } ?? []) + (fetchNote.map { [$0] } ?? [])
+        let text = [statusLine, modelsLine] + (suggestPort.map { [L("改用端口 \($0) 启动", "Start on port \($0) instead")] } ?? []) + (fetchNote.map { [$0] } ?? [])
         try? text.joined(separator: "\n").write(toFile: "\(dir)/menu.txt", atomically: true, encoding: .utf8)
     }
     @Published var usage: Usage?
@@ -103,7 +106,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
                 poll(port: h.engine?.port ?? h.port)
             } else {
                 foreign = h.engine
-                state = .failed("另一个观羽引擎在运行（pid \(h.engine?.pid ?? 0)，\(exe)）")
+                state = .failed(L("另一个观羽引擎在运行（pid \(h.engine?.pid ?? 0)，\(exe)）", "Another GuanYu engine is running (pid \(h.engine?.pid ?? 0), \(exe))"))
             }
             return
         }
@@ -125,7 +128,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
         let exit = AsyncStream<Int32> { c in p.terminationHandler = { c.yield($0.terminationStatus); c.finish() } }
-        do { try p.run() } catch { state = .failed("无法启动引擎：\(error.localizedDescription)"); return }
+        do { try p.run() } catch { state = .failed(L("无法启动引擎：\(error.localizedDescription)", "Cannot start the engine: \(error.localizedDescription)")); return }
         proc = p
         Task {
             // {"event": "starting", "port": N} and then output goes to engine.log (EOF here), or an error line and exit
@@ -148,9 +151,9 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
         switch (code, r) {
         case (3, _): Task { await adoptOrStart(open: openWhenReady) }           // someone else started one first
         case (0, nil), (SIGTERM, nil): state = .stopped                         // stopped from elsewhere (`admin stop`)
-        case (4, let r?): suggestPort = r.suggest; state = .failed(r.message ?? "端口被占用")
-        case (_, let r?): state = .failed(r.message ?? r.error ?? "启动失败")
-        default: state = .failed("引擎退出了（代码 \(code)），详情见日志")
+        case (4, let r?): suggestPort = r.suggest; state = .failed(r.message ?? L("端口被占用", "Port in use"))
+        case (_, let r?): state = .failed(r.message ?? r.error ?? L("启动失败", "Start failed"))
+        default: state = .failed(L("引擎退出了（代码 \(code)），详情见日志", "The engine exited (code \(code)); see the log"))
         }
     }
 
@@ -168,7 +171,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
                 }
                 try? await Task.sleep(nanoseconds: 300_000_000)
             }
-            if state == .starting { state = .failed("引擎 3 分钟内没有就绪，详情见日志") }
+            if state == .starting { state = .failed(L("引擎 3 分钟内没有就绪，详情见日志", "The engine was not ready within 3 minutes; see the log")) }
         }
     }
 
@@ -232,7 +235,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
 
     func run(_ args: [String]) async -> String? {
         let (code, out) = await admin(args)
-        return code == 0 ? nil : (decode(Reply.self, out)?.error ?? "失败（代码 \(code)）")
+        return code == 0 ? nil : (decode(Reply.self, out)?.error ?? L("失败（代码 \(code)）", "Failed (code \(code))"))
     }
 
     func fetch() {
@@ -244,7 +247,7 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
                 guard let e = decode(Progress.self, line) else { return }
                 Task { @MainActor in
                     if let f = e.file, let d = e.done, let t = e.total { self.fetching = (f, d, t) }
-                    if e.state == "failed", let f = e.file { self.fetchNote = (self.fetchNote.map { $0 + "；" } ?? "下载失败：") + "\(f)：\(e.error ?? "")" }
+                    if e.state == "failed", let f = e.file { self.fetchNote = (self.fetchNote.map { $0 + L("；", "; ") } ?? L("下载失败：", "Download failed: ")) + "\(f)\(L("：", ": "))\(e.error ?? "")" }
                 }
             }
             fetchProc = nil
@@ -253,25 +256,25 @@ func size(_ n: Int64) -> String { ByteCountFormatter.string(fromByteCount: n, co
         }
     }
 
-    func cancelFetch() { fetchProc?.terminate(); fetchNote = "已取消下载" }
+    func cancelFetch() { fetchProc?.terminate(); fetchNote = L("已取消下载", "Download cancelled") }
 
     var statusLine: String {
         switch state {
-        case .stopped: return "已停止"
-        case .starting: return "启动中…"
+        case .stopped: return L("已停止", "Stopped")
+        case .starting: return L("启动中…", "Starting…")
         case .running(let p):
-            let m = loaded?.engine == "loading" ? " · 模型加载中…" : loaded?.engine == "error" ? " · 模型出错（页面顶栏可重试）" : loaded?.engine == "ready" ? " · 模型就绪" : ""
-            return "运行中 · 端口 \(p)\(m)"
-        case .stopping: return "正在停止…"
-        case .failed(let why): return "出错：\(why)"
+            let m = loaded?.engine == "loading" ? L(" · 模型加载中…", " · loading models…") : loaded?.engine == "error" ? L(" · 模型出错（页面顶栏可重试）", " · model error (retry from the page’s top bar)") : loaded?.engine == "ready" ? L(" · 模型就绪", " · models ready") : ""
+            return L("运行中 · 端口 \(p)\(m)", "Running · port \(p)\(m)")
+        case .stopping: return L("正在停止…", "Stopping…")
+        case .failed(let why): return L("出错：\(why)", "Error: \(why)")
         }
     }
 
     var modelsLine: String {
-        if let f = fetching { return f.total > 1 ? "模型下载中 \(Int(100 * Double(f.done) / Double(f.total)))% · \(f.file)" : "模型下载中…" }
-        guard let m = models else { return "模型：检查中…" }
-        var s = m.missing.isEmpty ? "模型：就绪（\(size(m.presentBytes))）" : "模型：缺 \(m.missing.count) 个（\(size(m.downloadBytes))）"
-        if !m.notReleased.isEmpty { s += " · \(m.notReleased.count) 个尚未发布" }
+        if let f = fetching { return f.total > 1 ? L("模型下载中 \(Int(100 * Double(f.done) / Double(f.total)))% · \(f.file)", "Downloading models \(Int(100 * Double(f.done) / Double(f.total)))% · \(f.file)") : L("模型下载中…", "Downloading models…") }
+        guard let m = models else { return L("模型：检查中…", "Models: checking…") }
+        var s = m.missing.isEmpty ? L("模型：就绪（\(size(m.presentBytes))）", "Models: ready (\(size(m.presentBytes)))") : L("模型：缺 \(m.missing.count) 个（\(size(m.downloadBytes))）", "Models: \(m.missing.count) missing (\(size(m.downloadBytes)))")
+        if !m.notReleased.isEmpty { s += L(" · \(m.notReleased.count) 个尚未发布", " · \(m.notReleased.count) not released yet") }
         return s
     }
 }
@@ -311,21 +314,21 @@ struct WelcomeView: View {
     @ObservedObject var e = Engine.shared
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("欢迎使用观羽").font(.title2.bold())
-            Text("观羽在这台 Mac 上运行，照片不会上传。它在后台运行一个本地服务，界面在浏览器里打开（http://127.0.0.1）。菜单栏的小鸟图标可以启动、停止服务，管理模型和缓存。")
+            Text(L("欢迎使用观羽", "Welcome to GuanYu")).font(.title2.bold())
+            Text(L("观羽在这台 Mac 上运行，照片不会上传。它在后台运行一个本地服务，界面在浏览器里打开（http://127.0.0.1）。菜单栏的小鸟图标可以启动、停止服务，管理模型和缓存。", "GuanYu runs on this Mac; photos are never uploaded. It runs a local service in the background and its interface opens in the browser (http://127.0.0.1). The bird icon in the menu bar starts and stops the service and manages models and caches."))
             if let m = e.models {
-                Text("首次使用要下载识别模型，共 \(size(m.downloadBytes))（来自 GitHub，逐个校验 sha256）。" +
-                     (m.notReleased.isEmpty ? "" : "另有 \(m.notReleased.count) 个文件尚未发布，以后再下载，不影响使用。"))
+                Text(L("首次使用要下载识别模型，共 \(size(m.downloadBytes))（来自 GitHub，逐个校验 sha256）。", "First use downloads the identification models, \(size(m.downloadBytes)) in total (from GitHub, each checked by sha256). ") +
+                     (m.notReleased.isEmpty ? "" : L("另有 \(m.notReleased.count) 个文件尚未发布，以后再下载，不影响使用。", "\(m.notReleased.count) more files are not released yet; they download later and are not needed now.")))
             } else {
-                Text("正在检查需要下载的模型…").foregroundStyle(.secondary)
+                Text(L("正在检查需要下载的模型…", "Checking which models need downloading…")).foregroundStyle(.secondary)
             }
             if let p = e.paths {
-                Text("模型、缩略图和预览：\(p.cache)\n数据库：\(p.data)\n都可以在“设置”里更改位置。").font(.callout).foregroundStyle(.secondary)
+                Text(L("模型、缩略图和预览：\(p.cache)\n数据库：\(p.data)\n都可以在“设置”里更改位置。", "Models, thumbnails and previews: \(p.cache)\nDatabase: \(p.data)\nBoth locations can be changed in Settings.")).font(.callout).foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
             HStack {
                 Spacer()
-                Button("开始使用") {
+                Button(L("开始使用", "Get started")) {
                     UserDefaults.standard.set(true, forKey: "welcomed")
                     if e.models?.missing.isEmpty == false { e.fetch() }
                     Windows.close("welcome")
@@ -342,12 +345,12 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("服务") {
-                LabeledContent("状态", value: e.statusLine)
-                if let b = e.busy { LabeledContent("正在", value: b) }
-                HStack { Button("查看日志") { e.openLog() }; Spacer() }
+            Section(L("服务", "Service")) {
+                LabeledContent(L("状态", "Status"), value: e.statusLine)
+                if let b = e.busy { LabeledContent(L("正在", "Working on"), value: b) }
+                HStack { Button(L("查看日志", "View log")) { e.openLog() }; Spacer() }
             }
-            Section("模型") {
+            Section(L("模型", "Models")) {
                 ForEach(e.models?.files ?? []) { f in
                     HStack {
                         VStack(alignment: .leading) {
@@ -356,33 +359,33 @@ struct SettingsView: View {
                         }
                         Spacer()
                         Text(size(f.bytes)).foregroundStyle(.secondary).monospacedDigit()
-                        Text(["present": "已就绪", "missing": "缺少", "not_released": "尚未发布"][f.state] ?? f.state)
+                        Text(["present": L("已就绪", "Ready"), "missing": L("缺少", "Missing"), "not_released": L("尚未发布", "Not released")][f.state] ?? f.state)
                             .foregroundStyle(f.state == "present" ? .green : f.state == "missing" ? .orange : .secondary)
                             .frame(width: 64, alignment: .trailing)
                     }
                 }
-                if let m = e.models { Text("已有 \(size(m.presentBytes))，待下载 \(size(m.downloadBytes))").font(.caption) }
+                if let m = e.models { Text(L("已有 \(size(m.presentBytes))，待下载 \(size(m.downloadBytes))", "\(size(m.presentBytes)) present, \(size(m.downloadBytes)) to download")).font(.caption) }
                 if let f = e.fetching {
-                    ProgressView(value: Double(f.done), total: Double(max(f.total, 1))) { Text("下载 \(f.file)") }
+                    ProgressView(value: Double(f.done), total: Double(max(f.total, 1))) { Text(L("下载 \(f.file)", "Downloading \(f.file)")) }
                 }
                 if let n = e.fetchNote { Text(n).font(.caption).foregroundStyle(.orange) }
                 HStack {
-                    if e.fetching != nil { Button("取消下载") { e.cancelFetch() } }
-                    else { Button("下载缺少的模型") { e.fetch() }.disabled(e.models?.missing.isEmpty != false) }
-                    Button("重新校验") { Task { error = await e.run(["models-verify"]); await e.refresh() } }
-                    Button("删除已下载的模型…") { removeModels() }.disabled(e.fetching != nil)
-                    Button("打开模型文件夹") { reveal(e.models?.dir ?? e.paths?.models) }
+                    if e.fetching != nil { Button(L("取消下载", "Cancel download")) { e.cancelFetch() } }
+                    else { Button(L("下载缺少的模型", "Download missing models")) { e.fetch() }.disabled(e.models?.missing.isEmpty != false) }
+                    Button(L("重新校验", "Verify again")) { Task { error = await e.run(["models-verify"]); await e.refresh() } }
+                    Button(L("删除已下载的模型…", "Delete downloaded models…")) { removeModels() }.disabled(e.fetching != nil)
+                    Button(L("打开模型文件夹", "Open models folder")) { reveal(e.models?.dir ?? e.paths?.models) }
                 }
             }
-            Section("缓存与数据") {
-                LabeledContent("缩略图和预览", value: size(e.usage?.img ?? 0))
-                LabeledContent("模型", value: size(e.usage?.models ?? 0))
-                LabeledContent("数据库", value: size((e.usage?.db ?? 0) + (e.usage?.singles ?? 0)))
-                LabeledContent("缓存位置") { pathRow(e.paths?.cache, kind: "cache") }
-                LabeledContent("数据位置") { pathRow(e.paths?.data, kind: "data") }
+            Section(L("缓存与数据", "Cache and data")) {
+                LabeledContent(L("缩略图和预览", "Thumbnails and previews"), value: size(e.usage?.img ?? 0))
+                LabeledContent(L("模型", "Models"), value: size(e.usage?.models ?? 0))
+                LabeledContent(L("数据库", "Database"), value: size((e.usage?.db ?? 0) + (e.usage?.singles ?? 0)))
+                LabeledContent(L("缓存位置", "Cache location")) { pathRow(e.paths?.cache, kind: "cache") }
+                LabeledContent(L("数据位置", "Data location")) { pathRow(e.paths?.data, kind: "data") }
                 HStack {
-                    Button("清空缓存") { Task { error = await e.run(["clear-cache"]); await e.refresh() } }
-                    Button("删除数据库…") { deleteDatabase() }
+                    Button(L("清空缓存", "Clear cache")) { Task { error = await e.run(["clear-cache"]); await e.refresh() } }
+                    Button(L("删除数据库…", "Delete database…")) { deleteDatabase() }
                 }
             }
             if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
@@ -394,8 +397,8 @@ struct SettingsView: View {
     func pathRow(_ path: String?, kind: String) -> some View {
         HStack {
             Text(path ?? "").font(.caption).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-            Button("在访达中显示") { reveal(path) }
-            Button("更改…") { move(kind) }.disabled(e.paths?.overridden.contains(kind == "cache" ? "BIRDCM_CACHE_DIR" : "BIRDCM_DATA_DIR") ?? false)
+            Button(L("在访达中显示", "Show in Finder")) { reveal(path) }
+            Button(L("更改…", "Change…")) { move(kind) }.disabled(e.paths?.overridden.contains(kind == "cache" ? "BIRDCM_CACHE_DIR" : "BIRDCM_DATA_DIR") ?? false)
         }
     }
 
@@ -410,7 +413,7 @@ struct SettingsView: View {
         a.messageText = title
         a.informativeText = text
         a.addButton(withTitle: ok)
-        a.addButton(withTitle: "取消")
+        a.addButton(withTitle: L("取消", "Cancel"))
         return a.runModal() == .alertFirstButtonReturn
     }
 
@@ -419,22 +422,23 @@ struct SettingsView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.prompt = "移到这里"
-        panel.message = kind == "cache" ? "选择缓存（模型、缩略图、预览）的新位置" : "选择数据库的新位置"
+        panel.prompt = L("移到这里", "Move here")
+        panel.message = kind == "cache" ? L("选择缓存（模型、缩略图、预览）的新位置", "Choose a new location for the cache (models, thumbnails, previews)") : L("选择数据库的新位置", "Choose a new location for the database")
         guard panel.runModal() == .OK, let dest = panel.url?.path else { return }
-        guard confirm("移动\(kind == "cache" ? "缓存" : "数据")", "内容会移到 \(dest)（不是空文件夹时放进其中的 BirdCM 子文件夹）。服务会先停止，完成后重新启动。", "移动") else { return }
-        Task { error = await e.whileStopped("移动\(kind == "cache" ? "缓存" : "数据")") { await e.run(["move-\(kind)", dest]) } }
+        let title = kind == "cache" ? L("移动缓存", "Move cache") : L("移动数据", "Move data")
+        guard confirm(title, L("内容会移到 \(dest)（不是空文件夹时放进其中的 BirdCM 子文件夹）。服务会先停止，完成后重新启动。", "The contents move to \(dest) (into a BirdCM subfolder if the folder is not empty). The service stops first and restarts when done."), L("移动", "Move")) else { return }
+        Task { error = await e.whileStopped(title) { await e.run(["move-\(kind)", dest]) } }
     }
 
     func removeModels() {
-        guard confirm("删除已下载的模型", "删除缓存里下载的模型文件（\(size(e.usage?.models ?? 0))），以后可以重新下载。服务会先停止。", "删除") else { return }
-        Task { error = await e.whileStopped("删除模型") { await e.run(["models-remove"]) } }
+        guard confirm(L("删除已下载的模型", "Delete downloaded models"), L("删除缓存里下载的模型文件（\(size(e.usage?.models ?? 0))），以后可以重新下载。服务会先停止。", "Deletes the downloaded model files in the cache (\(size(e.usage?.models ?? 0))); they can be downloaded again later. The service stops first."), L("删除", "Delete")) else { return }
+        Task { error = await e.whileStopped(L("删除模型", "Deleting models")) { await e.run(["models-remove"]) } }
     }
 
     func deleteDatabase() {
-        guard confirm("删除数据库？", "所有扫描记录、星级和单张识别的历史都会删除，照片本身不受影响。", "继续"),
-              confirm("确定删除数据库？", "这一步不能撤销。", "删除数据库") else { return }
-        Task { error = await e.whileStopped("删除数据库") { await e.run(["clear-cache", "--database"]) } }
+        guard confirm(L("删除数据库？", "Delete the database?"), L("所有扫描记录、星级和单张识别的历史都会删除，照片本身不受影响。", "All scan records, star ratings and single-photo identification history are deleted; the photos themselves are not affected."), L("继续", "Continue")),
+              confirm(L("确定删除数据库？", "Really delete the database?"), L("这一步不能撤销。", "This cannot be undone."), L("删除数据库", "Delete database")) else { return }
+        Task { error = await e.whileStopped(L("删除数据库", "Deleting database")) { await e.run(["clear-cache", "--database"]) } }
     }
 }
 
@@ -446,30 +450,30 @@ struct MenuView: View {
 
     var body: some View {
         Text(e.statusLine)
-        if let p = e.suggestPort { Button("改用端口 \(p) 启动") { e.start(port: p, open: true) } }
-        if e.foreign != nil { Button("停止那个引擎") { Task { await e.stop(); e.start(port: nil, open: false) } } }
-        Button("打开观羽") { e.openUI() }.keyboardShortcut("o").disabled(e.port == nil)
+        if let p = e.suggestPort { Button(L("改用端口 \(p) 启动", "Start on port \(p) instead")) { e.start(port: p, open: true) } }
+        if e.foreign != nil { Button(L("停止那个引擎", "Stop that engine")) { Task { await e.stop(); e.start(port: nil, open: false) } } }
+        Button(L("打开观羽", "Open GuanYu")) { e.openUI() }.keyboardShortcut("o").disabled(e.port == nil)
         Divider()
         switch e.state {
-        case .stopped, .failed: Button("启动") { e.start(port: nil, open: false) }
+        case .stopped, .failed: Button(L("启动", "Start")) { e.start(port: nil, open: false) }
         default:
-            Button("停止") { Task { await e.stop() } }.disabled(e.state == .stopping)
-            Button("重新启动") { Task { await e.restart() } }.disabled(e.state == .stopping)
+            Button(L("停止", "Stop")) { Task { await e.stop() } }.disabled(e.state == .stopping)
+            Button(L("重新启动", "Restart")) { Task { await e.restart() } }.disabled(e.state == .stopping)
         }
         Divider()
         Text(e.modelsLine)
-        if e.fetching != nil { Button("取消下载") { e.cancelFetch() } }
-        else if e.models?.missing.isEmpty == false { Button("下载缺少的模型") { e.fetch() } }
-        Button("设置…") { Windows.show("settings", "观羽 设置", SettingsView()) }.keyboardShortcut(",")
-        Button("查看日志") { e.openLog() }
-        Toggle("登录时启动", isOn: Binding(get: { login }, set: { on in
+        if e.fetching != nil { Button(L("取消下载", "Cancel download")) { e.cancelFetch() } }
+        else if e.models?.missing.isEmpty == false { Button(L("下载缺少的模型", "Download missing models")) { e.fetch() } }
+        Button(L("设置…", "Settings…")) { Windows.show("settings", L("观羽 设置", "GuanYu Settings"), SettingsView()) }.keyboardShortcut(",")
+        Button(L("查看日志", "View log")) { e.openLog() }
+        Toggle(L("登录时启动", "Open at login"), isOn: Binding(get: { login }, set: { on in
             do { try on ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister() } catch {
                 NSAlert(error: error).runModal()
             }
             login = SMAppService.mainApp.status == .enabled
         }))
         Divider()
-        Button("退出观羽") { NSApp.terminate(nil) }.keyboardShortcut("q")
+        Button(L("退出观羽", "Quit GuanYu")) { NSApp.terminate(nil) }.keyboardShortcut("q")
     }
 }
 
@@ -481,7 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             let e = Engine.shared
             let env = ProcessInfo.processInfo.environment
-            if env["BIRDCM_OPEN_SETTINGS"] != nil { Windows.show("settings", "观羽 设置", SettingsView()) }   // testing
+            if env["BIRDCM_OPEN_SETTINGS"] != nil { Windows.show("settings", L("观羽 设置", "GuanYu Settings"), SettingsView()) }   // testing
             if env["BIRDCM_TEST_FETCH"] != nil {                    // testing: start a download, cancel it after 5 s
                 e.fetch()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 5) { e.cancelFetch() }
@@ -490,7 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await e.adoptOrStart(open: !atLogin)
                 await e.refresh()
             } else {
-                Windows.show("welcome", "观羽", WelcomeView())
+                Windows.show("welcome", L("观羽", "GuanYu"), WelcomeView())
                 await e.refresh()
             }
         }
@@ -515,7 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct BirdCMApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     static let icon: NSImage = {
-        let i = NSImage(named: "MenuIcon") ?? NSImage(systemSymbolName: "bird", accessibilityDescription: "观羽")!
+        let i = NSImage(named: "MenuIcon") ?? NSImage(systemSymbolName: "bird", accessibilityDescription: L("观羽", "GuanYu"))!
         i.isTemplate = true
         return i
     }()

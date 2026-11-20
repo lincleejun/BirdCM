@@ -59,6 +59,7 @@ swift "$M/tools/icon.swift" "$B/icon"
 iconutil -c icns "$B/icon/AppIcon.iconset" -o "$C/Resources/AppIcon.icns"
 cp "$B/icon/MenuIcon.png" "$B/icon/MenuIcon@2x.png" "$C/Resources/"
 sed "s/__VERSION__/$VERSION/g" "$M/Info.plist" > "$C/Info.plist"
+cp -R "$M/en.lproj" "$M/zh-Hans.lproj" "$C/Resources/"          # Info.plist names and permission texts, en / zh
 install -m 755 "$M/launcher.sh" "$E/birdcm"
 cp models.toml "$E/models.toml"
 mkdir -p "$E/data" && cp data/species-map.sqlite "$E/data/"     # online.py finds it next to the bundled python
